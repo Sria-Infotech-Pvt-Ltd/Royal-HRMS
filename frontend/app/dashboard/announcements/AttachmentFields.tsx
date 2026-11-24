@@ -8,6 +8,7 @@ import {
   removeExisting, removeLink, removeNew, updateLink,
   type AttachmentDraft, type AttachmentKind,
 } from "@/lib/announcementAttachments";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   draft:           AttachmentDraft;
@@ -31,6 +32,7 @@ interface TileProps {
 
 /** One picture in the form: a thumbnail (or an icon until the browser has made one) with a remove button. */
 export function ImageTile({ src, name, onRemove, disabled }: TileProps) {
+  const t = useT();
   return (
     <div style={{ position: "relative", width: 72, height: 72, borderRadius: 8, overflow: "hidden", border: "1px solid var(--outline-v)", background: "var(--surface-variant, #f4f4f7)" }}>
       {src ? (
@@ -43,8 +45,8 @@ export function ImageTile({ src, name, onRemove, disabled }: TileProps) {
         type="button"
         onClick={onRemove}
         disabled={disabled}
-        aria-label={`Remove image ${name}`}
-        title="Remove"
+        aria-label={t("Remove image {name}", { name })}
+        title={t("Remove")}
         style={{ position: "absolute", top: 3, right: 3, width: 20, height: 20, borderRadius: "50%", border: "none", cursor: "pointer", background: "rgba(0,0,0,0.65)", color: "#fff", lineHeight: 1, fontSize: 12 }}
       >
         <i className="ti ti-x" />
@@ -64,8 +66,9 @@ interface ToolProps {
 
 /** A small icon button in the toolbar under the Body box, with how many are attached. */
 function ToolButton({ icon, label, detail, count, disabled, onClick }: ToolProps) {
+  const t = useT();
   return (
-    <button type="button" className="btn btn-ghost btn-sm" onClick={onClick} disabled={disabled} aria-label={label} title={`${label} - ${detail}`} style={{ position: "relative", padding: "4px 8px" }}>
+    <button type="button" className="btn btn-ghost btn-sm" onClick={onClick} disabled={disabled} aria-label={t(label)} title={`${t(label)} - ${detail}`} style={{ position: "relative", padding: "4px 8px" }}>
       <i className={`ti ${icon}`} style={{ fontSize: 18 }} />
       {count > 0 && <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{count}</span>}
     </button>
@@ -78,6 +81,7 @@ function ToolButton({ icon, label, detail, count, disabled, onClick }: ToolProps
  * dropped on this area.
  */
 export default function AttachmentFields({ draft, onChange, showLinkErrors = false, uploadProgress = null, disabled = false }: Props) {
+  const t = useT();
   const imageInput = useRef<HTMLInputElement>(null);
   const documentInput = useRef<HTMLInputElement>(null);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
@@ -128,12 +132,12 @@ export default function AttachmentFields({ draft, onChange, showLinkErrors = fal
     >
       {/* ── Toolbar ───────────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <ToolButton icon="ti-photo-plus" label="Add images" detail={`JPG, PNG or WebP, up to 5 MB each, ${images}/${MAX_IMAGES}`} count={images} disabled={disabled || images >= MAX_IMAGES} onClick={() => imageInput.current?.click()} />
-        <ToolButton icon="ti-file-type-pdf" label="Add PDF" detail={`PDF, up to 5 MB each, ${documents}/${MAX_DOCUMENTS}`} count={documents} disabled={disabled || documents >= MAX_DOCUMENTS} onClick={() => documentInput.current?.click()} />
+        <ToolButton icon="ti-photo-plus" label="Add images" detail={t("JPG, PNG or WebP, up to 5 MB each, {count}/{max}", { count: images, max: MAX_IMAGES })} count={images} disabled={disabled || images >= MAX_IMAGES} onClick={() => imageInput.current?.click()} />
+        <ToolButton icon="ti-file-type-pdf" label="Add PDF" detail={t("PDF, up to 5 MB each, {count}/{max}", { count: documents, max: MAX_DOCUMENTS })} count={documents} disabled={disabled || documents >= MAX_DOCUMENTS} onClick={() => documentInput.current?.click()} />
         <ToolButton icon="ti-link" label="Add link" detail={`${draft.links.length}/${MAX_LINKS}`} count={draft.links.length} disabled={disabled || draft.links.length >= MAX_LINKS} onClick={() => onChange(addLink(draft))} />
-        <span style={{ ...HINT, marginLeft: 6 }}>Attach pictures, PDFs or links (or drop files here)</span>
-        <input ref={imageInput} type="file" multiple hidden accept={IMAGE_ACCEPT} aria-label="Choose images" onChange={event => { take("image", event.target.files); event.target.value = ""; }} />
-        <input ref={documentInput} type="file" multiple hidden accept={DOCUMENT_ACCEPT} aria-label="Choose PDF files" onChange={event => { take("document", event.target.files); event.target.value = ""; }} />
+        <span style={{ ...HINT, marginLeft: 6 }}>{t("Attach pictures, PDFs or links (or drop files here)")}</span>
+        <input ref={imageInput} type="file" multiple hidden accept={IMAGE_ACCEPT} aria-label={t("Choose images")} onChange={event => { take("image", event.target.files); event.target.value = ""; }} />
+        <input ref={documentInput} type="file" multiple hidden accept={DOCUMENT_ACCEPT} aria-label={t("Choose PDF files")} onChange={event => { take("document", event.target.files); event.target.value = ""; }} />
       </div>
 
       {/* ── Pictures ──────────────────────────────────────────── */}
@@ -158,10 +162,10 @@ export default function AttachmentFields({ draft, onChange, showLinkErrors = fal
                 <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{document.original_filename}</div>
                 <div style={HINT}>{formatFileSize(document.file_size)}</div>
               </div>
-              <a className="btn btn-ghost btn-sm" href={announcementDownloadHref(document.download_path)} target="_blank" rel="noopener noreferrer" aria-label={`Download ${document.original_filename}`}>
+              <a className="btn btn-ghost btn-sm" href={announcementDownloadHref(document.download_path)} target="_blank" rel="noopener noreferrer" aria-label={t("Download {name}", { name: document.original_filename })}>
                 <i className="ti ti-download" />
               </a>
-              <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} aria-label={`Remove ${document.original_filename}`} style={{ color: "var(--error)" }} onClick={() => onChange(removeExisting(draft, document.id))}>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} aria-label={t("Remove {name}", { name: document.original_filename })} style={{ color: "var(--error)" }} onClick={() => onChange(removeExisting(draft, document.id))}>
                 <i className="ti ti-trash" />
               </button>
             </div>
@@ -171,9 +175,9 @@ export default function AttachmentFields({ draft, onChange, showLinkErrors = fal
               <i className="ti ti-file-type-pdf" style={{ fontSize: 20, color: "var(--error)" }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</div>
-                <div style={HINT}>{formatFileSize(file.size)} · will be uploaded when you publish</div>
+                <div style={HINT}>{t("{size} · will be uploaded when you publish", { size: formatFileSize(file.size) })}</div>
               </div>
-              <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} aria-label={`Remove ${file.name}`} style={{ color: "var(--error)" }} onClick={() => onChange(removeNew(draft, "document", index))}>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} aria-label={t("Remove {name}", { name: file.name })} style={{ color: "var(--error)" }} onClick={() => onChange(removeNew(draft, "document", index))}>
                 <i className="ti ti-trash" />
               </button>
             </div>
@@ -183,7 +187,7 @@ export default function AttachmentFields({ draft, onChange, showLinkErrors = fal
 
       {fileErrors.length > 0 && (
         <div role="alert" className="field-error-msg" style={{ margin: "8px 0 0" }}>
-          {fileErrors.map(message => <div key={message}>{message}</div>)}
+          {fileErrors.map(message => <div key={message}>{t(message)}</div>)}
         </div>
       )}
 
@@ -196,21 +200,21 @@ export default function AttachmentFields({ draft, onChange, showLinkErrors = fal
               <div key={link.key} style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                   <input
-                    className={`field-input${problems.title ? " field-error" : ""}`} placeholder="Link title" aria-label={`Link ${index + 1} title`}
+                    className={`field-input${problems.title ? " field-error" : ""}`} placeholder={t("Link title")} aria-label={t("Link {number} title", { number: index + 1 })}
                     value={link.title} maxLength={LINK_TITLE_MAX} disabled={disabled}
                     onChange={event => onChange(updateLink(draft, link.key, { title: event.target.value }))}
                   />
-                  {problems.title && <div className="field-error-msg">{problems.title}</div>}
+                  {problems.title && <div className="field-error-msg">{t(problems.title)}</div>}
                 </div>
                 <div style={{ flex: "2 1 220px", minWidth: 0 }}>
                   <input
-                    className={`field-input${problems.url ? " field-error" : ""}`} placeholder="https://…" aria-label={`Link ${index + 1} address`}
+                    className={`field-input${problems.url ? " field-error" : ""}`} placeholder="https://…" aria-label={t("Link {number} address", { number: index + 1 })}
                     value={link.url} inputMode="url" disabled={disabled}
                     onChange={event => onChange(updateLink(draft, link.key, { url: event.target.value }))}
                   />
-                  {problems.url && <div className="field-error-msg">{problems.url}</div>}
+                  {problems.url && <div className="field-error-msg">{t(problems.url)}</div>}
                 </div>
-                <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} aria-label={`Remove link ${index + 1}`} style={{ color: "var(--error)" }} onClick={() => onChange(removeLink(draft, link.key))}>
+                <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} aria-label={t("Remove link {number}", { number: index + 1 })} style={{ color: "var(--error)" }} onClick={() => onChange(removeLink(draft, link.key))}>
                   <i className="ti ti-trash" />
                 </button>
               </div>
@@ -224,7 +228,7 @@ export default function AttachmentFields({ draft, onChange, showLinkErrors = fal
           <div style={{ height: 6, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden" }}>
             <div style={{ width: `${uploadProgress}%`, height: "100%", background: "var(--primary)", transition: "width 0.2s" }} />
           </div>
-          <div style={{ ...HINT, marginTop: 4 }}>Uploading… {uploadProgress}%</div>
+          <div style={{ ...HINT, marginTop: 4 }}>{t("Uploading… {percent}%", { percent: uploadProgress })}</div>
         </div>
       )}
     </div>

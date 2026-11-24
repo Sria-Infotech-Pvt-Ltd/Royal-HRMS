@@ -49,7 +49,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
-    if (!punchType) { showToast("Choose which punch was missed.", "error"); return; }
+    if (!punchType) { showToast(tr("Choose which punch was missed."), "error"); return; }
     setSubmitting(true);
 
     const body: CorrectionRequest = {
@@ -63,13 +63,13 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
 
     try {
       const res = await clientApi.post(API.attendance.correction, body);
-      const msg = (res.data as { message?: string })?.message ?? "Correction request submitted successfully.";
+      const msg = (res.data as { message?: string })?.message ?? tr("Correction request submitted successfully.");
       showToast(msg, "success");
       onSuccess?.();
       onClose();
     } catch (err: unknown) {
       const e = err as NormalisedError;
-      showToast(e?.message ?? "Failed to submit correction request.", "error");
+      showToast(e?.message ?? tr("Failed to submit correction request."), "error");
     } finally {
       setSubmitting(false);
     }

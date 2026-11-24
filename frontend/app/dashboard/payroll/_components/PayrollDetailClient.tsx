@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useT } from "@/hooks/useI18n";
 import PayrollDashboard   from "./PayrollDashboard";
 import RunPayrollWizard   from "./RunPayrollWizard";
 import BranchStatusOverview from "./BranchStatusOverview";
@@ -25,6 +26,7 @@ interface ResumeState { cycleId: string; status: string; cycleStart?: string; }
 interface BranchWizardState { branchId?: string; branchName?: string; }
 
 export default function PayrollDetailClient({ initialTab, onBack }: { initialTab?: TabId; onBack?: () => void }) {
+  const t = useT();
   const canCreate = usePermission("payroll.create");
   const user      = useCurrentUser();
 
@@ -88,9 +90,9 @@ export default function PayrollDetailClient({ initialTab, onBack }: { initialTab
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Payroll Management</div>
+          <div className="page-title">{t("Payroll Management")}</div>
           <div className="page-sub">
-            Process, approve and disburse salaries —{" "}
+            {t("Process, approve and disburse salaries —")}{" "}
             {(runWizard && resume?.cycleStart
               ? new Date(resume.cycleStart)
               : new Date()
@@ -107,12 +109,12 @@ export default function PayrollDetailClient({ initialTab, onBack }: { initialTab
             {!runWizard && canCreate && (
               <button className="btn btn-filled btn-sm" onClick={() => openFresh()}>
                 <i className="ti ti-player-play" />
-                {isAdmin ? "Run Payroll" : `Run Payroll — ${userBranch}`}
+                {isAdmin ? t("Run Payroll") : t("Run Payroll — {branch}", { branch: userBranch })}
               </button>
             )}
             {onBack && (
               <button className="btn btn-ghost btn-sm" onClick={onBack}>
-                <i className="ti ti-arrow-left" /> Back to overview
+                <i className="ti ti-arrow-left" /> {t("Back to overview")}
               </button>
             )}
           </div>
@@ -124,8 +126,7 @@ export default function PayrollDetailClient({ initialTab, onBack }: { initialTab
         <div className="alert alert-warn" style={{ marginBottom: 20 }}>
           <i className="ti ti-alert-triangle" />
           <span>
-            Your account is not assigned to a branch. Payroll actions are unavailable until an
-            administrator assigns you to a branch in Settings → Employees.
+            {t("Your account is not assigned to a branch. Payroll actions are unavailable until an administrator assigns you to a branch in Settings → Employees.")}
           </span>
         </div>
       )}
@@ -146,7 +147,7 @@ export default function PayrollDetailClient({ initialTab, onBack }: { initialTab
                 className={`tab${active === tab.id ? " active" : ""}`}
                 onClick={() => setActive(tab.id)}
               >
-                <i className={`ti ${tab.icon}`} style={{ marginRight: 5 }} />{tab.label}
+                <i className={`ti ${tab.icon}`} style={{ marginRight: 5 }} />{t(tab.label)}
               </button>
             ))}
           </div>

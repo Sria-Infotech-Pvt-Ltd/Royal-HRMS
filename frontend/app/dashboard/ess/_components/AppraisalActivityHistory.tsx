@@ -7,6 +7,7 @@
 // own.
 
 import { formatDateTime } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 
 export interface AppraisalActivityEntry {
   label: string;
@@ -16,20 +17,21 @@ export interface AppraisalActivityEntry {
 }
 
 export default function AppraisalActivityHistory({ entries }: { entries: AppraisalActivityEntry[] }) {
+  const t = useT();
   return (
     <>
       <div className="card mb-16">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-history" /> Activity history</div>
+          <div className="card-title"><i className="ti ti-history" /> {t("Activity history")}</div>
         </div>
         <div style={{ padding: "0 20px 4px" }}>
           <p style={{ margin: 0, fontSize: 12.5, color: "var(--on-variant)" }}>
-            Every stage change is recorded here with who made it and when.
+            {t("Every stage change is recorded here with who made it and when.")}
           </p>
         </div>
         <div style={{ padding: "8px 20px 16px" }}>
           {entries.length === 0 ? (
-            <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>No activity recorded yet.</p>
+            <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>{t("No activity recorded yet.")}</p>
           ) : (
             <div className="timeline">
               {entries.map((entry, idx) => (
@@ -50,11 +52,11 @@ export default function AppraisalActivityHistory({ entries }: { entries: Apprais
 
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-eye-off" /> Review visibility</div>
+          <div className="card-title"><i className="ti ti-eye-off" /> {t("Review visibility")}</div>
         </div>
         <div style={{ padding: "0 20px 16px" }}>
           <p style={{ fontSize: 12, color: "var(--on-variant)", margin: 0 }}>
-            Manager notes and calibrated ratings stay hidden until the outcome is published. Publishing an appraisal does not change pay, promotion or any other HR record.
+            {t("Manager notes and calibrated ratings stay hidden until the outcome is published. Publishing an appraisal does not change pay, promotion or any other HR record.")}
           </p>
         </div>
       </div>

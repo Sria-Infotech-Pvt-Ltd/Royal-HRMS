@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -62,6 +63,7 @@ interface RequestWfhFormProps {
 }
 
 export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page" }: RequestWfhFormProps) {
+  const t = useT();
   const { showToast } = useToast();
   const [startDate,   setStartDate]   = useState("");
   const [endDate,      setEndDate]     = useState("");
@@ -118,7 +120,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
   function captureLocation() {
     setLocationError("");
     if (!navigator.geolocation) {
-      setLocationError("Your browser doesn't support location capture.");
+      setLocationError(t("Your browser doesn't support location capture."));
       return;
     }
     setLocating(true);
@@ -134,7 +136,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
         setErrors(prev => { const n = { ...prev }; delete n.coords; return n; });
       },
       err => {
-        setLocationError(err.message || "Couldn't capture your location. Please allow location access and try again.");
+        setLocationError(err.message || t("Couldn't capture your location. Please allow location access and try again."));
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 15000 },
@@ -165,20 +167,20 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
         longitude: coords.longitude,
         location_source: locationSource,
       });
-      showToast("Location saved for next time.", "success");
+      showToast(t("Location saved for next time."), "success");
       setSaveLabel("");
       await refetchSaved();
       setSelectedLocationId(res.data.data.id);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to save location.", "error");
+      showToast(msg || t("Failed to save location."), "error");
     } finally {
       setSavingLocation(false);
     }
   }
 
   async function deleteSavedLocation(id: string, label: string) {
-    if (!(await confirmDialog(`Remove saved location "${label}"?`))) return;
+    if (!(await confirmDialog(t("Remove saved location \"{label}\"?", { label })))) return;
     setDeletingId(id);
     try {
       await clientApi.delete(API.workFromHome.savedLocationDetail(id));
@@ -188,7 +190,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
       }
       await refetchSaved();
     } catch {
-      showToast("Failed to remove saved location.", "error");
+      showToast(t("Failed to remove saved location."), "error");
     } finally {
       setDeletingId(null);
     }
@@ -196,11 +198,11 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!startDate) e.startDate = "Start date is required.";
-    if (!endDate) e.endDate = "End date is required.";
-    if (startDate && endDate && endDate < startDate) e.endDate = "End date must be on or after start date.";
-    if (!reason.trim()) e.reason = "Reason is required.";
-    if (!coords) e.coords = "Select a saved location, capture your current one, or search an address before submitting — this is what your clock-in will be checked against on WFH days.";
+    if (!startDate) e.startDate = t("Start date is required.");
+    if (!endDate) e.endDate = t("End date is required.");
+    if (startDate && endDate && endDate < startDate) e.endDate = t("End date must be on or after start date.");
+    if (!reason.trim()) e.reason = t("Reason is required.");
+    if (!coords) e.coords = t("Select a saved location, capture your current one, or search an address before submitting — this is what your clock-in will be checked against on WFH days.");
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -226,8 +228,9 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
       onCreated?.(created);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to submit request. Please try again.", "error");
-      setSubmitError(msg || "Failed to submit request. Please try again.");
+      const failure = msg || t("Failed to submit request. Please try again.");
+      showToast(failure, "error");
+      setSubmitError(failure);
     } finally {
       setSubmitting(false);
     }
@@ -247,9 +250,9 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
           <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
             <i className="ti ti-circle-check text-4xl text-green-600" />
           </div>
-          <h2 className="text-xl font-bold text-[var(--on-bg)] mb-2">Request Submitted!</h2>
+          <h2 className="text-xl font-bold text-[var(--on-bg)] mb-2">{t("Request Submitted!")}</h2>
           <p className="text-sm text-[var(--on-variant)] mb-1">
-            Your work-from-home request has been sent for approval.
+            {t("Your work-from-home request has been sent for approval.")}
           </p>
           <p className="text-xs text-[var(--on-variant)] mb-8">
             {fmtDate(submitted.start_date)} → {fmtDate(submitted.end_date)}
@@ -257,12 +260,12 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
           <div className="flex gap-3 justify-center">
             <button onClick={reset}
               className="px-5 py-2.5 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-low)]">
-              Request Another
+              {t("Request Another")}
             </button>
             <button onClick={onSubmitted}
               className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white"
               style={{ background: "var(--primary)" }}>
-              {variant === "modal" ? "Done" : "View My Requests"}
+              {variant === "modal" ? t("Done") : t("View My Requests")}
             </button>
           </div>
         </div>
@@ -280,35 +283,35 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
         <div className="flex flex-col gap-5 max-w-2xl">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Lbl text="Start Date" required />
+              <Lbl text={t("Start Date")} required />
               <DateInput value={startDate} onChange={isoDate => setStartDate(isoDate)} className={errors.startDate ? INPUT_ERR : INPUT} />
               <Err msg={errors.startDate} />
             </div>
             <div>
-              <Lbl text="End Date" required />
+              <Lbl text={t("End Date")} required />
               <DateInput value={endDate} min={startDate} onChange={isoDate => setEndDate(isoDate)} className={errors.endDate ? INPUT_ERR : INPUT} />
               <Err msg={errors.endDate} />
             </div>
           </div>
 
           <div>
-            <Lbl text="Location Label" />
+            <Lbl text={t("Location Label")} />
             <input type="text" value={locationLabel} onChange={e => setLocationLabel(e.target.value)}
-              placeholder="e.g. Home" className={INPUT} />
+              placeholder={t("e.g. Home")} className={INPUT} />
           </div>
 
           <div>
-            <Lbl text="Reason" required />
+            <Lbl text={t("Reason")} required />
             <textarea value={reason} rows={3} aria-required="true"
               onChange={e => { setReason(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.reason; return next; }); }}
-              placeholder="Why do you need to work from home? Your approver will read this." className={errors.reason ? INPUT_ERR : INPUT} />
+              placeholder={t("Why do you need to work from home? Your approver will read this.")} className={errors.reason ? INPUT_ERR : INPUT} />
             <Err msg={errors.reason} />
           </div>
 
           <div>
-            <Lbl text="Your Location" required />
+            <Lbl text={t("Your Location")} required />
             <p className="text-xs text-[var(--on-variant)] mb-2">
-              Pick a saved location, capture a new one, or search an address — this is what your clock-in on approved WFH days gets checked against.
+              {t("Pick a saved location, capture a new one, or search an address — this is what your clock-in on approved WFH days gets checked against.")}
             </p>
             <select
               value={selectedLocationId}
@@ -319,19 +322,19 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
               {locations.map(loc => (
                 <option key={loc.id} value={loc.id}>{loc.label}</option>
               ))}
-              <option value={NEW_LOCATION}>+ Add new location…</option>
+              <option value={NEW_LOCATION}>{t("+ Add new location…")}</option>
             </select>
 
             {selectedLocationId === NEW_LOCATION && (
               <div className="mt-3">
-                <div role="tablist" aria-label="How to add the location" className="flex gap-2">
+                <div role="tablist" aria-label={t("How to add the location")} className="flex gap-2">
                   <button type="button" role="tab" aria-selected={captureMode === "gps"} onClick={() => chooseCaptureMode("gps")}
                     className={`btn btn-sm ${captureMode === "gps" ? "btn-filled" : "btn-ghost"}`} suppressHydrationWarning>
-                    <i className="ti ti-current-location" /> I&apos;m here now
+                    <i className="ti ti-current-location" /> {t("I'm here now")}
                   </button>
                   <button type="button" role="tab" aria-selected={captureMode === "address"} onClick={() => chooseCaptureMode("address")}
                     className={`btn btn-sm ${captureMode === "address" ? "btn-filled" : "btn-ghost"}`} suppressHydrationWarning>
-                    <i className="ti ti-search" /> Search address
+                    <i className="ti ti-search" /> {t("Search address")}
                   </button>
                 </div>
 
@@ -349,11 +352,11 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
                       : { borderColor: "var(--outline-v)", color: "var(--on-variant)" }}
                   >
                     {locating ? (
-                      <><i className="ti ti-loader-2 animate-spin text-sm" /> Capturing…</>
+                      <><i className="ti ti-loader-2 animate-spin text-sm" /> {t("Capturing…")}</>
                     ) : coords ? (
-                      <><i className="ti ti-map-pin-check text-sm" /> Location captured</>
+                      <><i className="ti ti-map-pin-check text-sm" /> {t("Location captured")}</>
                     ) : (
-                      <><i className="ti ti-map-pin text-sm" /> Capture my current location</>
+                      <><i className="ti ti-map-pin text-sm" /> {t("Capture my current location")}</>
                     )}
                   </button>
                 )}
@@ -364,7 +367,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
                       type="text"
                       value={saveLabel}
                       onChange={e => setSaveLabel(e.target.value)}
-                      placeholder="Save as… e.g. Home"
+                      placeholder={t("Save as… e.g. Home")}
                       className={INPUT}
                       suppressHydrationWarning
                     />
@@ -376,7 +379,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
                       className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 whitespace-nowrap"
                       style={{ background: "var(--primary)" }}
                     >
-                      {savingLocation ? "Saving…" : "Save"}
+                      {savingLocation ? t("Saving…") : t("Save")}
                     </button>
                   </div>
                 )}
@@ -393,7 +396,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
             <div role="alert" className="text-xs rounded-xl px-3.5 py-2.5 border border-red-300 bg-red-50 text-red-700">
               <div className="font-semibold flex items-center gap-1"><i className="ti ti-alert-circle" /> {submitError}</div>
               <div className="mt-1 text-[var(--on-variant)]">
-                Your existing requests are listed under <b>Attendance requests</b> (Attendance tab) and in the <b>Requests</b> tab. Open one to see its status or cancel it while it is still pending.
+                {t("Your existing requests are listed under")} <b>{t("Attendance requests")}</b> {t("(Attendance tab) and in the")} <b>{t("Requests")}</b> {t("tab. Open one to see its status or cancel it while it is still pending.")}
               </div>
             </div>
           )}
@@ -407,7 +410,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
               className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
               style={{ background: "var(--primary)" }}
             >
-              {submitting ? "Submitting…" : "Submit Request"}
+              {submitting ? t("Submitting…") : t("Submit Request")}
             </button>
           </div>
         </div>
@@ -416,29 +419,29 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
       {/* ── Right: selected location + saved locations ── */}
       <div className="card w-full lg:w-[340px] flex-shrink-0">
         <div className="card-header">
-          <span className="card-title"><i className="ti ti-map-pin" />Your Location</span>
+          <span className="card-title"><i className="ti ti-map-pin" />{t("Your Location")}</span>
         </div>
         <div className="card-body flex flex-col gap-4">
           {coords ? (
             <>
-              <InfoRow label="Label" value={selectedSaved?.label || locationLabel || "Current Location"} />
-              <InfoRow label="Latitude" value={coords.latitude.toFixed(6)} />
-              <InfoRow label="Longitude" value={coords.longitude.toFixed(6)} />
-              <InfoRow label="Source" value={locationSource === "address" ? "Looked up from address" : "Captured on device"} />
+              <InfoRow label={t("Label")} value={selectedSaved?.label || locationLabel || t("Current Location")} />
+              <InfoRow label={t("Latitude")} value={coords.latitude.toFixed(6)} />
+              <InfoRow label={t("Longitude")} value={coords.longitude.toFixed(6)} />
+              <InfoRow label={t("Source")} value={locationSource === "address" ? t("Looked up from address") : t("Captured on device")} />
               {coords.accuracy != null && (
-                <InfoRow label="Accuracy" value={`±${Math.round(coords.accuracy)}m`} />
+                <InfoRow label={t("Accuracy")} value={`±${Math.round(coords.accuracy)}m`} />
               )}
             </>
           ) : (
             <p className="text-xs text-center py-4" style={{ color: "var(--on-variant)" }}>
               <i className="ti ti-map-pin-off text-lg block mb-2" style={{ color: "var(--outline)" }} />
-              Select a saved location or capture a new one to see its details here.
+              {t("Select a saved location or capture a new one to see its details here.")}
             </p>
           )}
 
           {locations.length > 0 && (
             <div className="pt-3 border-t" style={{ borderColor: "var(--outline-v)" }}>
-              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--outline)" }}>Saved Locations</div>
+              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--outline)" }}>{t("Saved Locations")}</div>
               <div className="flex flex-col gap-1.5">
                 {locations.map(loc => (
                   <div
@@ -462,7 +465,7 @@ export default function RequestWfhForm({ onSubmitted, onCreated, variant = "page
                       type="button"
                       onClick={() => deleteSavedLocation(loc.id, loc.label)}
                       disabled={deletingId === loc.id}
-                      title="Remove"
+                      title={t("Remove")}
                       className="bg-transparent border-none cursor-pointer p-1"
                       style={{ color: "var(--error)" }}
                       suppressHydrationWarning

@@ -9,19 +9,22 @@
 // from its own real backend endpoint — this file only renders whatever
 // data it's given, never invents any of it.
 
+import { useT } from "@/hooks/useI18n";
+
 export function KpiTile({ label, value, sub, tone = "brand" }: {
   label: string; value: string | number; sub: string; tone?: "brand" | "ok" | "warn" | "crit";
 }) {
+  const t = useT();
   return (
     <div className="stat">
       <div className="top">
-        <div className="lbl">{label}</div>
+        <div className="lbl">{t(label)}</div>
         <div className={`ico ${tone}`}>
           <div style={{ width: 8, height: 8, background: "currentColor", transform: "rotate(45deg)", borderRadius: 2 }} />
         </div>
       </div>
       <div className="num">{value}</div>
-      <div className="sub">{sub}</div>
+      <div className="sub">{t(sub)}</div>
     </div>
   );
 }
@@ -29,22 +32,24 @@ export function KpiTile({ label, value, sub, tone = "brand" }: {
 export function OverviewRow({ label, sub, chip, chipTone, onOpen }: {
   label: string; sub: string; chip: string; chipTone: "warn" | "error" | "success"; onOpen: () => void;
 }) {
+  const t = useT();
   const stateClass = chipTone === "warn" ? "warn" : chipTone === "error" ? "crit" : "ok";
   return (
     <div className="module-row">
-      <div className="mr-label">{label}</div>
-      <div className="mr-meta">{sub}</div>
+      <div className="mr-label">{t(label)}</div>
+      <div className="mr-meta">{t(sub)}</div>
       <span className={`state ${stateClass}`}>{chip}</span>
-      <button onClick={onOpen} className="mr-open">Open</button>
+      <button onClick={onOpen} className="mr-open">{t("Open")}</button>
     </div>
   );
 }
 
 export function QuickActionTile({ title, sub, onClick }: { title: string; sub: string; onClick: () => void }) {
+  const t = useT();
   return (
     <button onClick={onClick} className="quick">
-      <div className="q-title">{title}</div>
-      <div className="q-sub">{sub}</div>
+      <div className="q-title">{t(title)}</div>
+      <div className="q-sub">{t(sub)}</div>
     </button>
   );
 }

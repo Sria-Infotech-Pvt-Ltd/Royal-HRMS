@@ -7,6 +7,7 @@
 
 import { useMemo } from "react";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 import type { EmploymentDraft } from "../../hire/[hireActionId]/_components/EmploymentStep";
 import { useEmploymentLookups } from "@/hooks/useEmploymentLookups";import { EMPLOYMENT_TYPES } from "@/lib/employmentType";
 
@@ -32,6 +33,7 @@ function Required() { return <span className="req">*</span>; }
 function Tag({ text }: { text: string }) { return <span className="tag">{text}</span>; }
 
 export default function EditRecordEmploymentStep({ value, onChange, positionTitle, orgUnitName }: Props) {
+  const t = useT();
   const lookups = useEmploymentLookups();
   const set = <K extends keyof EmploymentDraft>(key: K, next: EmploymentDraft[K]) => onChange({ ...value, [key]: next });
 
@@ -49,118 +51,118 @@ export default function EditRecordEmploymentStep({ value, onChange, positionTitl
 
   return (
     <div className="mstep on">
-      <div className="sechead">JOB DETAILS</div>
+      <div className="sechead">{t("JOB DETAILS")}</div>
       <div className="g3">
-        <div className="f"><label>Date of joining <Required /></label>
+        <div className="f"><label>{t("Date of joining")} <Required /></label>
           <DateInput className="finput" value={value.date_of_joining ?? ""} onChange={iso => set("date_of_joining", iso)} /></div>
-        <div className="f"><label>Work email <Tag text="ASSIGN WHEN READY" /></label>
+        <div className="f"><label>{t("Work email")} <Tag text={t("ASSIGN WHEN READY")} /></label>
           <input type="email" className="finput" value={value.work_email} onChange={e => set("work_email", e.target.value)} placeholder="name@company.example" />
-          <div className="hint">Separate from the personal email used for preboarding.</div></div>
-        <div className="f"><label>Employment type <Required /></label>
+          <div className="hint">{t("Separate from the personal email used for preboarding.")}</div></div>
+        <div className="f"><label>{t("Employment type")} <Required /></label>
           <select className="finput" value={value.employment_type} onChange={e => set("employment_type", e.target.value)}>
-            <option value="">Select</option>
+            <option value="">{t("Select")}</option>
             {value.employment_type && !EMPLOYMENT_TYPES.includes(value.employment_type) && <option value={value.employment_type}>{value.employment_type}</option>}
-            {EMPLOYMENT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+            {EMPLOYMENT_TYPES.map(type => <option key={type} value={type}>{t(type)}</option>)}
           </select></div>
-        <div className="f"><label>Probation period</label>
+        <div className="f"><label>{t("Probation period")}</label>
           <select className="finput" value={value.probation_period_months} onChange={e => set("probation_period_months", e.target.value)}>
-            <option value="">None</option>
-            {PROBATION_MONTHS.map(months => <option key={months} value={months}>{months} months</option>)}
+            <option value="">{t("None")}</option>
+            {PROBATION_MONTHS.map(months => <option key={months} value={months}>{t("{count} months", { count: months })}</option>)}
           </select></div>
-        <div className="f"><label>Confirmation date <Tag text="AUTO" /></label>
+        <div className="f"><label>{t("Confirmation date")} <Tag text={t("AUTO")} /></label>
           <DateInput className="finput auto" readOnly value={confirmationDate} onChange={() => {}} /></div>
-        <div className="f"><label>Notice period</label>
+        <div className="f"><label>{t("Notice period")}</label>
           <select className="finput" value={value.notice_period_days} onChange={e => set("notice_period_days", e.target.value)}>
-            <option value="">None</option>
-            {NOTICE_DAYS.map(days => <option key={days} value={days}>{days} days</option>)}
+            <option value="">{t("None")}</option>
+            {NOTICE_DAYS.map(days => <option key={days} value={days}>{t("{count} days", { count: days })}</option>)}
           </select></div>
       </div>
 
       <div className="divider" />
-      <div className="sechead">POSITION &amp; REPORTING</div>
+      <div className="sechead">{t("POSITION & REPORTING")}</div>
       <div className="g3">
-        <div className="f"><label>Position <Required /></label>
+        <div className="f"><label>{t("Position")} <Required /></label>
           <select className="finput" value={selectedPositionId} onChange={e => set("position", e.target.value)}>
-            {!selectedPositionId && <option value="">{positionTitle || "Select a position"}</option>}
+            {!selectedPositionId && <option value="">{positionTitle || t("Select a position")}</option>}
             {lookups.positions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
           </select></div>
-        <div className="f"><label>Org unit <Tag text="FROM POSITION" /></label>
-          <input className="finput auto" disabled value={unitName} placeholder="Set by position" /></div>
-        <div className="f"><label>Grade / band <Tag text="FROM POSITION" /></label>
-          <input className="finput auto" disabled value={band} placeholder="Set by position" /></div>
-        <div className="f"><label>Reporting manager <Required /> <Tag text="FROM UNIT" /></label>
+        <div className="f"><label>{t("Org unit")} <Tag text={t("FROM POSITION")} /></label>
+          <input className="finput auto" disabled value={unitName} placeholder={t("Set by position")} /></div>
+        <div className="f"><label>{t("Grade / band")} <Tag text={t("FROM POSITION")} /></label>
+          <input className="finput auto" disabled value={band} placeholder={t("Set by position")} /></div>
+        <div className="f"><label>{t("Reporting manager")} <Required /> <Tag text={t("FROM UNIT")} /></label>
           <select className="finput" value={value.reporting_manager_id} onChange={e => set("reporting_manager_id", e.target.value)}>
-            <option value="">Assign later</option>
+            <option value="">{t("Assign later")}</option>
             {lookups.people.filter(p => p.uuid).map(p => <option key={p.uuid} value={p.uuid}>{p.full_name}</option>)}
           </select>
           {!value.reporting_manager_id && (
             <div className="hint" style={{ color: "var(--crit)", fontWeight: 600 }}>
-              No manager mapped to {unitName || "this unit"} — assign later and HR will set it.
+              {t("No manager mapped to {unit} — assign later and HR will set it.", { unit: unitName || t("this unit") })}
             </div>
           )}</div>
-        <div className="f"><label>Dotted-line manager <Tag text="OPTIONAL" /></label>
+        <div className="f"><label>{t("Dotted-line manager")} <Tag text={t("OPTIONAL")} /></label>
           <select className="finput" value={value.dotted_line_manager_id} onChange={e => set("dotted_line_manager_id", e.target.value)}>
-            <option value="">None</option>
+            <option value="">{t("None")}</option>
             {lookups.people.filter(p => p.uuid).map(p => <option key={p.uuid} value={p.uuid}>{p.full_name}</option>)}
           </select>
-          <div className="hint">Any unit — cross-functional reporting.</div></div>
-        <div className="f"><label>Cost center <Tag text="FROM UNIT" /></label>
-          <input className="finput auto" disabled value="" placeholder="Set by position" /></div>
+          <div className="hint">{t("Any unit — cross-functional reporting.")}</div></div>
+        <div className="f"><label>{t("Cost center")} <Tag text={t("FROM UNIT")} /></label>
+          <input className="finput auto" disabled value="" placeholder={t("Set by position")} /></div>
       </div>
 
       <div className="divider" />
-      <div className="sechead">WORK SETUP</div>
+      <div className="sechead">{t("WORK SETUP")}</div>
       <div className="g3">
-        <div className="f"><label>Company Code</label>
+        <div className="f"><label>{t("Company Code")}</label>
           <select className="finput" value={value.branch} onChange={e => set("branch", e.target.value)}>
             {/* No blank choice once a branch is set: saving a blank would clear the employee's Company Code. */}
-            {!value.branch && <option value="">Select</option>}
+            {!value.branch && <option value="">{t("Select")}</option>}
             {value.branch && !lookups.branches.some(b => b.branch_name === value.branch) && <option value={value.branch}>{value.branch}</option>}
             {lookups.branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_code ? `${b.branch_name} (${b.branch_code})` : b.branch_name}</option>)}
           </select>
-          <div className="hint">On save, the work location below follows the new Company Code unless it was entered by hand.</div></div>
-        <div className="f"><label>Work location <Tag text="FROM COMPANY CODE" /></label>
-          <input className="finput auto" disabled value={value.work_location} placeholder="Set from the Company Code address" />
-          <div className="hint">Follows the Company Code; a value entered earlier is kept until the Company Code changes.</div></div>
-        <div className="f"><label>Work mode</label>
+          <div className="hint">{t("On save, the work location below follows the new Company Code unless it was entered by hand.")}</div></div>
+        <div className="f"><label>{t("Work location")} <Tag text={t("FROM COMPANY CODE")} /></label>
+          <input className="finput auto" disabled value={value.work_location} placeholder={t("Set from the Company Code address")} />
+          <div className="hint">{t("Follows the Company Code; a value entered earlier is kept until the Company Code changes.")}</div></div>
+        <div className="f"><label>{t("Work mode")}</label>
           <select className="finput" value={value.work_mode} onChange={e => set("work_mode", e.target.value)}>
-            <option value="">Select</option>
-            {WORK_MODES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            <option value="">{t("Select")}</option>
+            {WORK_MODES.map(([key, label]) => <option key={key} value={key}>{t(label)}</option>)}
           </select></div>
-        <div className="f"><label>Shift</label>
+        <div className="f"><label>{t("Shift")}</label>
           <select className="finput" value={value.working_hours_policy} onChange={e => set("working_hours_policy", e.target.value)}>
-            <option value="">Company default</option>
+            <option value="">{t("Company default")}</option>
             {lookups.shiftPolicies.map(policy => <option key={policy.id} value={policy.id}>{policy.name}</option>)}
           </select></div>
-        <div className="f"><label>Weekly off</label>
+        <div className="f"><label>{t("Weekly off")}</label>
           <select className="finput" value={value.weekly_off_policy} onChange={e => set("weekly_off_policy", e.target.value)}>
-            <option value="">Company default</option>
+            <option value="">{t("Company default")}</option>
             {lookups.weeklyPolicies.map(policy => <option key={policy.id} value={policy.id}>{policy.name}</option>)}
           </select></div>
-        <div className="f"><label>Attendance scheme <Required /></label>
+        <div className="f"><label>{t("Attendance scheme")} <Required /></label>
           <select className="finput" value={value.attendance_scheme} onChange={e => set("attendance_scheme", e.target.value)}>
-            {ATTENDANCE_SCHEMES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            {ATTENDANCE_SCHEMES.map(([key, label]) => <option key={key} value={key}>{t(label)}</option>)}
           </select></div>
-        <div className="f"><label>Leave balances <Tag text="FROM POLICY" /></label>
-          <input className="finput auto" disabled value="Automatic" />
-          <div className="hint">Credited from the leave policy by Company Code, gender and service period; not chosen per employee.</div></div>
+        <div className="f"><label>{t("Leave balances")} <Tag text={t("FROM POLICY")} /></label>
+          <input className="finput auto" disabled value={t("Automatic")} />
+          <div className="hint">{t("Credited from the leave policy by Company Code, gender and service period; not chosen per employee.")}</div></div>
       </div>
 
       <div className="divider" />
-      <div className="sechead">COMPENSATION</div>
+      <div className="sechead">{t("COMPENSATION")}</div>
       <div className="g3">
-        <div className="f"><label>Pay group</label>
-          <input className="finput auto" disabled value="Monthly – India" /></div>
-        <div className="f"><label>Salary structure <Tag text="OPTIONAL" /></label>
+        <div className="f"><label>{t("Pay group")}</label>
+          <input className="finput auto" disabled value={t("Monthly – India")} /></div>
+        <div className="f"><label>{t("Salary structure")} <Tag text={t("OPTIONAL")} /></label>
           <select className="finput" value={value.salary_structure} onChange={e => set("salary_structure", e.target.value)}>
-            <option value="">Not assigned</option>
+            <option value="">{t("Not assigned")}</option>
             {lookups.structures.map(structure => <option key={structure.id} value={structure.id}>{structure.name}</option>)}
           </select></div>
-        <div className="f"><label>Annual fixed CTC <span className="own hr">HR</span></label>
+        <div className="f"><label>{t("Annual fixed CTC")} <span className="own hr">HR</span></label>
           <div className="prefix"><span>₹</span>
             <input type="number" className="finput" min={0} max={100000000} step={1000} value={value.annual_ctc}
               onChange={e => set("annual_ctc", e.target.value)} placeholder="800000" /></div>
-          <div className="hint">Total fixed cost to company per year, excluding variable pay and bonus.</div></div>
+          <div className="hint">{t("Total fixed cost to company per year, excluding variable pay and bonus.")}</div></div>
       </div>
     </div>
   );

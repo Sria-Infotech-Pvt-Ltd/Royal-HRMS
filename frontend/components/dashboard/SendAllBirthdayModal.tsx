@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { CompanyInfo, normalizeExtraContext } from "@/lib/emailPreview";
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
+  const t = useT();
   const [templateGroups,   setTemplateGroups]   = useState<TemplateGroup[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<WishTemplate | null>(null);
@@ -43,17 +45,17 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
         const groups: TemplateGroup[] = Object.entries(grouped)
           .map(([category, items]) => ({
             category,
-            templates: (items as WishTemplate[]).filter(t => t.is_active),
+            templates: (items as WishTemplate[]).filter(template => template.is_active),
           }))
           .filter(g => g.templates.length > 0);
         setTemplateGroups(groups);
         const all = groups.flatMap(g => g.templates);
-        setSelectedTemplate(all.find(t => t.name.includes("birthday")) ?? all[0] ?? null);
+        setSelectedTemplate(all.find(template => template.name.includes("birthday")) ?? all[0] ?? null);
         setCompany(coRes.data?.data ?? null);
       })
-      .catch(() => setApiError("Could not load templates or company info."))
+      .catch(() => setApiError(t("Could not load templates or company info.")))
       .finally(() => setLoadingTemplates(false));
-  }, []);
+  }, [t]);
 
   function buildVars(entry: BirthdayEntry): Record<string, string> {
     const parts       = entry.name.trim().split(/\s+/);
@@ -114,7 +116,7 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
       title={
         <>
           <i className="ti ti-confetti" style={{ marginRight: 6 }} />
-          Send Birthday Wishes — All ({entries.length})
+          {t("Send Birthday Wishes — All ({count})", { count: entries.length })}
         </>
       }
       onClose={onClose}
@@ -123,12 +125,12 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
       footer={
         isDone ? (
           <button className="btn btn-filled" onClick={onClose} suppressHydrationWarning>
-            <i className="ti ti-check" /> Close
+            <i className="ti ti-check" /> {t("Close")}
           </button>
         ) : (
           <>
             <button className="btn btn-ghost" onClick={onClose} disabled={sending} suppressHydrationWarning>
-              Cancel
+              {t("Cancel")}
             </button>
             <button
               className="btn btn-filled"
@@ -137,8 +139,8 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
               suppressHydrationWarning
             >
               {sending
-                ? <><i className="ti ti-loader-2 spin" /> Sending…</>
-                : <><i className="ti ti-confetti" /> Send to All {entries.length}</>
+                ? <><i className="ti ti-loader-2 spin" /> {t("Sending…")}</>
+                : <><i className="ti ti-confetti" /> {t("Send to All {count}", { count: entries.length })}</>
               }
             </button>
           </>
@@ -155,7 +157,7 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
           <div className="alert alert-info mb-16">
             <i className="ti ti-users" />
             <div>
-              Sending to <strong>{entries.length} employee{entries.length !== 1 ? "s" : ""}</strong>:{" "}
+              {t("Sending to")} <strong>{entries.length === 1 ? t("{count} employee", { count: entries.length }) : t("{count} employees", { count: entries.length })}</strong>:{" "}
               {entries.map(e => e.name).join(", ")}
             </div>
           </div>
@@ -163,29 +165,29 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
           {/* Template picker — only visible before sending */}
           {!isDone && (
             <div className="field-group mb-16">
-              <label className="field-label">Wish Template *</label>
+              <label className="field-label">{t("Wish Template *")}</label>
               {loadingTemplates ? (
                 <div style={{ fontSize: 13, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 6 }}>
-                  <i className="ti ti-loader-2 spin" /> Loading templates…
+                  <i className="ti ti-loader-2 spin" /> {t("Loading templates…")}
                 </div>
               ) : (
                 <select
                   className="field-input field-select"
                   value={selectedTemplate?.name ?? ""}
                   onChange={e => {
-                    const found = templateGroups.flatMap(g => g.templates).find(t => t.name === e.target.value) ?? null;
+                    const found = templateGroups.flatMap(g => g.templates).find(template => template.name === e.target.value) ?? null;
                     setSelectedTemplate(found);
                   }}
                   disabled={sending}
                   suppressHydrationWarning
                 >
                   {templateGroups.length === 0 && (
-                    <option value="">No active templates — create one in Settings → Email Templates</option>
+                    <option value="">{t("No active templates — create one in Settings → Email Templates")}</option>
                   )}
                   {templateGroups.map(g => (
                     <optgroup key={g.category} label={g.category.charAt(0).toUpperCase() + g.category.slice(1)}>
-                      {g.templates.map(t => (
-                        <option key={t.name} value={t.name}>{t.display_name}</option>
+                      {g.templates.map(template => (
+                        <option key={template.name} value={template.name}>{template.display_name}</option>
                       ))}
                     </optgroup>
                   ))}
@@ -198,7 +200,7 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
           {progress && (
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, color: "var(--on-variant)" }}>
-                <span>{sending ? "Sending wishes…" : "Done"}</span>
+                <span>{sending ? t("Sending wishes…") : t("Done")}</span>
                 <span>{progress.done} / {progress.total}</span>
               </div>
               <div style={{ height: 6, background: "var(--bg-high)", borderRadius: 3, overflow: "hidden" }}>
@@ -214,15 +216,15 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
               {isDone && progress.errors.length === 0 && (
                 <div className="alert alert-info" style={{ marginTop: 12 }}>
                   <i className="ti ti-circle-check" style={{ color: "#38a169" }} />
-                  <div>All birthday wishes sent successfully!</div>
+                  <div>{t("All birthday wishes sent successfully!")}</div>
                 </div>
               )}
               {isDone && progress.errors.length > 0 && (
                 <div className="alert alert-error" style={{ marginTop: 12 }}>
                   <i className="ti ti-alert-circle" />
                   <div>
-                    {progress.done - progress.errors.length} sent.
-                    Failed: {progress.errors.join(", ")}
+                    {t("{count} sent.", { count: progress.done - progress.errors.length })}{" "}
+                    {t("Failed: {names}", { names: progress.errors.join(", ") })}
                   </div>
                 </div>
               )}

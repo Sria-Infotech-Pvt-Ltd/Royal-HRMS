@@ -8,6 +8,7 @@ import clientApi from "@/lib/clientApi";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import Modal from "@/components/Modal";
 import FieldError from "@/components/shared/FieldError";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   action:        "approve" | "reject";
@@ -28,6 +29,7 @@ interface Props {
 export function ApprovalModal({
   action, itemLabel, employeeName, employeeEmail, kind, entityId, autoVars, onConfirm, onClose, saving,
 }: Props) {
+  const t = useT();
   const isApprove  = action === "approve";
   const currentUser = useCurrentUser();
 
@@ -111,15 +113,15 @@ export function ApprovalModal({
         // Request Approved" while approving an expense, whose variables
         // (MONTH/YEAR, leave_type/start_date/...) can never resolve for an
         // expense record no matter how much context this modal has.
-        const isRelevant = (t: EmailTemplate) => !kind || t.name.startsWith(`${kind}_`);
+        const isRelevant = (tpl: EmailTemplate) => !kind || tpl.name.startsWith(`${kind}_`);
         const groups = Object.entries(grouped)
-          .map(([category, items]) => ({ category, templates: items.filter(t => t.is_active && isRelevant(t)) }))
+          .map(([category, items]) => ({ category, templates: items.filter(tpl => tpl.is_active && isRelevant(tpl)) }))
           .filter(g => g.templates.length > 0);
         setTemplateGroups(groups);
         setSelectedTemplate(_pickDefaultTemplate(groups, kind, action));
         setCompany(coRes.data?.data ?? null);
       })
-      .catch(() => setTemplateErr("Could not load email templates."))
+      .catch(() => setTemplateErr(t("Could not load email templates.")))
       .finally(() => setLoadingTemplates(false));
   // Deliberately fetches once when the modal opens in approve mode, not on
   // every `kind`/`action` change — those are fixed for the lifetime of one
@@ -154,7 +156,7 @@ export function ApprovalModal({
   function handleConfirm() {
     // Rejecting needs a reason: say so beside the field instead of leaving a dead button.
     if (!isApprove && !remarks.trim()) {
-      setRemarksError("A reason is required to reject.");
+      setRemarksError(t("A reason is required to reject."));
       return;
     }
     if (isApprove) {
@@ -166,13 +168,13 @@ export function ApprovalModal({
 
   return (
     <Modal
-      title={`${isApprove ? "Approve" : "Reject"} — ${itemLabel}`}
+      title={t("{action} — {item}", { action: isApprove ? t("Approve") : t("Reject"), item: itemLabel })}
       onClose={onClose}
       maxWidth={isApprove ? 700 : 480}
       footer={
         <>
           <button className="btn btn-ghost" suppressHydrationWarning onClick={onClose} disabled={saving}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
@@ -181,11 +183,11 @@ export function ApprovalModal({
             onClick={handleConfirm}
           >
             {saving ? (
-              <><i className="ti ti-loader-2 spin" /> Saving…</>
+              <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</>
             ) : isApprove ? (
-              <><i className="ti ti-check" /> {selectedTemplate ? "Approve & Send Email" : "Approve"}</>
+              <><i className="ti ti-check" /> {selectedTemplate ? t("Approve & Send Email") : t("Approve")}</>
             ) : (
-              <><i className="ti ti-x" /> Reject</>
+              <><i className="ti ti-x" /> {t("Reject")}</>
             )}
           </button>
         </>
@@ -201,25 +203,25 @@ export function ApprovalModal({
           {isApprove && (
             <>
               <div className="field-group mb-16">
-                <label className="field-label">Notification Email Template</label>
+                <label className="field-label">{t("Notification Email Template")}</label>
                 {loadingTemplates ? (
                   <div style={{ fontSize: 13, color: "var(--on-variant)" }}>
-                    <i className="ti ti-loader-2 spin" /> Loading templates…
+                    <i className="ti ti-loader-2 spin" /> {t("Loading templates…")}
                   </div>
                 ) : (
                   <select
                     className="field-input field-select"
                     value={selectedTemplate?.name ?? ""}
                     onChange={e => {
-                      const found = templateGroups.flatMap(g => g.templates).find(t => t.name === e.target.value) ?? null;
+                      const found = templateGroups.flatMap(g => g.templates).find(tpl => tpl.name === e.target.value) ?? null;
                       setSelectedTemplate(found);
                     }}
                   >
-                    <option value="">Don&apos;t notify the employee</option>
+                    <option value="">{t("Don't notify the employee")}</option>
                     {templateGroups.map(g => (
                       <optgroup key={g.category} label={g.category.charAt(0).toUpperCase() + g.category.slice(1)}>
-                        {g.templates.map(t => (
-                          <option key={t.name} value={t.name}>{t.display_name}</option>
+                        {g.templates.map(tpl => (
+                          <option key={tpl.name} value={tpl.name}>{tpl.display_name}</option>
                         ))}
                       </optgroup>
                     ))}
@@ -229,7 +231,7 @@ export function ApprovalModal({
 
               {Object.keys(extraVars).length > 0 && (
                 <div className="settings-card mb-16">
-                  <div className="settings-card-title mb-8">Fill in template variables</div>
+                  <div className="settings-card-title mb-8">{t("Fill in template variables")}</div>
                   <div className="form-row cols-2">
                     {Object.keys(extraVars).map(key => (
                       <div key={key} className="field-group">
@@ -238,7 +240,7 @@ export function ApprovalModal({
                         </label>
                         <input
                           className="field-input"
-                          placeholder={`Enter ${key.replace(/_/g, " ")}`}
+                          placeholder={t("Enter {name}", { name: key.replace(/_/g, " ") })}
                           value={extraVars[key]}
                           onChange={e => setExtraVars(prev => ({ ...prev, [key]: e.target.value }))}
                         />
@@ -251,20 +253,20 @@ export function ApprovalModal({
               {selectedTemplate && (
                 <div className="settings-card mb-16">
                   <div className="settings-card-title mb-8">
-                    <i className="ti ti-mail" /> Email Preview
+                    <i className="ti ti-mail" /> {t("Email Preview")}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 2 }}>
-                    <strong>To:</strong> {employeeName}{employeeEmail ? ` <${employeeEmail}>` : ""}
+                    <strong>{t("To:")}</strong> {employeeName}{employeeEmail ? ` <${employeeEmail}>` : ""}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
-                    <strong>Subject:</strong>{" "}
+                    <strong>{t("Subject:")}</strong>{" "}
                     {renderTemplateVars(selectedTemplate.subject, previewVars())}
                   </div>
                   <iframe
                     srcDoc={previewHtml()}
                     sandbox="allow-same-origin"
                     style={{ width: "100%", height: 320, border: "1px solid var(--outline-v)", borderRadius: 6, display: "block" }}
-                    title="Email preview"
+                    title={t("Email preview")}
                   />
                 </div>
               )}
@@ -275,18 +277,18 @@ export function ApprovalModal({
           {!isApprove && (
             <div className="alert alert-warn mb-16">
               <i className="ti ti-alert-triangle" />
-              <div>This request will be rejected. The employee will be notified.</div>
+              <div>{t("This request will be rejected. The employee will be notified.")}</div>
             </div>
           )}
 
           <div className="field-group">
             <label className="field-label">
-              Remarks {!isApprove && <span style={{ color: "var(--error)" }}>*</span>}
+              {t("Remarks")} {!isApprove && <span style={{ color: "var(--error)" }}>*</span>}
             </label>
             <textarea
               className="field-input"
               rows={3}
-              placeholder={isApprove ? "Optional notes for the record…" : "Reason for rejection (required)"}
+              placeholder={isApprove ? t("Optional notes for the record…") : t("Reason for rejection (required)")}
               value={remarks}
               onChange={e => { setRemarks(e.target.value); setRemarksError(""); }}
               style={{ resize: "vertical" }}

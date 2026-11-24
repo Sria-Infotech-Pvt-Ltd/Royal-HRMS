@@ -1,3 +1,5 @@
+import { tr } from "@/lib/i18n/tr";
+
 // ─── Endpoints ───────────────────────────────────────────────────────────────
 export const SMTP_BASE    = "/settings/smtp/";
 export const smtpDetail   = (id: number) => `/settings/smtp/${id}/`;
@@ -115,12 +117,12 @@ export function formToPayload(form: SmtpForm): Record<string, unknown> {
 
 export function validateSmtpForm(form: SmtpForm, isAdd: boolean): SmtpFormErrors {
   const e: SmtpFormErrors = {};
-  if (!form.name.trim())      e.name      = "Configuration name is required";
-  if (!form.fromEmail.trim()) e.fromEmail = "From email is required";
+  if (!form.name.trim())      e.name      = tr("Configuration name is required");
+  if (!form.fromEmail.trim()) e.fromEmail = tr("From email is required");
   if (form.smtpType === "local") {
-    if (!form.host.trim())     e.host     = "Host is required";
-    if (!form.username.trim()) e.username = "Username is required";
-    if (isAdd && !form.password.trim()) e.password = "Password is required";
+    if (!form.host.trim())     e.host     = tr("Host is required");
+    if (!form.username.trim()) e.username = tr("Username is required");
+    if (isAdd && !form.password.trim()) e.password = tr("Password is required");
   }
   return e;
 }

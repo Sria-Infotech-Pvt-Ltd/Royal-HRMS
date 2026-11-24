@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
@@ -27,6 +28,7 @@ function Spin() {
 }
 
 export default function EditFieldModal({ field, onClose, onSaved }: Props) {
+  const t = useT();
   const [label, setLabel] = useState(field.label);
   const [optionsText, setOptionsText] = useState((field.options ?? []).join(", "));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -37,8 +39,8 @@ export default function EditFieldModal({ field, onClose, onSaved }: Props) {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!label.trim()) e.label = "Label is required.";
-    if (isDropdown && !optionsText.trim()) e.options = "Add at least one option, separated by commas.";
+    if (!label.trim()) e.label = t("Label is required.");
+    if (isDropdown && !optionsText.trim()) e.options = t("Add at least one option, separated by commas.");
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -55,7 +57,7 @@ export default function EditFieldModal({ field, onClose, onSaved }: Props) {
       await clientApi.patch(API.settings.onboardingFields.detail(field.field_key), payload);
       onSaved();
     } catch (err: unknown) {
-      setSubmitError((err as { message?: string })?.message ?? "Failed to update field.");
+      setSubmitError((err as { message?: string })?.message ?? t("Failed to update field."));
     } finally {
       setIsSubmitting(false);
     }
@@ -63,14 +65,14 @@ export default function EditFieldModal({ field, onClose, onSaved }: Props) {
 
   return (
     <Modal
-      title={<><i className="ti ti-pencil" style={{ marginRight: 8 }} />Edit Field</>}
+      title={<><i className="ti ti-pencil" style={{ marginRight: 8 }} />{t("Edit Field")}</>}
       onClose={onClose}
       maxWidth={460}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={submit} disabled={isSubmitting}>
-            {isSubmitting ? <><Spin />&nbsp;Saving…</> : "Save"}
+            {isSubmitting ? <><Spin />&nbsp;{t("Saving…")}</> : t("Save")}
           </button>
         </>
       }
@@ -82,7 +84,7 @@ export default function EditFieldModal({ field, onClose, onSaved }: Props) {
       )}
 
       <div className="field-group mb-16">
-        <label className="field-label">Field Label *</label>
+        <label className="field-label">{t("Field Label *")}</label>
         <input
           className={`field-input${errors.label ? " field-error" : ""}`}
           type="text"
@@ -93,29 +95,29 @@ export default function EditFieldModal({ field, onClose, onSaved }: Props) {
       </div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Field Type</label>
+        <label className="field-label">{t("Field Type")}</label>
         <div style={{ fontSize: 13, color: "var(--on-variant)", padding: "8px 0" }}>
-          {TYPE_LABELS[field.field_type] ?? field.field_type}
+          {t(TYPE_LABELS[field.field_type] ?? field.field_type)}
         </div>
         <p style={{ fontSize: 11, color: "var(--on-variant)" }}>
-          Type can&apos;t be changed after creation — it would corrupt any values already collected under it.
-          {field.is_custom ? "" : " Built-in fields can't change type at all."}
+          {t("Type can't be changed after creation — it would corrupt any values already collected under it.")}
+          {field.is_custom ? "" : ` ${t("Built-in fields can't change type at all.")}`}
         </p>
       </div>
 
       {isDropdown && (
         <div className="field-group">
-          <label className="field-label">Dropdown Options *</label>
+          <label className="field-label">{t("Dropdown Options *")}</label>
           <input
             className={`field-input${errors.options ? " field-error" : ""}`}
             type="text"
-            placeholder="e.g. Option A, Option B, Option C"
+            placeholder={t("e.g. Option A, Option B, Option C")}
             value={optionsText}
             onChange={e => { setOptionsText(e.target.value); setErrors(prev => ({ ...prev, options: "" })); }}
           />
           {errors.options
             ? <p className="field-error-msg">{errors.options}</p>
-            : <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>Separate options with commas.</p>
+            : <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>{t("Separate options with commas.")}</p>
           }
         </div>
       )}

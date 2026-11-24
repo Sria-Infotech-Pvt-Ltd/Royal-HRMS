@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
@@ -21,6 +22,7 @@ interface Props {
 
 export default function DeleteHolidayModal({ holiday, onClose, onDeleted }: Props) {
   const { showToast } = useToast();
+  const t = useT();
   const [deleting, setDeleting] = useState(false);
 
   async function confirmDelete() {
@@ -31,7 +33,7 @@ export default function DeleteHolidayModal({ holiday, onClose, onDeleted }: Prop
       onDeleted();
       onClose();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to delete holiday.";
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Failed to delete holiday.");
       showToast(msg, "error");
       setDeleting(false);
     }
@@ -44,19 +46,19 @@ export default function DeleteHolidayModal({ holiday, onClose, onDeleted }: Prop
           <div className="w-12 h-12 rounded-full bg-[var(--error-c)] flex items-center justify-center mx-auto mb-4">
             <i className="ti ti-trash text-xl text-[var(--error)]" />
           </div>
-          <p className="text-sm font-bold text-[var(--on-bg)] mb-1">Delete Holiday?</p>
+          <p className="text-sm font-bold text-[var(--on-bg)] mb-1">{t("Delete Holiday?")}</p>
           <p className="text-sm text-[var(--on-variant)]">
-            <strong className="text-[var(--on-bg)]">{holiday.name}</strong> ({fmtDate(holiday.date)}) will be permanently removed.
+            <strong className="text-[var(--on-bg)]">{holiday.name}</strong> ({fmtDate(holiday.date)}) {t("will be permanently removed.")}
           </p>
         </div>
         <div className="flex gap-2 px-6 pb-5">
           <button onClick={onClose} disabled={deleting}
             className="flex-1 py-2 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-mid)] transition-colors">
-            Cancel
+            {t("Cancel")}
           </button>
           <button onClick={confirmDelete} disabled={deleting}
             className="flex-1 py-2 rounded-xl bg-[var(--error-solid)] hover:bg-[var(--error-solid)] text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2">
-            {deleting ? <><i className="ti ti-loader-2 animate-spin" /> Deleting…</> : "Delete"}
+            {deleting ? <><i className="ti ti-loader-2 animate-spin" /> {t("Deleting…")}</> : t("Delete")}
           </button>
         </div>
       </div>

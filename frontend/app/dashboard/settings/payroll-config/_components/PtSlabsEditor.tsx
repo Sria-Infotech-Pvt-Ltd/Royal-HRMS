@@ -1,3 +1,5 @@
+import { useT } from "@/hooks/useI18n";
+
 export interface PTSlab { min: number; max: number | null; amount: number; }
 
 interface PtSlabsEditorProps {
@@ -8,16 +10,17 @@ interface PtSlabsEditorProps {
 }
 
 export default function PtSlabsEditor({ slabs, onAdd, onRemove, onUpdate }: PtSlabsEditorProps) {
+  const t = useT();
   return (
     <div className="mt-4">
-      <div className="text-[11px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-2">PT Slabs</div>
+      <div className="text-[11px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-2">{t("PT Slabs")}</div>
       <div className="border border-[var(--outline-v)] rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-[var(--bg-mid)] border-b border-[var(--outline-v)]">
-              <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">Min (₹)</th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">Max (₹)</th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">PT Amount (₹/mo)</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">{t("Min (₹)")}</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">{t("Max (₹)")}</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">{t("PT Amount (₹/mo)")}</th>
               <th className="px-3 py-2 w-10" />
             </tr>
           </thead>
@@ -38,7 +41,7 @@ export default function PtSlabsEditor({ slabs, onAdd, onRemove, onUpdate }: PtSl
                     type="number"
                     min={0}
                     value={slab.max ?? ""}
-                    placeholder="No limit"
+                    placeholder={t("No limit")}
                     onChange={e => onUpdate(i, "max", e.target.value)}
                     className="w-full rounded border border-[var(--outline-v)] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
                   />
@@ -56,7 +59,7 @@ export default function PtSlabsEditor({ slabs, onAdd, onRemove, onUpdate }: PtSl
                   <button
                     onClick={() => onRemove(i)}
                     className="text-[var(--error)] hover:text-[var(--error)] transition-colors p-1 rounded"
-                    title="Remove slab"
+                    title={t("Remove slab")}
                   >
                     <i className="ti ti-trash text-sm" />
                   </button>
@@ -66,7 +69,7 @@ export default function PtSlabsEditor({ slabs, onAdd, onRemove, onUpdate }: PtSl
             {slabs.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-3 py-4 text-center text-[var(--outline)] text-xs">
-                  No PT slabs defined — add one below
+                  {t("No PT slabs defined — add one below")}
                 </td>
               </tr>
             )}
@@ -77,10 +80,10 @@ export default function PtSlabsEditor({ slabs, onAdd, onRemove, onUpdate }: PtSl
         onClick={onAdd}
         className="mt-2 flex items-center gap-1.5 text-[12px] text-[var(--info)] border border-[var(--info)] hover:bg-[var(--info-c)] px-3 py-1.5 rounded-lg transition-colors"
       >
-        <i className="ti ti-plus text-xs" /> Add Slab
+        <i className="ti ti-plus text-xs" /> {t("Add Slab")}
       </button>
       <div className="mt-2 text-[11px] text-[var(--outline)]">
-        Leave Max blank on the last slab to apply it to all higher incomes.
+        {t("Leave Max blank on the last slab to apply it to all higher incomes.")}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import type { Holiday } from "@/types/holidays";
 import { TYPE_STYLES } from "./HolidayListView";
 
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export default function HolidayCalendarView({ year, calMonth, holidays, onMonthChange, onView }: Props) {
+  const t = useT();
   const weeks = calendarWeeks(year, calMonth);
   const calMap = Object.fromEntries(holidays.map(h => [h.date, h]));
 
@@ -44,22 +46,22 @@ export default function HolidayCalendarView({ year, calMonth, holidays, onMonthC
     <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
         <button onClick={() => onMonthChange(Math.max(0, calMonth - 1))} disabled={calMonth === 0}
-          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label="Previous">
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label={t("Previous")}>
           <i className="ti ti-chevron-left text-sm" />
         </button>
         <div className="text-center">
-          <div className="text-base font-bold text-[var(--on-bg)]">{MONTH_NAMES[calMonth]} {year}</div>
-          <div className="text-xs text-[var(--outline)] mt-0.5">{holidays.length} holiday{holidays.length !== 1 ? "s" : ""} this month</div>
+          <div className="text-base font-bold text-[var(--on-bg)]">{t(MONTH_NAMES[calMonth])} {year}</div>
+          <div className="text-xs text-[var(--outline)] mt-0.5">{holidays.length === 1 ? t("{count} holiday this month", { count: holidays.length }) : t("{count} holidays this month", { count: holidays.length })}</div>
         </div>
         <button onClick={() => onMonthChange(Math.min(11, calMonth + 1))} disabled={calMonth === 11}
-          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label="Next">
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label={t("Next")}>
           <i className="ti ti-chevron-right text-sm" />
         </button>
       </div>
 
       <div className="grid grid-cols-7 border-b border-[var(--outline-v)]">
         {DAY_SHORT.map(d => (
-          <div key={d} className={`py-2 text-center text-xs font-bold uppercase tracking-wider ${d === "Sun" ? "text-[var(--error)]" : "text-[var(--outline)]"}`}>{d}</div>
+          <div key={d} className={`py-2 text-center text-xs font-bold uppercase tracking-wider ${d === "Sun" ? "text-[var(--error)]" : "text-[var(--outline)]"}`}>{t(d)}</div>
         ))}
       </div>
 
@@ -81,7 +83,7 @@ export default function HolidayCalendarView({ year, calMonth, holidays, onMonthC
                         <div className={`mt-1 px-1.5 py-1 rounded text-xs font-medium leading-tight ${TYPE_STYLES[holiday.holiday_type].cal} cursor-pointer`}
                           onClick={() => onView(holiday)}>
                           <div className="truncate">{holiday.name}</div>
-                          {holiday.is_optional && <div className="text-[var(--primary)] text-[10px]">Optional</div>}
+                          {holiday.is_optional && <div className="text-[var(--primary)] text-[10px]">{t("Optional")}</div>}
                         </div>
                       )}
                     </>
@@ -95,7 +97,7 @@ export default function HolidayCalendarView({ year, calMonth, holidays, onMonthC
 
       {holidays.length > 0 && (
         <div className="border-t border-[var(--outline-v)] px-5 py-4">
-          <div className="text-xs font-bold text-[var(--outline)] uppercase tracking-wider mb-3">Holidays in {MONTH_NAMES[calMonth]}</div>
+          <div className="text-xs font-bold text-[var(--outline)] uppercase tracking-wider mb-3">{t("Holidays in {month}", { month: t(MONTH_NAMES[calMonth]) })}</div>
           <div className="flex flex-col gap-2">
             {[...holidays].sort((a, b) => a.date.localeCompare(b.date)).map(h => (
               <div key={h.id} className="flex items-center gap-3 text-sm">
@@ -103,7 +105,7 @@ export default function HolidayCalendarView({ year, calMonth, holidays, onMonthC
                 <span className="font-semibold text-[var(--on-bg)] w-[160px] truncate">{h.name}</span>
                 <span className="text-[var(--outline)]">{fmtDate(h.date)}</span>
                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_STYLES[h.holiday_type].badge}`}>{h.holiday_type_display}</span>
-                {h.is_optional && <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--primary-c)] text-[var(--primary)]">Optional</span>}
+                {h.is_optional && <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--primary-c)] text-[var(--primary)]">{t("Optional")}</span>}
               </div>
             ))}
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import Link from "next/link";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -35,6 +36,7 @@ function anniversaryDate(emp: LifecycleEmployee): string {
 }
 
 function EmployeeRow({ emp, tab }: { emp: LifecycleEmployee; tab: Tab }) {
+  const t = useT();
   const displayName = resolveName(emp);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid var(--bg-high)" }}>
@@ -60,16 +62,16 @@ function EmployeeRow({ emp, tab }: { emp: LifecycleEmployee; tab: Tab }) {
       {tab === "notice_period" && (
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, color: "var(--error)", fontWeight: 600, whiteSpace: "nowrap" }}>
-            Last day: {lastDay(emp)}
+            {t("Last day: {date}", { date: lastDay(emp) })}
           </div>
           {emp.days_left !== undefined && (
-            <div style={{ fontSize: 10, color: "var(--on-variant)", marginTop: 1 }}>{emp.days_left} days left</div>
+            <div style={{ fontSize: 10, color: "var(--on-variant)", marginTop: 1 }}>{t("{count} days left", { count: emp.days_left })}</div>
           )}
         </div>
       )}
       {tab === "work_anniversaries" && (
         <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 20, background: "rgba(162,98,12,0.12)", color: "var(--warn)", whiteSpace: "nowrap" }}>
-          {emp.years !== undefined ? `${emp.years} ${emp.years === 1 ? "year" : "years"}` : anniversaryDate(emp)}
+          {emp.years !== undefined ? (emp.years === 1 ? t("{count} year", { count: emp.years }) : t("{count} years", { count: emp.years })) : anniversaryDate(emp)}
         </span>
       )}
     </div>
@@ -77,13 +79,14 @@ function EmployeeRow({ emp, tab }: { emp: LifecycleEmployee; tab: Tab }) {
 }
 
 export default function EmployeeLifecycleTabs() {
+  const t = useT();
   const [active, setActive] = useState<Tab>("new_joiners");
   const { data, loading } = useFetch<EmployeeLifecycle>(API.dashboard.employeeLifecycle);
 
   const tabs: { key: Tab; icon: string; label: string }[] = [
-    { key: "new_joiners",        icon: "ti-user-plus", label: "New Joiners"    },
-    { key: "notice_period",      icon: "ti-logout",    label: "Notice Period"  },
-    { key: "work_anniversaries", icon: "ti-award",     label: "Anniversaries"  },
+    { key: "new_joiners",        icon: "ti-user-plus", label: t("New Joiners") },
+    { key: "notice_period",      icon: "ti-logout",    label: t("Notice Period") },
+    { key: "work_anniversaries", icon: "ti-award",     label: t("Anniversaries") },
   ];
 
   const count = (key: Tab) => data?.[key]?.count ?? 0;
@@ -92,8 +95,8 @@ export default function EmployeeLifecycleTabs() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-arrows-exchange" /> Employee Lifecycle</div>
-        <Link href="/dashboard/employees" className="btn btn-ghost btn-sm">All employees</Link>
+        <div className="card-title"><i className="ti ti-arrows-exchange" /> {t("Employee Lifecycle")}</div>
+        <Link href="/dashboard/employees" className="btn btn-ghost btn-sm">{t("All employees")}</Link>
       </div>
 
       {/* Tabs */}
@@ -130,12 +133,12 @@ export default function EmployeeLifecycleTabs() {
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : employees.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-user" style={{ fontSize: 22, display: "block", marginBottom: 6, opacity: 0.3 }} />
-          No records
+          {t("No records")}
         </div>
       ) : (
         <div style={{ padding: 0 }}>

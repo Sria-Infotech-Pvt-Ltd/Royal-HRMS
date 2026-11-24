@@ -3,6 +3,7 @@
 import TimesheetStatusBadge from "@/components/timesheet/TimesheetStatusBadge";
 import { addDays, currentMonday, weekRangeLabel } from "@/lib/timesheet";
 import type { TimesheetWeekView } from "@/types/timesheet";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   view: TimesheetWeekView;
@@ -14,6 +15,7 @@ function dueText(dueIso: string): string {
 }
 
 export default function TimesheetHeader({ view, onGoToWeek }: Props) {
+  const t = useT();
   const thisWeek = currentMonday();
   const isCurrentOrLater = view.week_start >= thisWeek;
   return (
@@ -21,16 +23,16 @@ export default function TimesheetHeader({ view, onGoToWeek }: Props) {
       <div>
         <h2 style={{ margin: 0 }}>{weekRangeLabel(view.week_start, view.week_end)}</h2>
         <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--muted)" }}>
-          Due {dueText(view.due_date)}{view.approver ? ` · Approver: ${view.approver.name}` : ""}
+          {t("Due {date}", { date: dueText(view.due_date) })}{view.approver ? ` · ${t("Approver: {name}", { name: view.approver.name })}` : ""}
         </p>
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <TimesheetStatusBadge status={view.status} isLate={view.is_late} />
-        <button type="button" className="rvbtn" aria-label="Previous week" onClick={() => onGoToWeek(addDays(view.week_start, -7))}>
+        <button type="button" className="rvbtn" aria-label={t("Previous week")} onClick={() => onGoToWeek(addDays(view.week_start, -7))}>
           <i className="ti ti-chevron-left" aria-hidden="true" />
         </button>
-        <button type="button" className="rvbtn" disabled={view.week_start === thisWeek} onClick={() => onGoToWeek(thisWeek)}>This week</button>
-        <button type="button" className="rvbtn" aria-label="Next week" disabled={isCurrentOrLater} onClick={() => onGoToWeek(addDays(view.week_start, 7))}>
+        <button type="button" className="rvbtn" disabled={view.week_start === thisWeek} onClick={() => onGoToWeek(thisWeek)}>{t("This week")}</button>
+        <button type="button" className="rvbtn" aria-label={t("Next week")} disabled={isCurrentOrLater} onClick={() => onGoToWeek(addDays(view.week_start, 7))}>
           <i className="ti ti-chevron-right" aria-hidden="true" />
         </button>
       </div>

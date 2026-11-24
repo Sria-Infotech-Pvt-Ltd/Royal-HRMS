@@ -11,6 +11,8 @@ export interface AppraisalReflectionForm {
   next_cycle_goal: string;
 }
 
+import { useT } from "@/hooks/useI18n";
+
 interface Props {
   value: AppraisalReflectionForm;
   disabled: boolean;
@@ -25,16 +27,17 @@ const FIELDS: { key: keyof AppraisalReflectionForm; label: string; placeholder: 
 ];
 
 export default function AppraisalReflectionFields({ value, disabled, onChange }: Props) {
+  const t = useT();
   return (
     <div className="form-row cols-2 mb-16">
       {FIELDS.map(field => (
         <div key={field.key} className="field-group">
-          <label className="field-label">{field.label}</label>
+          <label className="field-label">{t(field.label)}</label>
           <textarea
             className="field-input"
             rows={2}
             disabled={disabled}
-            placeholder={field.placeholder}
+            placeholder={t(field.placeholder)}
             value={value[field.key]}
             onChange={e => onChange(field.key, e.target.value)}
           />

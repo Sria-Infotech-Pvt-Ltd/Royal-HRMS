@@ -17,6 +17,8 @@ import {
 } from "./_data";
 import DateInput from "@/components/shared/DateInput";
 import { confirmDialog } from "@/components/DialogProvider";
+import { tr } from "@/lib/i18n/tr";
+import { useT } from "@/hooks/useI18n";
 
 // ─── Filter tabs ──────────────────────────────────────────────────────────────
 
@@ -33,6 +35,7 @@ const FILTER_TO_CATEGORY: Record<Filter, DocCategory | ""> = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DocumentCenterPage() {
+  const t = useT();
   const canUpload = usePermission("documents.create");
   const canDelete = usePermission("documents.delete");
 
@@ -114,7 +117,7 @@ export default function DocumentCenterPage() {
       const data = Array.isArray(envelope) ? envelope : (envelope?.results ?? []);
       setDocuments(data);
     } catch (err: unknown) {
-      setError((err as { message?: string }).message ?? "Failed to load documents");
+      setError((err as { message?: string }).message ?? tr("Failed to load documents"));
     } finally {
       setLoading(false);
     }
@@ -167,14 +170,14 @@ export default function DocumentCenterPage() {
       setShowUpload(false);
       setUploadForm(EMPTY_UPLOAD_FORM);
       setUploadErrors({});
-      showToast("Document uploaded successfully");
+      showToast(t("Document uploaded successfully"));
       loadStats();
     } catch (err: unknown) {
       const e = err as { message?: string; status?: number };
       if (e.status === 403) {
-        showToast("You do not have permission to upload documents.", false);
+        showToast(t("You do not have permission to upload documents."), false);
       } else {
-        showToast(e.message ?? "Upload failed. Please try again.", false);
+        showToast(e.message ?? t("Upload failed. Please try again."), false);
       }
     } finally {
       setUploading(false);
@@ -183,20 +186,20 @@ export default function DocumentCenterPage() {
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   async function handleDelete(doc: ApiDocument) {
-    if (!(await confirmDialog(`Delete "${doc.title}"? This cannot be undone.`))) return;
+    if (!(await confirmDialog(t("Delete \"{title}\"? This cannot be undone.", { title: doc.title })))) return;
     setDeleting(true);
     try {
       await clientApi.delete(documentDetail(doc.id));
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
       setSelected(null);
-      showToast(`"${doc.title}" deleted`);
+      showToast(t("\"{title}\" deleted", { title: doc.title }));
       loadStats();
     } catch (err: unknown) {
       const e = err as { message?: string; status?: number };
       if (e.status === 403) {
-        showToast("You do not have permission to delete documents.", false);
+        showToast(t("You do not have permission to delete documents."), false);
       } else {
-        showToast(e.message ?? "Delete failed.", false);
+        showToast(e.message ?? t("Delete failed."), false);
       }
     } finally {
       setDeleting(false);
@@ -255,7 +258,7 @@ export default function DocumentCenterPage() {
 
       }
     } catch (err: unknown) {
-      setPreviewError((err as { message?: string }).message ?? "Failed to load preview.");
+      setPreviewError((err as { message?: string }).message ?? tr("Failed to load preview."));
     } finally {
       setPreviewLoading(false);
     }
@@ -283,13 +286,13 @@ export default function DocumentCenterPage() {
       {/* Page header */}
       <div className="page-header" style={{ flexWrap: "wrap", gap: 10 }}>
         <div>
-          <div className="page-title">Document Center</div>
-          <div className="page-sub">Policies, forms, and templates — all in one place</div>
+          <div className="page-title">{t("Document Center")}</div>
+          <div className="page-sub">{t("Policies, forms, and templates — all in one place")}</div>
         </div>
         {canUpload && (
           <div className="page-actions">
             <button className="btn btn-filled" onClick={() => setShowUpload(true)} suppressHydrationWarning>
-              <i className="ti ti-upload" /> Upload Document
+              <i className="ti ti-upload" /> {t("Upload Document")}
             </button>
           </div>
         )}
@@ -312,7 +315,7 @@ export default function DocumentCenterPage() {
             suppressHydrationWarning
           >
             <div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 6 }}>{stat.label}</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 6 }}>{t(stat.label)}</div>
               <div style={{ fontSize: 26, fontWeight: 700, color: "var(--on-bg)", lineHeight: 1 }}>{stat.value}</div>
             </div>
             <div style={{ width: 44, height: 44, borderRadius: 10, background: stat.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -336,21 +339,21 @@ export default function DocumentCenterPage() {
                 fontSize: 13, fontWeight: filter === f ? 600 : 400,
                 cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
               }}>
-              {f}
+              {t(f)}
             </button>
           ))}
         </div>
         <div className="dx-tools">
-        <select className="dx-select" aria-label="Sort documents" value={sort} onChange={e => setSort(e.target.value as DocSort)} suppressHydrationWarning>
-          {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        <select className="dx-select" aria-label={t("Sort documents")} value={sort} onChange={e => setSort(e.target.value as DocSort)} suppressHydrationWarning>
+          {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
         </select>
-        <div className="dx-views" role="group" aria-label="Layout">
-          <button type="button" className={view === "grid" ? "is-on" : ""} aria-pressed={view === "grid"} aria-label="Grid view" title="Grid" onClick={() => setView("grid")} suppressHydrationWarning><i className="ti ti-layout-grid" /></button>
-          <button type="button" className={view === "list" ? "is-on" : ""} aria-pressed={view === "list"} aria-label="List view" title="List" onClick={() => setView("list")} suppressHydrationWarning><i className="ti ti-list" /></button>
+        <div className="dx-views" role="group" aria-label={t("Layout")}>
+          <button type="button" className={view === "grid" ? "is-on" : ""} aria-pressed={view === "grid"} aria-label={t("Grid view")} title={t("Grid")} onClick={() => setView("grid")} suppressHydrationWarning><i className="ti ti-layout-grid" /></button>
+          <button type="button" className={view === "list" ? "is-on" : ""} aria-pressed={view === "list"} aria-label={t("List view")} title={t("List")} onClick={() => setView("list")} suppressHydrationWarning><i className="ti ti-list" /></button>
         </div>
         <div style={{ position: "relative" }} className="dc-search-wrap">
           <i className="ti ti-search" style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "var(--outline)", pointerEvents: "none" }} />
-          <input className="field-input" placeholder="Search documents…" value={search}
+          <input className="field-input" placeholder={t("Search documents…")} value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ paddingLeft: 34, width: 220, maxWidth: "100%" }} suppressHydrationWarning />
         </div>
@@ -360,7 +363,7 @@ export default function DocumentCenterPage() {
       {/* Loading */}
       {loading && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, gap: 10, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "dcSpin 1s linear infinite" }} /> Loading documents…
+          <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "dcSpin 1s linear infinite" }} /> {t("Loading documents…")}
         </div>
       )}
 
@@ -369,10 +372,10 @@ export default function DocumentCenterPage() {
         <div className="alert alert-error mb-24">
           <i className="ti ti-alert-circle" />
           <div>
-            <strong>Failed to load</strong> — {error}
+            <strong>{t("Failed to load")}</strong> — {error}
             <div style={{ marginTop: 8 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => loadDocuments(FILTER_TO_CATEGORY[filter], debouncedQ)} suppressHydrationWarning>
-                Retry
+                {t("Retry")}
               </button>
             </div>
           </div>
@@ -383,11 +386,11 @@ export default function DocumentCenterPage() {
       {!loading && !error && documents.length === 0 && (
         <div className="dx-empty">
           <span className="dx-empty-icon"><i className="ti ti-folder-off" /></span>
-          <b>No documents found</b>
-          <p>{search || filter !== "All Documents" ? "Try a different filter or search term." : "Policies, forms and templates your company shares will appear here."}</p>
+          <b>{t("No documents found")}</b>
+          <p>{search || filter !== "All Documents" ? t("Try a different filter or search term.") : t("Policies, forms and templates your company shares will appear here.")}</p>
           {canUpload && !search && filter === "All Documents" && (
             <button type="button" className="btn btn-filled btn-sm" style={{ marginTop: 14 }} onClick={() => setShowUpload(true)} suppressHydrationWarning>
-              <i className="ti ti-upload" /> Upload the first document
+              <i className="ti ti-upload" /> {t("Upload the first document")}
             </button>
           )}
         </div>
@@ -425,7 +428,7 @@ export default function DocumentCenterPage() {
                   {selected.title}
                 </div>
               </div>
-              <button className="modal-close" onClick={() => setSelected(null)} aria-label="Close" suppressHydrationWarning>
+              <button className="modal-close" onClick={() => setSelected(null)} aria-label={t("Close")} suppressHydrationWarning>
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -449,12 +452,12 @@ export default function DocumentCenterPage() {
 
               {/* Metadata rows */}
               {([
-                { label: "Category",    value: selected.category_display },
-                ...(selected.version        ? [{ label: "Version",         value: `v${selected.version}` }] : []),
-                ...(selected.effective_date ? [{ label: "Effective date",  value: formatUploadedAt(selected.effective_date) }] : []),
-                { label: "Uploaded by", value: selected.uploaded_by_name },
-                { label: "Upload date", value: formatUploadedAt(selected.uploaded_at) },
-                { label: "Access",      value: selected.branch_name ? `Branch: ${selected.branch_name}` : "All Employees" },
+                { label: t("Category"),    value: selected.category_display },
+                ...(selected.version        ? [{ label: t("Version"),         value: `v${selected.version}` }] : []),
+                ...(selected.effective_date ? [{ label: t("Effective date"),  value: formatUploadedAt(selected.effective_date) }] : []),
+                { label: t("Uploaded by"), value: selected.uploaded_by_name },
+                { label: t("Upload date"), value: formatUploadedAt(selected.uploaded_at) },
+                { label: t("Access"),      value: selected.branch_name ? t("Branch: {name}", { name: selected.branch_name }) : t("All Employees") },
                 ...(selected.branch_name ? [] : []),
               ]).map(row => (
                 <div key={row.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)" }}>
@@ -474,17 +477,17 @@ export default function DocumentCenterPage() {
               {canDelete && (
                 <button className="btn btn-danger btn-sm" onClick={() => handleDelete(selected)} disabled={deleting} suppressHydrationWarning>
                   {deleting
-                    ? <><i className="ti ti-loader-2" style={{ animation: "dcSpin 1s linear infinite" }} /> Deleting…</>
-                    : <><i className="ti ti-trash" /> Delete</>
+                    ? <><i className="ti ti-loader-2" style={{ animation: "dcSpin 1s linear infinite" }} /> {t("Deleting…")}</>
+                    : <><i className="ti ti-trash" /> {t("Delete")}</>
                   }
                 </button>
               )}
               <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                <button className="btn btn-ghost" onClick={() => setSelected(null)} suppressHydrationWarning>Close</button>
+                <button className="btn btn-ghost" onClick={() => setSelected(null)} suppressHydrationWarning>{t("Close")}</button>
                 <button className="btn btn-outline btn-sm"
                   onClick={() => openPreview(selected)}
                   suppressHydrationWarning>
-                  <i className="ti ti-eye" /> Preview
+                  <i className="ti ti-eye" /> {t("Preview")}
                 </button>
                 <button className="btn btn-filled"
                   onClick={() => {
@@ -494,7 +497,7 @@ export default function DocumentCenterPage() {
                     a.click();
                   }}
                   suppressHydrationWarning>
-                  <i className="ti ti-download" /> Download
+                  <i className="ti ti-download" /> {t("Download")}
                 </button>
               </div>
             </div>
@@ -526,7 +529,7 @@ export default function DocumentCenterPage() {
                   </div>
                 </div>
               </div>
-              <button className="modal-close" onClick={closePreview} aria-label="Close preview" suppressHydrationWarning>
+              <button className="modal-close" onClick={closePreview} aria-label={t("Close preview")} suppressHydrationWarning>
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -544,7 +547,7 @@ export default function DocumentCenterPage() {
 
             {/* Footer */}
             <div className="modal-footer" style={{ flexShrink: 0 }}>
-              <button className="btn btn-ghost" onClick={closePreview} suppressHydrationWarning>Close</button>
+              <button className="btn btn-ghost" onClick={closePreview} suppressHydrationWarning>{t("Close")}</button>
               <button className="btn btn-filled"
                 onClick={() => {
                   const a = document.createElement("a");
@@ -553,7 +556,7 @@ export default function DocumentCenterPage() {
                   a.click();
                 }}
                 suppressHydrationWarning>
-                <i className="ti ti-download" /> Download
+                <i className="ti ti-download" /> {t("Download")}
               </button>
             </div>
           </div>
@@ -571,10 +574,10 @@ export default function DocumentCenterPage() {
 
             <div className="modal-header" style={{ flexShrink: 0 }}>
               <div>
-                <div className="modal-title">Upload Document</div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>PDF, Word, Excel, PPT, images, TXT, CSV — up to 25 MB</div>
+                <div className="modal-title">{t("Upload Document")}</div>
+                <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>{t("PDF, Word, Excel, PPT, images, TXT, CSV — up to 25 MB")}</div>
               </div>
-              <button className="modal-close" onClick={closeUpload} aria-label="Close upload" suppressHydrationWarning>
+              <button className="modal-close" onClick={closeUpload} aria-label={t("Close upload")} suppressHydrationWarning>
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -614,16 +617,16 @@ export default function DocumentCenterPage() {
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>{uploadForm.file.name}</div>
                     <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
                       {uploadForm.file.size < 1024 * 1024
-                        ? `${(uploadForm.file.size / 1024).toFixed(0)} KB`
-                        : `${(uploadForm.file.size / (1024 * 1024)).toFixed(1)} MB`
-                      } — click to change
+                        ? t("{size} KB", { size: (uploadForm.file.size / 1024).toFixed(0) })
+                        : t("{size} MB", { size: (uploadForm.file.size / (1024 * 1024)).toFixed(1) })
+                      } — {t("click to change")}
                     </div>
                   </>
                 ) : (
                   <>
                     <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "var(--outline)", display: "block", marginBottom: 8 }} />
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>Drop a file here or click to browse</div>
-                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>PDF, Word, Excel, PPT, images, TXT, CSV</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>{t("Drop a file here or click to browse")}</div>
+                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>{t("PDF, Word, Excel, PPT, images, TXT, CSV")}</div>
                   </>
                 )}
               </div>
@@ -631,8 +634,8 @@ export default function DocumentCenterPage() {
 
               {/* Document name */}
               <div className="field-group">
-                <label className="field-label">Document Name <span style={{ color: "var(--error)" }}>*</span></label>
-                <input className="field-input" placeholder="e.g. Employee Handbook 2025"
+                <label className="field-label">{t("Document Name")} <span style={{ color: "var(--error)" }}>*</span></label>
+                <input className="field-input" placeholder={t("e.g. Employee Handbook 2025")}
                   value={uploadForm.title}
                   onChange={e => { setUploadForm(p => ({ ...p, title: e.target.value })); setUploadErrors(p => ({ ...p, title: undefined })); }}
                   suppressHydrationWarning />
@@ -641,8 +644,8 @@ export default function DocumentCenterPage() {
 
               {/* Description */}
               <div className="field-group">
-                <label className="field-label">Description <span style={{ fontSize: 11, color: "var(--outline)" }}>(optional)</span></label>
-                <textarea className="field-input" placeholder="Brief description of this document…" rows={2}
+                <label className="field-label">{t("Description")} <span style={{ fontSize: 11, color: "var(--outline)" }}>{t("(optional)")}</span></label>
+                <textarea className="field-input" placeholder={t("Brief description of this document…")} rows={2}
                   value={uploadForm.description}
                   onChange={e => setUploadForm(p => ({ ...p, description: e.target.value }))}
                   style={{ resize: "vertical" }}
@@ -651,16 +654,16 @@ export default function DocumentCenterPage() {
 
               {/* Category */}
               <div className="field-group">
-                <label className="field-label">Category <span style={{ color: "var(--error)" }}>*</span></label>
+                <label className="field-label">{t("Category")} <span style={{ color: "var(--error)" }}>*</span></label>
                 <select className="field-input field-select"
                   value={uploadForm.category}
                   onChange={e => { setUploadForm(p => ({ ...p, category: e.target.value as DocCategory | "" })); setUploadErrors(p => ({ ...p, category: undefined })); }}
                   suppressHydrationWarning>
-                  <option value="">Select a category…</option>
-                  <option value="policy">Policy</option>
-                  <option value="form">Form</option>
-                  <option value="template">Template</option>
-                  <option value="other">Other</option>
+                  <option value="">{t("Select a category…")}</option>
+                  <option value="policy">{t("Policy")}</option>
+                  <option value="form">{t("Form")}</option>
+                  <option value="template">{t("Template")}</option>
+                  <option value="other">{t("Other")}</option>
                 </select>
                 {uploadErrors.category && <span className="field-error-msg">{uploadErrors.category}</span>}
               </div>
@@ -669,14 +672,14 @@ export default function DocumentCenterPage() {
               {uploadForm.category === "policy" && (
                 <div style={{ display: "flex", gap: 12 }}>
                   <div className="field-group" style={{ flex: 1 }}>
-                    <label className="field-label">Version <span style={{ fontSize: 11, color: "var(--outline)" }}>(optional)</span></label>
-                    <input className="field-input" placeholder="e.g. 3.2"
+                    <label className="field-label">{t("Version")} <span style={{ fontSize: 11, color: "var(--outline)" }}>{t("(optional)")}</span></label>
+                    <input className="field-input" placeholder={t("e.g. 3.2")}
                       value={uploadForm.version}
                       onChange={e => setUploadForm(p => ({ ...p, version: e.target.value }))}
                       suppressHydrationWarning />
                   </div>
                   <div className="field-group" style={{ flex: 1 }}>
-                    <label className="field-label">Effective date <span style={{ fontSize: 11, color: "var(--outline)" }}>(optional)</span></label>
+                    <label className="field-label">{t("Effective date")} <span style={{ fontSize: 11, color: "var(--outline)" }}>{t("(optional)")}</span></label>
                     <DateInput className="field-input" value={uploadForm.effective_date} onChange={isoDate => setUploadForm(p => ({ ...p, effective_date: isoDate }))} />
                   </div>
                 </div>
@@ -684,11 +687,11 @@ export default function DocumentCenterPage() {
             </div>
 
             <div className="modal-footer" style={{ flexShrink: 0 }}>
-              <button className="btn btn-ghost" onClick={closeUpload} disabled={uploading} suppressHydrationWarning>Cancel</button>
+              <button className="btn btn-ghost" onClick={closeUpload} disabled={uploading} suppressHydrationWarning>{t("Cancel")}</button>
               <button className="btn btn-filled" onClick={handleUpload} disabled={uploading} suppressHydrationWarning>
                 {uploading
-                  ? <><i className="ti ti-loader-2" style={{ animation: "dcSpin 1s linear infinite" }} /> Uploading…</>
-                  : <><i className="ti ti-upload" /> Upload Document</>
+                  ? <><i className="ti ti-loader-2" style={{ animation: "dcSpin 1s linear infinite" }} /> {t("Uploading…")}</>
+                  : <><i className="ti ti-upload" /> {t("Upload Document")}</>
                 }
               </button>
             </div>

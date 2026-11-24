@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function ExpenseDetailModal({ initialData, onClose }: Props) {
+  const t = useT();
   // Row data renders immediately; GET /expenses/<expense_number>/ then supplies
   // the current state in case status changed since the list loaded.
   const { data, loading, error } = useFetch<Expense>(
@@ -33,62 +35,62 @@ export default function ExpenseDetailModal({ initialData, onClose }: Props) {
       maxWidth={520}
       footer={
         <button className="btn btn-ghost" onClick={onClose}>
-          Close
+          {t("Close")}
         </button>
       }
     >
       <div className="flex flex-col gap-4">
         {loading && !data && (
             <div className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
-              <i className="ti ti-loader-2 spin" /> Loading latest status…
+              <i className="ti ti-loader-2 spin" /> {t("Loading latest status…")}
             </div>
           )}
           {error && (
             <div className="flex items-center gap-1.5 text-xs text-[var(--error)]">
-              <i className="ti ti-alert-circle" /> Could not refresh — showing last known details.
+              <i className="ti ti-alert-circle" /> {t("Could not refresh — showing last known details.")}
             </div>
           )}
 
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Title</p>
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Title")}</p>
               <p className="text-sm font-medium text-[var(--on-bg)]">{expense.title}</p>
             </div>
-            <span className={`badge ${cls} flex-shrink-0`}>{label}</span>
+            <span className={`badge ${cls} flex-shrink-0`}>{t(label)}</span>
           </div>
 
           <div className="flex items-center justify-between border-t border-[var(--outline-v)] pt-4">
             <div>
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Amount</p>
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Amount")}</p>
               <p className="text-base font-bold text-[var(--on-bg)]">
                 ₹{parseFloat(String(expense.amount)).toLocaleString("en-IN")}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Category</p>
-              <p className="text-sm text-[var(--on-bg)]">{CATEGORY_LABEL[expense.category] ?? expense.category}</p>
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Category")}</p>
+              <p className="text-sm text-[var(--on-bg)]">{t(CATEGORY_LABEL[expense.category] ?? expense.category)}</p>
             </div>
           </div>
 
           <div className="flex items-center justify-between border-t border-[var(--outline-v)] pt-4">
             <div>
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Employee</p>
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Employee")}</p>
               <p className="text-sm text-[var(--on-bg)]">{expense.employee_name || "—"}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Company Code</p>
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Company Code")}</p>
               <p className="text-sm text-[var(--on-bg)]">{expense.branch_name || "—"}</p>
             </div>
           </div>
 
           <div className="border-t border-[var(--outline-v)] pt-4">
-            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Expense Date</p>
+            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Expense Date")}</p>
             <p className="text-sm text-[var(--on-bg)]">{formatDate(expense.expense_date)}</p>
           </div>
 
           {expense.description && (
             <div className="border-t border-[var(--outline-v)] pt-4">
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Description</p>
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Description")}</p>
               <p className="text-sm text-[var(--on-bg)]">{expense.description}</p>
             </div>
           )}
@@ -96,7 +98,7 @@ export default function ExpenseDetailModal({ initialData, onClose }: Props) {
           {expense.receipts.length > 0 && (
             <div className="border-t border-[var(--outline-v)] pt-4">
               <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-2">
-                Receipts ({expense.receipts.length})
+                {t("Receipts ({count})", { count: expense.receipts.length })}
               </p>
               <div className="flex flex-col gap-1.5">
                 {expense.receipts.map((receipt, idx) => (
@@ -108,7 +110,7 @@ export default function ExpenseDetailModal({ initialData, onClose }: Props) {
                       rel="noreferrer"
                       className="flex items-center gap-2 text-sm text-[var(--primary)] hover:underline"
                     >
-                      <i className="ti ti-eye" /> View receipt {idx + 1}
+                      <i className="ti ti-eye" /> {t("View receipt {number}", { number: idx + 1 })}
                     </a>
                   )
                 ))}

@@ -27,10 +27,13 @@ import CandidateToolbar from "./CandidateToolbar";
 import { hasActiveFilters } from "./_filters";
 import { FeedbackModal } from "./FeedbackModal";
 import ConfirmModal from "@/components/ConfirmModal";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InterviewListPage() {
+  const t = useT();
   const { showToast }  = useToast();
   const canCreate      = usePermission("recruitment.create");
   const canEditRec     = usePermission("recruitment.edit");
@@ -115,7 +118,7 @@ export default function InterviewListPage() {
       setPage(raw?.page ?? 1);
       if (raw?.status_choices?.length) setStatusChoices(raw.status_choices);
     } catch {
-      setError("Failed to load candidates.");
+      setError(tr("Failed to load candidates."));
       setCandidates([]);
     } finally {
       setLoading(false);
@@ -181,11 +184,11 @@ export default function InterviewListPage() {
     setPortalErr(null);
     try {
       const res = await RECRUITMENT_API.sendPortalLogin(candidateId);
-      setPortalMsg(res.data?.message ?? "Onboarding link sent.");
+      setPortalMsg(res.data?.message ?? t("Onboarding link sent."));
       fetchAll(search, statusFilter, branchFilter);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Failed to send the onboarding link.";
+        ?.response?.data?.message ?? t("Failed to send the onboarding link.");
       setPortalErr(msg);
     } finally {
       setSendingPortal(null);
@@ -274,9 +277,9 @@ export default function InterviewListPage() {
 
       {portalConfirm && (
         <ConfirmModal
-          title="Send onboarding link?"
-          body={`This emails ${portalConfirm.name} (${portalConfirm.email}) a one-time link, valid for a limited time, to complete the onboarding wizard and upload documents. No account or password is created until you approve the onboarding.`}
-          confirmLabel="Send Link"
+          title={t("Send onboarding link?")}
+          body={t("This emails {name} ({email}) a one-time link, valid for a limited time, to complete the onboarding wizard and upload documents. No account or password is created until you approve the onboarding.", { name: portalConfirm.name, email: portalConfirm.email })}
+          confirmLabel={t("Send Link")}
           saving={sendingPortal === portalConfirm.id}
           onConfirm={confirmSendPortalLogin}
           onCancel={() => setPortalConfirm(null)}
@@ -313,9 +316,9 @@ export default function InterviewListPage() {
             setCandidates(prev => prev.map(c => c.id === updated.id ? updated : c));
             setEditTarget(null);
             if (!hadDate && nowHasDate) {
-              showToast("Interview details saved. Invitation email sent to candidate.", "success");
+              showToast(t("Interview details saved. Invitation email sent to candidate."), "success");
             } else {
-              showToast("Interview details updated.", "success");
+              showToast(t("Interview details updated."), "success");
             }
           }}
         />

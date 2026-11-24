@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import { useDragScroll } from "@/hooks/useDragScroll";
+import { useT } from "@/hooks/useI18n";
 import { CHART_CSS } from "./orgChartStyles";
 
 const MIN_ZOOM = 0.3;
@@ -27,6 +28,7 @@ const clampZoom = (value: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.
 
 /** What every org chart shares: search, expand/collapse, zoom, fit to screen, drag to pan, and print. */
 export default function OrgChartFrame({ query, onQueryChange, searchPlaceholder, onExpandAll, onCollapseAll, isEmpty, emptyText, tools, children }: Props) {
+  const t = useT();
   const [zoom, setZoom] = useState(1);
   const scrollRef = useDragScroll<HTMLDivElement>();
   const chartRef = useRef<HTMLDivElement>(null);
@@ -47,24 +49,24 @@ export default function OrgChartFrame({ query, onQueryChange, searchPlaceholder,
       <div className="oc-toolbar">
         <div className="oc-search">
           <i className="ti ti-search" />
-          <input className="field-input" value={query} placeholder={searchPlaceholder} aria-label="Search the chart" onChange={event => onQueryChange(event.target.value)} />
+          <input className="field-input" value={query} placeholder={searchPlaceholder} aria-label={t("Search the chart")} onChange={event => onQueryChange(event.target.value)} />
         </div>
         {tools}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onExpandAll}><i className="ti ti-arrows-diagonal" /> Expand all</button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onCollapseAll}><i className="ti ti-arrows-diagonal-minimize-2" /> Collapse all</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onExpandAll}><i className="ti ti-arrows-diagonal" /> {t("Expand all")}</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onCollapseAll}><i className="ti ti-arrows-diagonal-minimize-2" /> {t("Collapse all")}</button>
         <span className="oc-spacer" />
-        <button type="button" className="btn btn-ghost btn-sm" aria-label="Zoom out" disabled={zoom <= MIN_ZOOM} onClick={() => setZoom(clampZoom(zoom - ZOOM_STEP))}><i className="ti ti-minus" /></button>
+        <button type="button" className="btn btn-ghost btn-sm" aria-label={t("Zoom out")} disabled={zoom <= MIN_ZOOM} onClick={() => setZoom(clampZoom(zoom - ZOOM_STEP))}><i className="ti ti-minus" /></button>
         <span className="oc-zoom">{Math.round(zoom * 100)}%</span>
-        <button type="button" className="btn btn-ghost btn-sm" aria-label="Zoom in" disabled={zoom >= MAX_ZOOM} onClick={() => setZoom(clampZoom(zoom + ZOOM_STEP))}><i className="ti ti-plus" /></button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={fitToScreen}><i className="ti ti-arrows-maximize" /> Fit</button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => window.print()} title="Print, or save as PDF"><i className="ti ti-printer" /> Print</button>
+        <button type="button" className="btn btn-ghost btn-sm" aria-label={t("Zoom in")} disabled={zoom >= MAX_ZOOM} onClick={() => setZoom(clampZoom(zoom + ZOOM_STEP))}><i className="ti ti-plus" /></button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={fitToScreen}><i className="ti ti-arrows-maximize" /> {t("Fit")}</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => window.print()} title={t("Print, or save as PDF")}><i className="ti ti-printer" /> {t("Print")}</button>
       </div>
       <div className="oc-scroll" ref={scrollRef}>
         {isEmpty
           ? <div className="oc-empty">{emptyText}</div>
           : <div className="oc" ref={chartRef} style={{ zoom }}>{children}</div>}
       </div>
-      <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 6 }}>Drag the chart to move around it.</div>
+      <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 6 }}>{t("Drag the chart to move around it.")}</div>
       <style>{CHART_CSS}</style>
     </div>
   );

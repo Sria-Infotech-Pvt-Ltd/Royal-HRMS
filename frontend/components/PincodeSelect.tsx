@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 
 export interface PincodeOption {
   pincode: string;
@@ -26,6 +27,7 @@ const isSixDigits = (text: string) => /^\d{6}$/.test(text);
  * area); a PIN code that is not in the list can still be entered. Until then it is a plain 6-digit box.
  */
 export default function PincodeSelect({ value, onChange, options, isLoading = false, placeholder, inputClassName = "field-input" }: PincodeSelectProps) {
+  const t = useT();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -43,7 +45,7 @@ export default function PincodeSelect({ value, onChange, options, isLoading = fa
     return (
       <input
         value={value} onChange={event => onChange(event.target.value.replace(/\D/g, "").slice(0, 6))}
-        placeholder={isLoading ? "Loading PIN codes…" : placeholder ?? "6-digit PIN code"}
+        placeholder={isLoading ? t("Loading PIN codes…") : placeholder ?? t("6-digit PIN code")}
         maxLength={6} inputMode="numeric" className={inputClassName}
       />
     );
@@ -68,16 +70,16 @@ export default function PincodeSelect({ value, onChange, options, isLoading = fa
         style={{ width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}
       >
         <span style={{ color: value ? "inherit" : "var(--on-variant, #7c8aa3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {value ? `${value}${chosenArea ? ` · ${chosenArea}` : ""}` : placeholder ?? "Select PIN code"}
+          {value ? `${value}${chosenArea ? ` · ${chosenArea}` : ""}` : placeholder ?? t("Select PIN code")}
         </span>
         <i className="ti ti-chevron-down" style={{ fontSize: 14, color: "var(--on-variant)", flexShrink: 0 }} />
       </button>
       {isOpen && (
         <div className="pin-pop" role="listbox">
-          <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder={`Search ${options.length} PIN codes or areas…`} className={inputClassName} style={{ margin: 6, width: "calc(100% - 12px)" }} />
+          <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Search {count} PIN codes or areas…", { count: options.length })} className={inputClassName} style={{ margin: 6, width: "calc(100% - 12px)" }} />
           <div style={{ overflowY: "auto" }}>
-            {canUseTyped && <div role="option" aria-selected={false} className="pin-row use-typed" onClick={() => pick(needle)}>Use PIN code {needle}</div>}
-            {shown.length === 0 && !canUseTyped && <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>No match. Type all 6 digits to use a PIN code that is not listed.</div>}
+            {canUseTyped && <div role="option" aria-selected={false} className="pin-row use-typed" onClick={() => pick(needle)}>{t("Use PIN code {pincode}", { pincode: needle })}</div>}
+            {shown.length === 0 && !canUseTyped && <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>{t("No match. Type all 6 digits to use a PIN code that is not listed.")}</div>}
             {shown.map(option => (
               <div key={option.pincode} role="option" aria-selected={option.pincode === value} className={`pin-row${option.pincode === value ? " is-selected" : ""}`} onClick={() => pick(option.pincode, option.area)}>
                 <strong>{option.pincode}</strong>{option.area && <span> · {option.area}</span>}

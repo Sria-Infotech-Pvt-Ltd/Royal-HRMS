@@ -1,5 +1,6 @@
 // How an employee's Face ID registration reads on the HR page. Pure: no component state, safe to import anywhere.
 
+import { tr } from "@/lib/i18n/tr"
 import type { FaceRegistrationRequest, FaceRegistrationStatus, FaceRosterCounts, FaceRosterFilter } from "@/types/faceRegistration"
 
 /** The three states a request can be in, plus "none" for an employee with no request at all. */
@@ -40,12 +41,16 @@ export function stateDetails(state: FaceState, request: Partial<Detail> | null |
   if (!request) return []
   const lines: string[] = []
   if (state === "approved" && request.approved_at) {
-    lines.push(`Registered on ${formatDate(request.approved_at)}${request.approved_by_name ? ` by ${request.approved_by_name}` : ""}.`)
+    lines.push(request.approved_by_name
+      ? tr("Registered on {date} by {name}.", { date: formatDate(request.approved_at), name: request.approved_by_name })
+      : tr("Registered on {date}.", { date: formatDate(request.approved_at) }))
   }
-  if (state === "pending" && request.created_at) lines.push(`Submitted on ${formatDate(request.created_at)}. It can be approved from the Approvals page.`)
+  if (state === "pending" && request.created_at) lines.push(tr("Submitted on {date}. It can be approved from the Approvals page.", { date: formatDate(request.created_at) }))
   if (state === "rejected") {
-    if (request.approved_at) lines.push(`Reviewed on ${formatDate(request.approved_at)}${request.approved_by_name ? ` by ${request.approved_by_name}` : ""}.`)
-    if (request.notes?.trim()) lines.push(`Reason: ${request.notes.trim()}`)
+    if (request.approved_at) lines.push(request.approved_by_name
+      ? tr("Reviewed on {date} by {name}.", { date: formatDate(request.approved_at), name: request.approved_by_name })
+      : tr("Reviewed on {date}.", { date: formatDate(request.approved_at) }))
+    if (request.notes?.trim()) lines.push(tr("Reason: {reason}", { reason: request.notes.trim() }))
   }
   return lines
 }
@@ -54,7 +59,7 @@ export function stateDetails(state: FaceState, request: Partial<Detail> | null |
 export function pickerRange(page: number, pageSize: number, shown: number, total: number): string | null {
   if (total <= 0 || shown <= 0) return null
   const first = (page - 1) * pageSize + 1
-  return `Showing ${first}–${first + shown - 1} of ${total}`
+  return tr("Showing {from}–{to} of {total}", { from: first, to: first + shown - 1, total })
 }
 
 export function personInitials(name: string): string {

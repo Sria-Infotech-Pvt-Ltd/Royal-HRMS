@@ -8,6 +8,8 @@ import { downloadBlobFile } from "@/lib/downloadFile";
 import { describeBulkImportOutcome, type BulkImportStatus } from "@/lib/bulkImportStatus";
 import { EmployeeBulkImportError, EmployeeBulkImportResult } from "@/types/employeeBulkImport";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = [".csv", ".xlsx"];
@@ -23,8 +25,8 @@ function validateFile(file: File): string | null {
   const hasAcceptedExtension = ACCEPTED_EXTENSIONS.some(ext =>
     file.name.toLowerCase().endsWith(ext)
   );
-  if (!hasAcceptedExtension) return "Unsupported file type. Please upload a .csv or .xlsx file.";
-  if (file.size > MAX_FILE_SIZE_BYTES) return "File is too large. Maximum allowed size is 5 MB.";
+  if (!hasAcceptedExtension) return tr("Unsupported file type. Please upload a .csv or .xlsx file.");
+  if (file.size > MAX_FILE_SIZE_BYTES) return tr("File is too large. Maximum allowed size is 5 MB.");
   return null;
 }
 
@@ -45,6 +47,7 @@ async function fetchImportStatus(batchId: string): Promise<BulkImportStatus | nu
 }
 
 export default function BulkImportModal({ onClose, onSuccess }: Props) {
+  const t = useT();
   const inputRef                  = useRef<HTMLInputElement>(null);
   const [file,        setFile]        = useState<File | null>(null);
   const [fileError,   setFileError]   = useState<string | null>(null);
@@ -65,7 +68,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
       { format },
       `employee_import_sample.${format}`,
     );
-    if (!res.success) setSampleError(res.message ?? "Failed to download sample file.");
+    if (!res.success) setSampleError(res.message ?? t("Failed to download sample file."));
     setSampleDownloading(null);
   }
 
@@ -85,7 +88,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
 
   async function handleUpload() {
     if (!file) {
-      setFileError("Please select a file first.");
+      setFileError(t("Please select a file first."));
       return;
     }
     setUploading(true);
@@ -99,7 +102,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
       try {
         await clientApi.get(API.employees.me);
       } catch {
-        setSubmitError("Your session has expired. Nothing was imported — sign in again and upload the file.");
+        setSubmitError(t("Your session has expired. Nothing was imported — sign in again and upload the file."));
         return;
       }
       const formData = new FormData();
@@ -115,7 +118,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
         setResult(res.data.data);
         if (res.data.data.created > 0) onSuccess();
       } else {
-        setSubmitError(res.data.message || "Import failed. Please check your file and try again.");
+        setSubmitError(res.data.message || t("Import failed. Please check your file and try again."));
       }
     } catch (err: unknown) {
       const e = err as { code?: string; status?: number; response?: { status?: number; data?: { message?: string } } };
@@ -143,13 +146,13 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
 
   return (
     <Modal
-      title={<><i className="ti ti-file-upload" style={{ marginRight: 8 }} />Bulk Import Employees</>}
+      title={<><i className="ti ti-file-upload" style={{ marginRight: 8 }} />{t("Bulk Import Employees")}</>}
       onClose={handleClose}
       maxWidth={560}
       footer={
         <>
           <button className="btn btn-ghost" onClick={handleClose}>
-            {result ? "Close" : "Cancel"}
+            {result ? t("Close") : t("Cancel")}
           </button>
           {!result && (
             <button
@@ -159,8 +162,8 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
               suppressHydrationWarning
             >
               {uploading
-                ? <><i className="ti ti-loader-2 spin" /> Uploading…</>
-                : <><i className="ti ti-file-upload" /> Upload & Import</>
+                ? <><i className="ti ti-loader-2 spin" /> {t("Uploading…")}</>
+                : <><i className="ti ti-file-upload" /> {t("Upload & Import")}</>
               }
             </button>
           )}
@@ -170,19 +173,19 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
           {/* Instructions */}
           <div style={{ padding: "12px 14px", borderRadius: 8, background: "color-mix(in srgb, var(--primary) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--primary) 15%, transparent)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, color: "var(--primary)", marginBottom: 4, fontSize: 12 }}>
-              <i className="ti ti-info-circle" style={{ marginRight: 5 }} />File Requirements
+              <i className="ti ti-info-circle" style={{ marginRight: 5 }} />{t("File Requirements")}
             </div>
             <ul style={{ margin: 0, paddingLeft: 16 }}>
-              <li>Accepted formats: <strong>.csv</strong>, <strong>.xlsx</strong> (max 5 MB)</li>
-              <li>Required columns: First Name, Last Name, Work Email, Org Unit, Position, Company Code, Date of Joining</li>
-              <li>Optional columns: Phone, Employee Type, Gender, DOB, Blood Group, Address</li>
+              <li>{t("Accepted formats:")} <strong>.csv</strong>, <strong>.xlsx</strong> {t("(max 5 MB)")}</li>
+              <li>{t("Required columns: First Name, Last Name, Work Email, Org Unit, Position, Company Code, Date of Joining")}</li>
+              <li>{t("Optional columns: Phone, Employee Type, Gender, DOB, Blood Group, Address")}</li>
             </ul>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("csv")} disabled={!!sampleDownloading} suppressHydrationWarning>
-                <i className="ti ti-download" /> {sampleDownloading === "csv" ? "Downloading…" : "Sample CSV"}
+                <i className="ti ti-download" /> {sampleDownloading === "csv" ? t("Downloading…") : t("Sample CSV")}
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("xlsx")} disabled={!!sampleDownloading} suppressHydrationWarning>
-                <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? "Downloading…" : "Sample XLSX"}
+                <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? t("Downloading…") : t("Sample XLSX")}
               </button>
             </div>
             {sampleError && (
@@ -212,12 +215,12 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
               <>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--primary)" }}>{file.name}</div>
                 <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>
-                  {(file.size / 1024).toFixed(1)} KB · Click to change
+                  {t("{size} KB · Click to change", { size: (file.size / 1024).toFixed(1) })}
                 </div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>Click to select file</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{t("Click to select file")}</div>
                 <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>.csv · .xlsx</div>
               </>
             )}
@@ -244,32 +247,32 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", textAlign: "center" }}>
                   <div style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)", background: "color-mix(in srgb, var(--success) 8%, transparent)" }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: "var(--success)" }}>{result.created}</div>
-                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Created</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>{t("Created")}</div>
                   </div>
                   <div style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)", background: result.skipped > 0 ? "color-mix(in srgb, var(--warn) 10%, transparent)" : undefined }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: result.skipped > 0 ? "var(--warn)" : "var(--on-variant)" }}>{result.skipped}</div>
-                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Skipped</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>{t("Skipped")}</div>
                   </div>
                   <div style={{ padding: "12px 8px", background: result.failed > 0 ? "color-mix(in srgb, var(--error) 8%, transparent)" : undefined }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: result.failed > 0 ? "var(--error)" : "var(--on-variant)" }}>{result.failed}</div>
-                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Failed</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>{t("Failed")}</div>
                   </div>
                 </div>
                 <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--on-variant)", borderTop: "1px solid var(--outline-v)" }}>
-                  {result.total_rows} row{result.total_rows === 1 ? "" : "s"} processed
+                  {result.total_rows === 1 ? t("{count} row processed", { count: result.total_rows }) : t("{count} rows processed", { count: result.total_rows })}
                 </div>
               </div>
 
               {result.skipped_rows.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-bg)", marginBottom: 6 }}>Skipped Rows</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-bg)", marginBottom: 6 }}>{t("Skipped Rows")}</div>
                   <div style={{ borderRadius: 8, border: "1px solid var(--outline-v)", maxHeight: 160, overflowY: "auto" }}>
                     <table style={{ width: "100%", fontSize: 12 }}>
                       <thead>
                         <tr style={{ background: "var(--bg-low)" }}>
-                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Row</th>
-                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Email</th>
-                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Reason</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Row")}</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Email")}</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Reason")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -289,19 +292,19 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
               {result.errors.length > 0 && (
                 <div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-bg)" }}>Errors</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-bg)" }}>{t("Errors")}</div>
                     <button className="btn btn-ghost btn-sm" onClick={() => downloadErrorReport(result.errors)} suppressHydrationWarning>
-                      <i className="ti ti-download" /> Download Error Report
+                      <i className="ti ti-download" /> {t("Download Error Report")}
                     </button>
                   </div>
                   <div style={{ borderRadius: 8, border: "1px solid var(--outline-v)", maxHeight: 200, overflowY: "auto" }}>
                     <table style={{ width: "100%", fontSize: 12 }}>
                       <thead>
                         <tr style={{ background: "var(--bg-low)" }}>
-                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Row</th>
-                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Email</th>
-                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Field</th>
-                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Error Message</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Row")}</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Email")}</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Field")}</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Error Message")}</th>
                         </tr>
                       </thead>
                       <tbody>

@@ -1,3 +1,5 @@
+import { tr } from "@/lib/i18n/tr";
+
 // Shared types for the ESS Payslips screen. Mirrors exactly what the
 // backend's EmployeePayslipSerializer / MyProfileSerializer / PayrollSettingsSerializer
 // / EmployeeTaxDeclaration serializer return — no field here is invented.
@@ -103,7 +105,7 @@ export function currentFinancialYearStart(startMonthName: string, today: Date = 
 }
 
 export function financialYearLabel(fyStart: Date): string {
-  return `FY ${fyStart.getFullYear()}–${String(fyStart.getFullYear() + 1).slice(-2)}`;
+  return tr("FY {start}–{end}", { start: fyStart.getFullYear(), end: String(fyStart.getFullYear() + 1).slice(-2) });
 }
 
 export function fyEndLabel(fyStart: Date): string {

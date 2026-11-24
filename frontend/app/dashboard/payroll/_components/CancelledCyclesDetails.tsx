@@ -3,18 +3,20 @@
 import type { PayrollCycle } from "@/types/payroll";
 import { formatDate } from "@/lib/formatDate";
 import { cyclePeriodLabel } from "./payrollDashboardShared";
+import { useT } from "@/hooks/useI18n";
 
 export default function CancelledCyclesDetails({ cycles }: { cycles: PayrollCycle[] }) {
+  const t = useT();
   const cancelled = cycles.filter(c => c.status === "cancelled");
   return (
     <details className="card" style={{ padding: 0 }}>
       <summary style={{ padding: "12px 16px", cursor: "pointer", fontWeight: 600, fontSize: 13, listStyle: "none", display: "flex", alignItems: "center", gap: 8 }}>
         <i className="ti ti-ban" style={{ color: "var(--error)" }} />
-        Cancelled Cycles ({cancelled.length})
+        {t("Cancelled Cycles ({count})", { count: cancelled.length })}
       </summary>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Period</th><th>Cancelled By</th><th>Cancelled At</th><th>Reason</th></tr></thead>
+          <thead><tr><th>{t("Period")}</th><th>{t("Cancelled By")}</th><th>{t("Cancelled At")}</th><th>{t("Reason")}</th></tr></thead>
           <tbody>
             {cancelled.map(c => (
               <tr key={c.id}>

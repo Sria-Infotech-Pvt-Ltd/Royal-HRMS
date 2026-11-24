@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "@/hooks/useI18n";
 
 interface DocPreviewModalProps {
   name: string;
@@ -34,6 +35,7 @@ function resolveUrl(url: string): string {
 export default function DocPreviewModal({
   name, fileName, fileUrl, fileSize, onClose,
 }: DocPreviewModalProps) {
+  const t = useT();
   const close = useCallback(() => onClose(), [onClose]);
 
   const resolvedUrl = resolveUrl(fileUrl);
@@ -119,14 +121,14 @@ export default function DocPreviewModal({
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white/90 hover:bg-white/15 transition-colors text-[12px] font-medium"
               >
                 <i className="ti ti-external-link text-[15px]" />
-                Open
+                {t("Open")}
               </a>
             )}
             <button
               onClick={onClose}
               suppressHydrationWarning
               className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/15 transition-colors"
-             aria-label="Close">
+             aria-label={t("Close")}>
               <i className="ti ti-x text-[18px]" />
             </button>
           </div>
@@ -148,12 +150,12 @@ export default function DocPreviewModal({
           ) : loading ? (
             <div className="flex flex-col items-center gap-3 text-gray-400">
               <i className="ti ti-loader-2 animate-spin text-[36px]" />
-              <span className="text-[13px]">Loading PDF…</span>
+              <span className="text-[13px]">{t("Loading PDF…")}</span>
             </div>
           ) : fetchErr ? (
             <div className="flex flex-col items-center gap-4 py-12 px-6 text-center">
               <i className="ti ti-file-off text-[48px] text-gray-300" />
-              <p className="text-[14px] text-gray-500">Could not load the PDF inline.</p>
+              <p className="text-[14px] text-gray-500">{t("Could not load the PDF inline.")}</p>
               <a
                 href={resolvedUrl}
                 target="_blank"
@@ -162,7 +164,7 @@ export default function DocPreviewModal({
                 style={{ background: "var(--primary)" }}
               >
                 <i className="ti ti-external-link text-[15px]" />
-                Open in new tab
+                {t("Open in new tab")}
               </a>
             </div>
           ) : (

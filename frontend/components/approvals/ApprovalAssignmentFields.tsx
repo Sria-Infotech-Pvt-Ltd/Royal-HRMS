@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useApproverChoices } from "@/hooks/useApproverChoices";
 import type { ApproverSelection, PersonRef } from "@/types/approvers";
 import ApproverSelect from "./ApproverSelect";
@@ -17,28 +18,29 @@ interface Props {
 
 /** Reporting manager, L1 approver and L2 HR approver: shared by the hire wizard and the employee profile. */
 export default function ApprovalAssignmentFields({ value, onChange, employeeId, errors = {}, assigned, disabled }: Props) {
+  const t = useT();
   const choices = useApproverChoices(employeeId);
   const set = (key: keyof ApproverSelection) => (next: string) => onChange({ ...value, [key]: next });
   return (
     <>
-      {choices.failed && <div className="alert alert-warn mb-16">Could not load the list of people. Try again in a moment.</div>}
+      {choices.failed && <div className="alert alert-warn mb-16">{t("Could not load the list of people. Try again in a moment.")}</div>}
       <div className="fgrid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
         <ApproverSelect
-          label="Reporting manager" value={value.reporting_manager_id} onChange={set("reporting_manager_id")}
-          options={choices.managers} placeholder="Follow the org chart" disabled={disabled}
-          hint="Leave empty to use the head of the employee's org unit." error={errors.reporting_manager_id}
+          label={t("Reporting manager")} value={value.reporting_manager_id} onChange={set("reporting_manager_id")}
+          options={choices.managers} placeholder={t("Follow the org chart")} disabled={disabled}
+          hint={t("Leave empty to use the head of the employee's org unit.")} error={errors.reporting_manager_id}
           assigned={assigned?.reportingManager}
         />
         <ApproverSelect
-          label="L1 approver (leave)" value={value.l1_approver_id} onChange={set("l1_approver_id")}
+          label={t("L1 approver (leave)")} value={value.l1_approver_id} onChange={set("l1_approver_id")}
           options={choices.l1} placeholder={l1Placeholder(choices.rule)} disabled={disabled}
-          hint="Choose someone only if L1 should differ from what the approval rule gives."
+          hint={t("Choose someone only if L1 should differ from what the approval rule gives.")}
           error={errors.l1_approver_id} assigned={assigned?.l1}
         />
         <ApproverSelect
-          label="L2 HR approver" value={value.hr_id} onChange={set("hr_id")}
-          options={choices.l2} placeholder="Not assigned" disabled={disabled}
-          hint="The HR partner who gives the second approval." error={errors.hr_id} assigned={assigned?.hr}
+          label={t("L2 HR approver")} value={value.hr_id} onChange={set("hr_id")}
+          options={choices.l2} placeholder={t("Not assigned")} disabled={disabled}
+          hint={t("The HR partner who gives the second approval.")} error={errors.hr_id} assigned={assigned?.hr}
         />
       </div>
     </>

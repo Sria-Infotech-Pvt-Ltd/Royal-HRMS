@@ -13,10 +13,12 @@ import MyApprovalsOverview from "./_components/MyApprovalsOverview";
 import { isUnrestrictedUser } from "@/lib/auth";
 import { approvalSectionsFor, sectionFromLink, type ApprovalSectionKey } from "@/lib/approvalSections";
 import { parseApprovalsLink } from "@/lib/approvalLink";
+import { useT } from "@/hooks/useI18n";
 
 type Section = ApprovalSectionKey;
 
 export default function ApprovalsPage() {
+  const t = useT();
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("overview");
   const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create", "separation.approve");
@@ -78,7 +80,7 @@ export default function ApprovalsPage() {
             className={`tab${section === s.key ? " active" : ""}`}
           >
             <i className={`ti ${s.icon}`} style={{ marginRight: 5 }} />
-            {s.label}
+            {t(s.label)}
           </button>
         ))}
       </div>

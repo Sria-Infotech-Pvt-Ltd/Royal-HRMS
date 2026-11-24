@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "@/hooks/useI18n";
 
 export interface RowAction {
   label: string;
@@ -27,6 +28,7 @@ const TONE_COLOR: Record<NonNullable<RowAction["tone"]>, string> = {
 };
 
 export default function EmployeeRowActionsMenu({ actions }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -67,10 +69,10 @@ export default function EmployeeRowActionsMenu({ actions }: Props) {
       <button
         ref={btnRef}
         onClick={() => setOpen(v => !v)}
-        title="Actions"
+        title={t("Actions")}
         suppressHydrationWarning
         className="actbtn"
-       aria-label="Actions">
+       aria-label={t("Actions")}>
         <i className="ti ti-dots text-[16px]" />
       </button>
       {open && coords && createPortal(
@@ -96,7 +98,7 @@ export default function EmployeeRowActionsMenu({ actions }: Props) {
               onMouseLeave={e => (e.currentTarget.style.background = "none")}
             >
               <i className={`ti ${a.icon}`} style={{ fontSize: 15 }} />
-              {a.label}
+              {t(a.label)}
             </button>
           ))}
         </div>,

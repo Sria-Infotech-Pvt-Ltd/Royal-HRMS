@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import Link from "next/link";
 import { formatDate } from "@/lib/formatDate";
 import { FACE_STATE_META, actionLabel, faceStateOf, personInitials, stateDetails } from "@/lib/faceRegistrationStatus";
@@ -25,11 +26,12 @@ const STEPS = [
 ];
 
 function EmptyDetail({ onStart }: { onStart: () => void }) {
+  const t = useT();
   return (
     <div className="card fid-detail fid-detail-empty">
       <i className="ti ti-face-id fid-empty-icon" />
-      <h3>Select an employee</h3>
-      <p>Choose someone from the list to see their Face ID status or register it in person.</p>
+      <h3>{t("Select an employee")}</h3>
+      <p>{t("Choose someone from the list to see their Face ID status or register it in person.")}</p>
       <ol className="fid-steps">
         {STEPS.map((step, index) => (
           <li key={step.title}>
@@ -37,15 +39,15 @@ function EmptyDetail({ onStart }: { onStart: () => void }) {
               type="button"
               className={`fid-step${step.isOpen ? " is-open" : " is-locked"}`}
               onClick={onStart}
-              aria-label={step.isOpen ? `Step ${index + 1}: ${step.title}. Go to the employee search` : `Step ${index + 1}: ${step.title}. Locked until an employee is chosen`}
-              title={step.isOpen ? "Go to the employee search" : "Choose an employee first"}
+              aria-label={step.isOpen ? t("Step {number}: {title}. Go to the employee search", { number: index + 1, title: t(step.title) }) : t("Step {number}: {title}. Locked until an employee is chosen", { number: index + 1, title: t(step.title) })}
+              title={step.isOpen ? t("Go to the employee search") : t("Choose an employee first")}
             >
               <span className="fid-step-no">{index + 1}</span>
               <i className={`ti ${step.icon}`} />
-              <strong>{step.title}</strong>
-              <span>{step.text}</span>
+              <strong>{t(step.title)}</strong>
+              <span>{t(step.text)}</span>
               <span className="fid-step-tag">
-                {step.isOpen ? <>Start here <i className="ti ti-arrow-right" /></> : <><i className="ti ti-lock" /> Choose an employee first</>}
+                {step.isOpen ? <>{t("Start here")} <i className="ti ti-arrow-right" /></> : <><i className="ti ti-lock" /> {t("Choose an employee first")}</>}
               </span>
             </button>
           </li>
@@ -58,6 +60,7 @@ function EmptyDetail({ onStart }: { onStart: () => void }) {
 /** The chosen employee: who they are, their Face ID status in plain words, and the register / update action. */
 export default function EmployeeFaceCard(props: EmployeeFaceCardProps) {
   const { employee, status, isLoading, error, isConfirming } = props;
+  const t = useT();
   if (!employee) return <EmptyDetail onStart={props.onStart} />;
 
   const state = faceStateOf(status?.status);
@@ -86,39 +89,39 @@ export default function EmployeeFaceCard(props: EmployeeFaceCardProps) {
       {error && <div className="alert alert-error"><i className="ti ti-alert-circle" /><div>{error}</div></div>}
 
       {isLoading ? (
-        <div className="fid-state is-loading" role="status" aria-label="Loading Face ID status"><span className="cand-skeleton-bar" /></div>
+        <div className="fid-state is-loading" role="status" aria-label={t("Loading Face ID status")}><span className="cand-skeleton-bar" /></div>
       ) : (
         <div className={`fid-state tone-${meta.tone}`}>
           <span className="fid-state-icon"><i className={`ti ${meta.icon}`} /></span>
           <div className="fid-state-text">
-            <div className="fid-state-top"><strong>{meta.headline}</strong><span className={`badge ${meta.badge}`}>{meta.label}</span></div>
+            <div className="fid-state-top"><strong>{t(meta.headline)}</strong><span className={`badge ${meta.badge}`}>{t(meta.label)}</span></div>
             {details.map(line => <p key={line}>{line}</p>)}
-            {state === "none" && <p>This employee has not registered a Face ID. You can register it now, in person.</p>}
+            {state === "none" && <p>{t("This employee has not registered a Face ID. You can register it now, in person.")}</p>}
           </div>
         </div>
       )}
 
       {isConfirming ? (
-        <div className="fid-confirm" role="alertdialog" aria-label="Replace Face ID">
+        <div className="fid-confirm" role="alertdialog" aria-label={t("Replace Face ID")}>
           <i className="ti ti-alert-triangle" />
           <div>
-            <strong>Replace the current Face ID?</strong>
-            <p>This will replace {employee.full_name}&apos;s registered Face ID will be replaced by the new capture.</p>
+            <strong>{t("Replace the current Face ID?")}</strong>
+            <p>{t("This will replace {name}'s registered Face ID will be replaced by the new capture.", { name: employee.full_name })}</p>
           </div>
           <div className="fid-confirm-buttons">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={props.onCancelConfirm}>Cancel</button>
-            <button type="button" className="btn btn-filled btn-sm" onClick={props.onConfirm}>Replace</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={props.onCancelConfirm}>{t("Cancel")}</button>
+            <button type="button" className="btn btn-filled btn-sm" onClick={props.onConfirm}>{t("Replace")}</button>
           </div>
         </div>
       ) : (
         <div className="fid-actions">
           <button type="button" className="btn btn-filled" onClick={props.onRegister} disabled={isLoading}>
-            <i className="ti ti-camera" /> {actionLabel(state)}
+            <i className="ti ti-camera" /> {t(actionLabel(state))}
           </button>
           {state === "pending" && (
-            <Link className="btn btn-ghost" href="/dashboard/approvals"><i className="ti ti-checklist" /> Review pending requests</Link>
+            <Link className="btn btn-ghost" href="/dashboard/approvals"><i className="ti ti-checklist" /> {t("Review pending requests")}</Link>
           )}
-          <span className="fid-note"><i className="ti ti-info-circle" /> Captured in person, so it is approved immediately.</span>
+          <span className="fid-note"><i className="ti ti-info-circle" /> {t("Captured in person, so it is approved immediately.")}</span>
         </div>
       )}
     </div>

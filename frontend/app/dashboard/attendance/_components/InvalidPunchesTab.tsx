@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
@@ -28,6 +29,7 @@ type ModalState =
   | null;
 
 export default function InvalidPunchesTab({ onMutated }: Props) {
+  const t = useT();
   const canEdit         = usePermission("attendance.edit");
   const [page, setPage]   = useState(1);
   const [modal, setModal] = useState<ModalState>(null);
@@ -44,16 +46,16 @@ export default function InvalidPunchesTab({ onMutated }: Props) {
 
   return (
     <>
-      <SectionCard icon="ti-alert-triangle" colour={PALETTE.absent} title="Invalid Punches" count={data?.count ?? null} subtitle="Punches that could not be matched to an employee or contain data errors.">
-        <Notice tone="info" icon="ti-info-circle">Review and fix each record before it affects payroll.</Notice>
+      <SectionCard icon="ti-alert-triangle" colour={PALETTE.absent} title={t("Invalid Punches")} count={data?.count ?? null} subtitle={t("Punches that could not be matched to an employee or contain data errors.")}>
+        <Notice tone="info" icon="ti-info-circle">{t("Review and fix each record before it affects payroll.")}</Notice>
         {error && <Notice tone="error" icon="ti-alert-circle">{error}</Notice>}
         <div className="table-wrap" style={{ marginTop: 14 }}>
           <table>
             <thead>
-              <tr><th>Employee</th><th>Device ID</th><th>Raw Punch Time</th><th>Card / Bio ID</th><th>Issue</th><th>Suggested Match</th><th>Company Code</th><th>Action</th></tr>
+              <tr><th>{t("Employee")}</th><th>{t("Device ID")}</th><th>{t("Raw Punch Time")}</th><th>{t("Card / Bio ID")}</th><th>{t("Issue")}</th><th>{t("Suggested Match")}</th><th>{t("Company Code")}</th><th>{t("Action")}</th></tr>
             </thead>
             <tbody>
-              <TableStates columns={8} loading={loading} empty={rows.length === 0} icon="ti-circle-check" title="No invalid punches found." hint="Every punch has been matched to an employee." />
+              <TableStates columns={8} loading={loading} empty={rows.length === 0} icon="ti-circle-check" title={t("No invalid punches found.")} hint={t("Every punch has been matched to an employee.")} />
               {rows.map(p => (
                 <tr key={p.id}>
                   <td>
@@ -69,9 +71,9 @@ export default function InvalidPunchesTab({ onMutated }: Props) {
                   <td>
                     {canEdit && (
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.present }} onClick={() => setModal({ type: "assign", punch: p })}><i className="ti ti-user-check" /> Assign</button>
-                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.brand }} onClick={() => setModal({ type: "convert", punch: p })}><i className="ti ti-replace" /> Convert</button>
-                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.absent }} onClick={() => setModal({ type: "discard", punch: p })}><i className="ti ti-trash" /> Discard</button>
+                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.present }} onClick={() => setModal({ type: "assign", punch: p })}><i className="ti ti-user-check" /> {t("Assign")}</button>
+                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.brand }} onClick={() => setModal({ type: "convert", punch: p })}><i className="ti ti-replace" /> {t("Convert")}</button>
+                        <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11, color: PALETTE.absent }} onClick={() => setModal({ type: "discard", punch: p })}><i className="ti ti-trash" /> {t("Discard")}</button>
                       </div>
                     )}
                   </td>

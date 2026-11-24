@@ -3,6 +3,7 @@
 // The "Record leave" form of the Employee Directory's Leave dialog: HR records leave on someone's behalf. It is
 // final at once (balance deducted, attendance marked) — the server validates everything and needs leave.record.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -46,22 +47,22 @@ export function useRecordEmployeeLeave(employeeCode: string, firstType: string, 
   const days = estimateWorkingDays(from, to, duration);
 
   async function record() {
-    if (!from) { setError("Start date is required."); return; }
-    if (!to) { setError("End date is required."); return; }
-    if (to < from) { setError("End date is before the start date."); return; }
-    if (from !== to && duration !== "full_day") { setError("Half day applies to a single date only."); return; }
-    if (!days) { setError("That range contains only weekly offs."); return; }
+    if (!from) { setError(tr("Start date is required.")); return; }
+    if (!to) { setError(tr("End date is required.")); return; }
+    if (to < from) { setError(tr("End date is before the start date.")); return; }
+    if (from !== to && duration !== "full_day") { setError(tr("Half day applies to a single date only.")); return; }
+    if (!days) { setError(tr("That range contains only weekly offs.")); return; }
     setSaving(true);
     setError("");
     try {
       await clientApi.post(API.leave.recordForEmployee, {
         employee_id: employeeCode, leave_type: type, start_date: from, end_date: to, duration, reason: reason.trim(),
       });
-      showToast(`Leave recorded — ${days} day${days === 1 ? "" : "s"} from ${formatDateSlash(from)}.`, "success");
+      showToast((days === 1 ? tr("Leave recorded — {days} day from {date}.", { days, date: formatDateSlash(from) }) : tr("Leave recorded — {days} days from {date}.", { days, date: formatDateSlash(from) })), "success");
       setFrom(""); setTo(""); setReason(""); setDuration("full_day");
       onRecorded();
     } catch (err: unknown) {
-      setError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not record this leave.");
+      setError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? tr("Could not record this leave."));
     } finally {
       setSaving(false);
     }

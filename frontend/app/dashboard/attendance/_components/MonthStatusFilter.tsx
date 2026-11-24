@@ -3,6 +3,7 @@
 // The colour legend of the month, doubling as a filter: every status is always shown in its colour with how many days had it, and
 // clicking one highlights just those days. A status with no days this month is dimmed and cannot be chosen.
 
+import { useT } from "@/hooks/useI18n";
 import { FILTER_STATUSES, STATUS_META } from "./monthView";
 
 interface Props {
@@ -12,8 +13,9 @@ interface Props {
 }
 
 export default function MonthStatusFilter({ counts, active, onChange }: Props) {
+  const t = useT();
   return (
-    <div role="group" aria-label="Highlight days by status" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+    <div role="group" aria-label={t("Highlight days by status")} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
       {FILTER_STATUSES.map(status => {
         const meta = STATUS_META[status];
         const count = counts[status] ?? 0;
@@ -28,12 +30,12 @@ export default function MonthStatusFilter({ counts, active, onChange }: Props) {
             }}
           >
             <span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: "50%", background: selected ? "#fff" : meta.colour }} />
-            {meta.label}
+            {t(meta.label)}
             <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", color: selected ? "#fff" : meta.colour }}>{count}</span>
           </button>
         );
       })}
-      {active && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange("")}>Clear</button>}
+      {active && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange("")}>{t("Clear")}</button>}
     </div>
   );
 }

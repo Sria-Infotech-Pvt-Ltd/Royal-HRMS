@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+
 interface Props {
   /** Employees with no joining date (Employment Stage "Unknown"). */
   missingCount: number;
@@ -8,15 +10,17 @@ interface Props {
 
 /** Tells HR that some employees have no joining date: they are left out of attendance and payroll until it is corrected. */
 export default function JoiningDateAlert({ missingCount, onShow }: Props) {
+  const t = useT();
   if (missingCount <= 0) return null;
-  const noun = missingCount === 1 ? "employee has" : "employees have";
   return (
     <div className="alert alert-warn" role="status" style={{ margin: "0 0 12px", display: "flex", alignItems: "center", gap: 10 }}>
       <i className="ti ti-calendar-exclamation" />
       <span style={{ flex: 1 }}>
-        {missingCount} {noun} no joining date. They are left out of attendance and payroll until HR corrects it.
+        {missingCount === 1
+          ? t("{count} employee has no joining date. They are left out of attendance and payroll until HR corrects it.", { count: missingCount })
+          : t("{count} employees have no joining date. They are left out of attendance and payroll until HR corrects it.", { count: missingCount })}
       </span>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onShow} suppressHydrationWarning>Show them</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onShow} suppressHydrationWarning>{t("Show them")}</button>
     </div>
   );
 }

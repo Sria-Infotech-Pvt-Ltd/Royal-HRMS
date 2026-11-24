@@ -64,7 +64,7 @@ export default function AttendanceTab() {
         <div className="stat-card">
           <div className="stat-label">{tr("Late Arrivals")}</div>
           <div className="stat-value" style={{ color: "var(--warn)" }}>{isLoading ? <Spinner /> : lateArrivals}</div>
-          <div className="stat-sub">{isLoading ? "" : `${regularized} regularized`}</div>
+          <div className="stat-sub">{isLoading ? "" : tr("{count} regularized", { count: regularized })}</div>
         </div>
 
         <div className="stat-card">

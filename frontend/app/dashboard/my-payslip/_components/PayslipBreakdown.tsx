@@ -89,7 +89,7 @@ export default function PayslipBreakdown({ slip, gratuityRate }: Props) {
   const employerRows: Row[] = [
     { label: tr("Employer PF"), value: Number(slip.pf_employer) },
     gratuityProvision === null
-      ? { label: tr("Gratuity provision"), value: null, unavailableNote: "Rate not loaded" }
+      ? { label: tr("Gratuity provision"), value: null, unavailableNote: tr("Rate not loaded") }
       : { label: tr("Gratuity provision"), value: gratuityProvision },
     { label: tr("Insurance premium"), value: Number(slip.esi_employer) },
   ];
@@ -97,16 +97,16 @@ export default function PayslipBreakdown({ slip, gratuityRate }: Props) {
   return (
     <div className="flex flex-col lg:flex-row gap-4 items-stretch">
       <BreakdownColumn
-        title={tr("Earnings")} subtitle={`${monthLabel} payroll components.`}
-        rows={earningsRows} totalLabel="Total earnings" totalValue={Number(slip.gross_earnings)} accent="var(--success)"
+        title={tr("Earnings")} subtitle={tr("{month} payroll components.", { month: monthLabel })}
+        rows={earningsRows} totalLabel={tr("Total earnings")} totalValue={Number(slip.gross_earnings)} accent="var(--success)"
       />
       <BreakdownColumn
-        title={tr("Deductions")} subtitle={`${monthLabel} payroll components.`}
-        rows={deductionsRows} totalLabel="Total deductions" totalValue={Number(slip.total_deductions)} accent="var(--error)"
+        title={tr("Deductions")} subtitle={tr("{month} payroll components.", { month: monthLabel })}
+        rows={deductionsRows} totalLabel={tr("Total deductions")} totalValue={Number(slip.total_deductions)} accent="var(--error)"
       />
       <BreakdownColumn
-        title={tr("Employer contributions")} subtitle="Benefits paid in addition to net salary."
-        rows={employerRows} totalLabel="Total" totalValue={employerTotal} accent="var(--primary)"
+        title={tr("Employer contributions")} subtitle={tr("Benefits paid in addition to net salary.")}
+        rows={employerRows} totalLabel={tr("Total")} totalValue={employerTotal} accent="var(--primary)"
       />
     </div>
   );

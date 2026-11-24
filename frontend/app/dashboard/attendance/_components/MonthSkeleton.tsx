@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+
 // What shows while a month loads: the shape of the page (a calendar grid and the side column) shimmering, instead of a spinner on a blank page.
 
 const SHIMMER: React.CSSProperties = {
@@ -11,8 +13,9 @@ function Block({ height, radius = 12, width = "100%" }: { height: number; radius
 }
 
 export default function MonthSkeleton() {
+  const t = useT();
   return (
-    <div role="status" aria-label="Loading attendance" style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
+    <div role="status" aria-label={t("Loading attendance")} style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
       <div style={{ flex: "65 1 0%", minWidth: "min(560px, 100%)" }}>
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <Block height={38} radius={0} />

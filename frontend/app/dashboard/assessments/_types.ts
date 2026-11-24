@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/formatDate";
+import { tr } from "@/lib/i18n/tr";
 
 export interface AssessmentSettings {
   default_pass_percentage: number;
@@ -92,7 +93,7 @@ export const EMPTY: AssessmentForm = {
 };
 
 export function apiErr(e: unknown) {
-  return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Action failed.";
+  return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? tr("Action failed.");
 }
 
 export function fmt(iso: string | null) {

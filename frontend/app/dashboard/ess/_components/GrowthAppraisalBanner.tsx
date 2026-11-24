@@ -6,22 +6,25 @@
 // side. A button that cross-navigates to the ESS "Appraisals" tab, same
 // pattern as PoliciesAssetsTab's onNavigateToDocuments prop.
 
+import { useT } from "@/hooks/useI18n";
+
 interface Props {
   cycleName: string;
   onNavigateToAppraisals: () => void;
 }
 
 export default function GrowthAppraisalBanner({ cycleName, onNavigateToAppraisals }: Props) {
+  const t = useT();
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: "var(--on-bg)" }}>
-        {cycleName} appraisal is open
+        {t("{cycle} appraisal is open", { cycle: cycleName })}
       </div>
       <p style={{ margin: "4px 0 12px", fontSize: 12.5, color: "var(--on-variant)" }}>
-        Complete your self-review, track manager and HR stages, and review your final development plan.
+        {t("Complete your self-review, track manager and HR stages, and review your final development plan.")}
       </p>
       <button className="btn btn-filled btn-sm" onClick={onNavigateToAppraisals}>
-        Open appraisal
+        {t("Open appraisal")}
       </button>
     </div>
   );

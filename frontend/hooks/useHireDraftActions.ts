@@ -6,6 +6,7 @@
 //   Discard      deletes the draft (after the app's own confirmation modal) and closes the wizard
 // Every outcome is a toast; a failed save shows the server's message instead of being swallowed.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -30,10 +31,10 @@ export function useHireDraftActions({ hireActionId, save, onClose }: UseHireDraf
     setIsSaving(true);
     try {
       await save();
-      showToast("Draft saved.", "success");
+      showToast(tr("Draft saved."), "success");
       return true;
     } catch (err: unknown) {
-      handleError(err, "Could not save the draft.");
+      handleError(err, tr("Could not save the draft."));
       return false;
     } finally {
       setIsSaving(false);
@@ -48,11 +49,11 @@ export function useHireDraftActions({ hireActionId, save, onClose }: UseHireDraf
     setIsDiscarding(true);
     try {
       await clientApi.delete(API.hireActions.detail(hireActionId));
-      showToast("Draft discarded.", "success");
+      showToast(tr("Draft discarded."), "success");
       setIsDiscardOpen(false);
       onClose();
     } catch (err: unknown) {
-      handleError(err, "Could not discard the draft.");
+      handleError(err, tr("Could not discard the draft."));
     } finally {
       setIsDiscarding(false);
     }

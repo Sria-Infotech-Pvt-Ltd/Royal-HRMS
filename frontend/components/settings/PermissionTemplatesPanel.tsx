@@ -6,6 +6,7 @@
 // modal one at a time (Organization > a position > Permissions).
 
 import { useMemo, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const { data: templates, error: loadError, refetch } = useFetch<PermissionTemplate[]>(API.settings.permissionTemplates);
   const [editing, setEditing] = useState<PermissionTemplate | "new" | null>(null);
@@ -60,16 +62,16 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
         codenames: template.permission_codenames,
       });
       refetch();
-      showToast(`Copied "${template.name}". Rename it with Edit.`, "success");
+      showToast(t("Copied \"{name}\". Rename it with Edit.", { name: template.name }), "success");
     } catch (err: unknown) {
-      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not copy this template.", "error");
+      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Could not copy this template."), "error");
     }
   }
 
   function onSaved() {
     setEditing(null);
     refetch();
-    showToast("Template saved.", "success");
+    showToast(t("Template saved."), "success");
   }
 
   async function confirmDelete() {
@@ -79,9 +81,9 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
       await clientApi.delete(API.settings.permissionTemplateDetail(deleting.id));
       setDeleting(null);
       refetch();
-      showToast("Template deleted.", "success");
+      showToast(t("Template deleted."), "success");
     } catch (err: unknown) {
-      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not delete this template.", "error");
+      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Could not delete this template."), "error");
     } finally {
       setIsDeleting(false);
     }
@@ -91,12 +93,11 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-[var(--on-variant)]">
-          Define a permission bundle once, then apply it to any number of positions at a time —
-          e.g. give every manager position the same access without editing each one.
+          {t("Define a permission bundle once, then apply it to any number of positions at a time — e.g. give every manager position the same access without editing each one.")}
         </p>
         {canEdit && (
           <button className="btn btn-filled" type="button" onClick={() => setEditing("new")}>
-            <i className="ti ti-plus" /> New template
+            <i className="ti ti-plus" /> {t("New template")}
           </button>
         )}
       </div>
@@ -104,26 +105,26 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
       {loadError && <div className="alert alert-error" role="alert">{loadError}</div>}
 
       {!templates && !loadError ? (
-        <p className="py-10 text-center text-sm text-[var(--on-variant)]"><i className="ti ti-loader-2 mr-2 animate-spin text-[var(--primary)]" />Loading templates…</p>
+        <p className="py-10 text-center text-sm text-[var(--on-variant)]"><i className="ti ti-loader-2 mr-2 animate-spin text-[var(--primary)]" />{t("Loading templates…")}</p>
       ) : templates && templates.length === 0 ? (
-        <p className="py-10 text-center text-sm text-[var(--on-variant)]">No templates yet. Create one to start applying bulk access.</p>
+        <p className="py-10 text-center text-sm text-[var(--on-variant)]">{t("No templates yet. Create one to start applying bulk access.")}</p>
       ) : (
         <>
           <StatCardGrid
             cards={[
-              { icon: "ti-stack-2", tone: "var(--primary)", label: "Templates", value: String(summary.templates), note: "Reusable bundles" },
-              { icon: "ti-briefcase", tone: "var(--success)", label: "Positions using them", value: String(summary.applications), note: "Across all templates" },
-              { icon: "ti-alert-circle", tone: "var(--warn)", label: "Empty templates", value: String(summary.empty), note: summary.empty === 0 ? "None" : "Grant nothing: fill or delete" },
-              { icon: "ti-alert-triangle", tone: "var(--warn)", label: "Sensitive permissions", value: String(summary.sensitive), note: "Counted across templates" },
+              { icon: "ti-stack-2", tone: "var(--primary)", label: t("Templates"), value: String(summary.templates), note: t("Reusable bundles") },
+              { icon: "ti-briefcase", tone: "var(--success)", label: t("Positions using them"), value: String(summary.applications), note: t("Across all templates") },
+              { icon: "ti-alert-circle", tone: "var(--warn)", label: t("Empty templates"), value: String(summary.empty), note: summary.empty === 0 ? t("None") : t("Grant nothing: fill or delete") },
+              { icon: "ti-alert-triangle", tone: "var(--warn)", label: t("Sensitive permissions"), value: String(summary.sensitive), note: t("Counted across templates") },
             ]}
           />
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-72 max-w-full">
               <i className="ti ti-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--on-variant)]" />
-              <input className="finput w-full !pl-9" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search templates" aria-label="Search templates" />
+              <input className="finput w-full !pl-9" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t("Search templates")} aria-label={t("Search templates")} />
             </div>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter templates">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("Filter templates")}>
               {FILTERS.map(option => (
                 <button
                   key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setFilter(option.value)}
@@ -132,24 +133,24 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
                     ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
                     : { background: "var(--surface)", borderColor: "var(--outline-v)", color: "var(--on-variant)" }}
                 >
-                  {option.label}
+                  {t(option.label)}
                   <span className="rounded-full px-1.5 text-[10px]" style={{ background: filter === option.value ? "rgba(255,255,255,.25)" : "var(--bg-low)" }}>{counts[option.value]}</span>
                 </button>
               ))}
             </div>
             <label className="ml-auto flex items-center gap-2 text-xs text-[var(--on-variant)]">
-              Sort by
-              <select className="finput w-44" value={sort} onChange={event => setSort(event.target.value as TemplateSort)} aria-label="Sort templates">
-                <option value="name">Name</option>
-                <option value="permissions">Most permissions</option>
-                <option value="positions">Most positions</option>
-                <option value="updated">Recently updated</option>
+              {t("Sort by")}
+              <select className="finput w-44" value={sort} onChange={event => setSort(event.target.value as TemplateSort)} aria-label={t("Sort templates")}>
+                <option value="name">{t("Name")}</option>
+                <option value="permissions">{t("Most permissions")}</option>
+                <option value="positions">{t("Most positions")}</option>
+                <option value="updated">{t("Recently updated")}</option>
               </select>
             </label>
           </div>
 
           {shown.length === 0 ? (
-            <p className="py-10 text-center text-sm text-[var(--on-variant)]">No template matches. Clear the search or choose &ldquo;All&rdquo;.</p>
+            <p className="py-10 text-center text-sm text-[var(--on-variant)]">{t("No template matches. Clear the search or choose “All”.")}</p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {shown.map(template => (
@@ -179,16 +180,16 @@ export default function PermissionTemplatesPanel({ catalogue, canEdit }: Props) 
           onClose={() => setApplying(null)}
           onApplied={count => {
             setApplying(null);
-            showToast(`Applied to ${count} position${count === 1 ? "" : "s"}.`, "success");
+            showToast(count === 1 ? t("Applied to {count} position.", { count }) : t("Applied to {count} positions.", { count }), "success");
           }}
         />
       )}
 
       {deleting && (
         <ConfirmModal
-          title="Delete this template?"
-          body={`This permanently deletes "${deleting.name}". Positions it was already applied to keep their current access — this only removes the reusable template, not anything already granted.`}
-          confirmLabel="Delete template"
+          title={t("Delete this template?")}
+          body={t("This permanently deletes \"{name}\". Positions it was already applied to keep their current access — this only removes the reusable template, not anything already granted.", { name: deleting.name })}
+          confirmLabel={t("Delete template")}
           danger
           saving={isDeleting}
           onConfirm={confirmDelete}

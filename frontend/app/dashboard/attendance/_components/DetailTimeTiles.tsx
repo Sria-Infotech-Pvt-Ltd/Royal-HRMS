@@ -2,6 +2,7 @@
 
 // The day's four numbers as tiles: clock in, clock out, total hours, overtime. A tile with no value shows a quiet dash.
 
+import { useT } from "@/hooks/useI18n";
 import { PALETTE, tint } from "./attendancePalette";
 import { isBlank } from "./attendanceView";
 
@@ -15,6 +16,7 @@ interface Props {
 interface Tile { label: string; value: string; icon: string; colour: string }
 
 export default function DetailTimeTiles({ clockIn, clockOut, totalHours, overtime }: Props) {
+  const t = useT();
   const tiles: Tile[] = [
     { label: "Clock in", value: clockIn, icon: "ti-login-2", colour: PALETTE.present },
     { label: "Clock out", value: clockOut, icon: "ti-logout-2", colour: PALETTE.half_day },
@@ -31,7 +33,7 @@ export default function DetailTimeTiles({ clockIn, clockOut, totalHours, overtim
               <i className={`ti ${tile.icon}`} />
             </span>
             <span>
-              <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".04em" }}>{tile.label}</span>
+              <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".04em" }}>{t(tile.label)}</span>
               <span style={{ display: "block", fontSize: 17, fontWeight: 800, fontFamily: "Menlo, Consolas, monospace", color: blank ? "var(--outline)" : "var(--on-bg)" }}>{blank ? "—" : tile.value}</span>
             </span>
           </div>

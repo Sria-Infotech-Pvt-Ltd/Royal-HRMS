@@ -1,5 +1,6 @@
 "use client";
 
+import { tr } from "@/lib/i18n/tr";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { useElapsedSeconds, useRefetchWhileActive } from "@/hooks/useElapsedSeconds";
@@ -119,7 +120,7 @@ export function useClockWidget() {
       if (!LOCATION_CHECKED_MODES.includes(attendanceMode)) return { ok: true, location: null };
 
       if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
-        showToast("Your browser does not support location access.", "error");
+        showToast(tr("Your browser does not support location access."), "error");
         return { ok: false, location: null };
       }
 
@@ -134,8 +135,10 @@ export function useClockWidget() {
         const isPermissionDenied = (geoErr as GeolocationPositionError).code === 1;
         showToast(
           isPermissionDenied
-            ? `Location access is required for ${attendanceMode === "wfh" ? "work-from-home" : "office"} punch in/out. Please allow location in your browser settings.`
-            : "Unable to determine your location. Please check your device's location settings and try again.",
+            ? (attendanceMode === "wfh"
+              ? tr("Location access is required for work-from-home punch in/out. Please allow location in your browser settings.")
+              : tr("Location access is required for office punch in/out. Please allow location in your browser settings."))
+            : tr("Unable to determine your location. Please check your device's location settings and try again."),
           "error"
         );
         setIsLocating(false);
@@ -151,7 +154,7 @@ export function useClockWidget() {
         });
       } catch (err: unknown) {
         const e = err as NormalisedError;
-        showToast(e?.message ?? "You are outside the allowed location for this branch.", "error");
+        showToast(e?.message ?? tr("You are outside the allowed location for this branch."), "error");
         setIsLocating(false);
         return { ok: false, location: null };
       }
@@ -168,14 +171,14 @@ export function useClockWidget() {
   const ensureFaceReady = useCallback((): boolean => {
     if (faceRegistrationMissing) {
       showToast(
-        faceMessage || "Please register your Face ID first (Profile > Register My Face), then come back to punch in.",
+        faceMessage || tr("Please register your Face ID first (Profile > Register My Face), then come back to punch in."),
         "error",
       );
       return false;
     }
     if (isLockedOut) {
       showToast(
-        `Too many failed face verification attempts. Please wait ${formatLockoutCountdown(lockoutSecondsRemaining)} before trying again.`,
+        tr("Too many failed face verification attempts. Please wait {time} before trying again.", { time: formatLockoutCountdown(lockoutSecondsRemaining) }),
         "error",
       );
       return false;
@@ -216,7 +219,7 @@ export function useClockWidget() {
         const envelope = res.data as { message?: string; data?: TodaySession };
         if (envelope.data) setSession(envelope.data);
         showToast(
-          envelope.message ?? (punchType === "IN" ? "Punched in successfully." : "Punched out successfully."),
+          envelope.message ?? (punchType === "IN" ? tr("Punched in successfully.") : tr("Punched out successfully.")),
           "success"
         );
         return true;
@@ -230,7 +233,7 @@ export function useClockWidget() {
           setLockoutNow(Date.now());
           saveLockoutUntil(until);
         }
-        showToast(e?.message ?? "Punch failed. Please try again.", "error");
+        showToast(e?.message ?? tr("Punch failed. Please try again."), "error");
         return false;
       } finally {
         setIsPunching(false);

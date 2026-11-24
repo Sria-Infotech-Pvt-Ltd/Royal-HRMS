@@ -4,6 +4,7 @@ import { use, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle, EmployeePayslip } from "@/types/payroll";
@@ -49,6 +50,7 @@ const ECR_ELIGIBLE_STATUSES = ["payslips_generated", "query_window_open", "paid"
 export default function PayrollRunDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id }  = use(params);
   const router  = useRouter();
+  const t = useT();
   const [downloading, setDownloading] = useState(false);
   const [dlError,     setDlError]     = useState<string | null>(null);
   const [missingEsi,  setMissingEsi]  = useState<{ employee_name: string; employee_code: string }[] | null>(null);
@@ -86,11 +88,11 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch {
-      setDlError("Failed to download ECR. Please try again.");
+      setDlError(t("Failed to download ECR. Please try again."));
     } finally {
       setDownloading(false);
     }
-  }, [cycle, id]);
+  }, [cycle, id, t]);
 
   const [downloadingText, setDownloadingText] = useState(false);
 
@@ -123,11 +125,11 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
           msg = parsed?.message;
         } catch { /* non-JSON error body — fall through to the generic message */ }
       }
-      setDlError(msg || "Failed to download the ECR text file. Please try again.");
+      setDlError(msg || t("Failed to download the ECR text file. Please try again."));
     } finally {
       setDownloadingText(false);
     }
-  }, [cycle, id]);
+  }, [cycle, id, t]);
 
   const [downloadingEsic, setDownloadingEsic] = useState(false);
 
@@ -167,18 +169,18 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
         // show each employee as a clickable link to go fix it directly.
         setMissingEsi(missing);
       } else {
-        setDlError(msg || "Failed to download the ESIC Challan. Please try again.");
+        setDlError(msg || t("Failed to download the ESIC Challan. Please try again."));
       }
     } finally {
       setDownloadingEsic(false);
     }
-  }, [cycle, id]);
+  }, [cycle, id, t]);
 
   if (loadCycle) {
     return (
       <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)" }}>
         <i className="ti ti-loader-2 spin" style={{ fontSize: 24 }} />
-        <div style={{ marginTop: 10, fontSize: 14 }}>Loading payroll run…</div>
+        <div style={{ marginTop: 10, fontSize: 14 }}>{t("Loading payroll run…")}</div>
       </div>
     );
   }
@@ -186,9 +188,9 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
   if (!cycle) {
     return (
       <div style={{ padding: "40px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: 15, color: "var(--error)" }}>Payroll run not found.</div>
+        <div style={{ fontSize: 15, color: "var(--error)" }}>{t("Payroll run not found.")}</div>
         <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => router.back()}>
-          <i className="ti ti-arrow-left" /> Back
+          <i className="ti ti-arrow-left" /> {t("Back")}
         </button>
       </div>
     );
@@ -204,7 +206,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
         style={{ marginBottom: 16, fontSize: 13 }}
         onClick={() => router.push("/dashboard/payroll")}
       >
-        <i className="ti ti-arrow-left" /> Payroll
+        <i className="ti ti-arrow-left" /> {t("Payroll")}
       </button>
 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -214,14 +216,14 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
               {period(cycle)}
             </h1>
             <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}40` }}>
-              {STATUS_LABEL[cycle.status] ?? cycle.status}
+              {STATUS_LABEL[cycle.status] ? t(STATUS_LABEL[cycle.status]) : cycle.status}
             </span>
           </div>
           <div style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 4 }}>
-            {cycle.branch_name ?? "All Branches"} &nbsp;·&nbsp;
+            {cycle.branch_name ?? t("All Branches")} &nbsp;·&nbsp;
             {fmtDate(cycle.cycle_start)} – {fmtDate(cycle.cycle_end)} &nbsp;·&nbsp;
-            Pay date: {fmtDate(cycle.pay_date)} &nbsp;·&nbsp;
-            {cycle.payslip_count} employees
+            {t("Pay date: {date}", { date: fmtDate(cycle.pay_date) })} &nbsp;·&nbsp;
+            {t("{count} employees", { count: cycle.payslip_count })}
           </div>
         </div>
 
@@ -235,30 +237,30 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
                 style={{ display: "flex", alignItems: "center", gap: 6 }}
               >
                 {downloading
-                  ? <><i className="ti ti-loader-2 spin" /> Downloading…</>
-                  : <><i className="ti ti-file-spreadsheet" /> Download ECR</>}
+                  ? <><i className="ti ti-loader-2 spin" /> {t("Downloading…")}</>
+                  : <><i className="ti ti-file-spreadsheet" /> {t("Download ECR")}</>}
               </button>
               <button
                 className="btn btn-ghost"
                 onClick={downloadEcrText}
                 disabled={downloadingText}
-                title="EPFO Unified Portal ECR upload file (#~# delimited .txt)"
+                title={t("EPFO Unified Portal ECR upload file (#~# delimited .txt)")}
                 style={{ display: "flex", alignItems: "center", gap: 6 }}
               >
                 {downloadingText
-                  ? <><i className="ti ti-loader-2 spin" /> Downloading…</>
-                  : <><i className="ti ti-file-text" /> Download ECR (Text)</>}
+                  ? <><i className="ti ti-loader-2 spin" /> {t("Downloading…")}</>
+                  : <><i className="ti ti-file-text" /> {t("Download ECR (Text)")}</>}
               </button>
               <button
                 className="btn btn-ghost"
                 onClick={downloadEsic}
                 disabled={downloadingEsic}
-                title="ESIC Challan — per-employee contribution report (internal, not the government upload file)"
+                title={t("ESIC Challan — per-employee contribution report (internal, not the government upload file)")}
                 style={{ display: "flex", alignItems: "center", gap: 6 }}
               >
                 {downloadingEsic
-                  ? <><i className="ti ti-loader-2 spin" /> Downloading…</>
-                  : <><i className="ti ti-file-spreadsheet" /> Download ESIC Challan</>}
+                  ? <><i className="ti ti-loader-2 spin" /> {t("Downloading…")}</>
+                  : <><i className="ti ti-file-spreadsheet" /> {t("Download ESIC Challan")}</>}
               </button>
             </>
           )}
@@ -275,7 +277,9 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
         <div className="alert alert-error" style={{ marginBottom: 16, display: "block" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
             <i className="ti ti-alert-circle" />
-            {missingEsi.length} ESI-eligible employee{missingEsi.length === 1 ? "" : "s"} {missingEsi.length === 1 ? "has" : "have"} no ESI number on file — add it before filing:
+            {missingEsi.length === 1
+              ? t("{count} ESI-eligible employee has no ESI number on file — add it before filing:", { count: missingEsi.length })
+              : t("{count} ESI-eligible employees have no ESI number on file — add it before filing:", { count: missingEsi.length })}
           </div>
           <ul style={{ margin: 0, paddingLeft: 20, listStyle: "disc" }}>
             {missingEsi.map(m => (
@@ -295,7 +299,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
 
       {payslipsTruncated && (
         <div className="alert alert-warn" style={{ marginBottom: 16 }}>
-          <i className="ti ti-alert-triangle" /> Showing {payslips.length} of {psData!.count} payslips. Summary totals below reflect only the visible rows. The ECR download still includes all employees.
+          <i className="ti ti-alert-triangle" /> {t("Showing {shown} of {total} payslips. Summary totals below reflect only the visible rows. The ECR download still includes all employees.", { shown: payslips.length, total: psData?.count ?? 0 })}
         </div>
       )}
 
@@ -303,10 +307,10 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
       {!loadPs && payslips.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
           {[
-            { label: "Total Gross",      value: fmt(totalGross),      icon: "ti-cash" },
-            { label: "Total Deductions", value: fmt(totalDeductions), icon: "ti-minus" },
-            { label: "Net Payroll",      value: fmt(totalNet),        icon: "ti-transfer-in" },
-            { label: "Total PF",         value: fmt(totalPF),         icon: "ti-building-community" },
+            { label: t("Total Gross"),      value: fmt(totalGross),      icon: "ti-cash" },
+            { label: t("Total Deductions"), value: fmt(totalDeductions), icon: "ti-minus" },
+            { label: t("Net Payroll"),      value: fmt(totalNet),        icon: "ti-transfer-in" },
+            { label: t("Total PF"),         value: fmt(totalPF),         icon: "ti-building-community" },
           ].map(card => (
             <div key={card.label} className="card" style={{ padding: "14px 18px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -322,24 +326,24 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
       {/* ── Payslips Table ────────────────────────────────────────────────── */}
       <div className="card" style={{ overflow: "hidden" }}>
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-receipt" /> Employee Payslips</div>
-          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{payslips.length} employees</span>
+          <div className="card-title"><i className="ti ti-receipt" /> {t("Employee Payslips")}</div>
+          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("{count} employees", { count: payslips.length })}</span>
         </div>
 
         {loadPs ? (
           <div style={{ padding: "32px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 14 }}>
-            <i className="ti ti-loader-2 spin" /> Loading payslips…
+            <i className="ti ti-loader-2 spin" /> {t("Loading payslips…")}
           </div>
         ) : payslips.length === 0 ? (
           <div style={{ padding: "32px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 14 }}>
-            No payslips generated for this cycle yet.
+            {t("No payslips generated for this cycle yet.")}
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "var(--bg-mid)" }}>
-                  {["#", "Employee", "Dept", "Gross", "Deductions", "Net Pay", "PF", "LOP", "Status"].map(h => (
+                  {[t("#"), t("Employee"), t("Dept"), t("Gross"), t("Deductions"), t("Net Pay"), t("PF"), t("LOP"), t("Status")].map(h => (
                     <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, fontSize: 11, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".04em", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>

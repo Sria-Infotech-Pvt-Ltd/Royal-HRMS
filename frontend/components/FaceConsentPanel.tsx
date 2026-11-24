@@ -6,6 +6,7 @@
 // submission. Requires an explicit checkbox tick; there is no "just close
 // this and continue" shortcut.
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 
 interface FaceConsentPanelProps {
   noticeText: string;
@@ -14,6 +15,7 @@ interface FaceConsentPanelProps {
 }
 
 export default function FaceConsentPanel({ noticeText, onAcknowledge, onCancel }: FaceConsentPanelProps) {
+  const t = useT();
   const [checked, setChecked] = useState(false);
 
   return (
@@ -27,7 +29,7 @@ export default function FaceConsentPanel({ noticeText, onAcknowledge, onCancel }
         </div>
         <div>
           <h3 className="text-base font-bold mb-1" style={{ color: "var(--on-bg)" }}>
-            Biometric data consent
+            {t("Biometric data consent")}
           </h3>
           <p className="text-sm leading-relaxed" style={{ color: "var(--on-variant)" }}>
             {noticeText}
@@ -47,13 +49,13 @@ export default function FaceConsentPanel({ noticeText, onAcknowledge, onCancel }
           className="mt-0.5"
         />
         <span className="text-sm" style={{ color: "var(--on-bg)" }}>
-          I have read and agree to the above.
+          {t("I have read and agree to the above.")}
         </span>
       </label>
 
       <div className="flex justify-end gap-3">
         <button className="btn btn-ghost btn-sm" suppressHydrationWarning onClick={onCancel} type="button">
-          Cancel
+          {t("Cancel")}
         </button>
         <button
           className="btn btn-primary btn-sm"
@@ -62,7 +64,7 @@ export default function FaceConsentPanel({ noticeText, onAcknowledge, onCancel }
           onClick={onAcknowledge}
           type="button"
         >
-          I Agree &amp; Continue
+          {t("I Agree & Continue")}
         </button>
       </div>
     </div>

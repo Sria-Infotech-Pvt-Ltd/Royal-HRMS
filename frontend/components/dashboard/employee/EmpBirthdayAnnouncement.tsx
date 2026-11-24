@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
 import BirthdayCelebrationModal from "./BirthdayCelebrationModal";
+import { useT } from "@/hooks/useI18n";
 
 function initials(name: string): string {
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
 export default function EmpBirthdayAnnouncement() {
+  const t = useT();
   const { data, loading } = useBirthdaysToday();
   const birthdays = data?.birthdays ?? [];
   const [celebrateTarget, setCelebrateTarget] = useState<BirthdayEmployee | null>(null);
@@ -38,7 +40,7 @@ export default function EmpBirthdayAnnouncement() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: isSingle ? 4 : 10 }}>
           <span style={{ fontSize: 20 }}>🎉</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--on-bg)" }}>
-            {isSingle ? `Happy Birthday, ${birthdays[0].full_name}!` : "Today's Birthdays"}
+            {isSingle ? t("Happy Birthday, {name}!", { name: birthdays[0].full_name }) : t("Today's Birthdays")}
           </span>
         </div>
 
@@ -75,7 +77,7 @@ export default function EmpBirthdayAnnouncement() {
               ))}
             </div>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 10 }}>
-              Wish them a wonderful day!
+              {t("Wish them a wonderful day!")}
             </div>
           </>
         )}

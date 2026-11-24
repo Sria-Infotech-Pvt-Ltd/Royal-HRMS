@@ -2,6 +2,7 @@
 
 // Shown above the workspace banner while someone is looking at an employee's workspace on their behalf.
 
+import { tr } from "@/lib/i18n/tr";
 import Link from "next/link";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -27,11 +28,11 @@ export default function ViewAsStrip() {
         <i className="ti ti-eye" style={{ marginRight: 6 }} />
         {error
           // A mistyped or removed employee code: say so, instead of showing "Viewing this employee's workspace" over an empty page.
-          ? `${error} Check the employee ID, then go back to Employees.`
-          : `Viewing ${employee ? `${employee.full_name}'s` : "this employee's"} workspace — read-only. Nothing you do here is saved.`}
+          ? tr("{error} Check the employee ID, then go back to Employees.", { error })
+          : employee ? tr("Viewing {name}'s workspace — read-only. Nothing you do here is saved.", { name: employee.full_name }) : tr("Viewing this employee's workspace — read-only. Nothing you do here is saved.")}
       </span>
       <Link href="/dashboard/employees" style={{ color: "inherit", textDecoration: "underline" }}>
-        Back to Employees
+        {tr("Back to Employees")}
       </Link>
     </div>
   );

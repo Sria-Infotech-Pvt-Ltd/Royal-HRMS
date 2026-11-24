@@ -14,9 +14,11 @@ import styles from "@/components/dashboard/hrhome/hrHome.module.css";
 import { useHrHomeData } from "@/hooks/useHrHomeData";
 import { useAnyPermission, usePermission } from "@/hooks/usePermission";
 import type { SessionPayload } from "@/lib/session";
+import { useT } from "@/hooks/useI18n";
 
 export default function HrHomeDashboard({ session }: { session: SessionPayload }) {
   const router = useRouter();
+  const t = useT();
   const data = useHrHomeData();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
@@ -31,12 +33,12 @@ export default function HrHomeDashboard({ session }: { session: SessionPayload }
 
   const go = (path: string) => () => router.push(path);
   const actions: HrQuickAction[] = [
-    canSeeRecruitment && { key: "interviews", label: "Interview List", icon: "ti-list-details", onClick: go("/dashboard/interview-list") },
-    canHire && { key: "hire", label: "Register Employee", icon: "ti-user-plus", onClick: go("/dashboard/employees?action=hire") },
-    canApprove && { key: "approve", label: "Approve Requests", icon: "ti-circle-check", onClick: go("/dashboard/approvals") },
-    canAddCandidate && { key: "candidate", label: "Add Candidate", icon: "ti-user-search", onClick: go("/dashboard/interview-list?action=add") },
-    canReviewOnboarding && { key: "onboarding", label: "Assign Onboarding", icon: "ti-clipboard-check", onClick: go("/dashboard/candidate-review?tab=onboarding") },
-    { key: "reports", label: "Generate Reports", icon: "ti-chart-bar", onClick: go("/dashboard/reports") },
+    canSeeRecruitment && { key: "interviews", label: t("Interview List"), icon: "ti-list-details", onClick: go("/dashboard/interview-list") },
+    canHire && { key: "hire", label: t("Register Employee"), icon: "ti-user-plus", onClick: go("/dashboard/employees?action=hire") },
+    canApprove && { key: "approve", label: t("Approve Requests"), icon: "ti-circle-check", onClick: go("/dashboard/approvals") },
+    canAddCandidate && { key: "candidate", label: t("Add Candidate"), icon: "ti-user-search", onClick: go("/dashboard/interview-list?action=add") },
+    canReviewOnboarding && { key: "onboarding", label: t("Assign Onboarding"), icon: "ti-clipboard-check", onClick: go("/dashboard/candidate-review?tab=onboarding") },
+    { key: "reports", label: t("Generate Reports"), icon: "ti-chart-bar", onClick: go("/dashboard/reports") },
   ].filter((action): action is HrQuickAction => Boolean(action));
 
   return (

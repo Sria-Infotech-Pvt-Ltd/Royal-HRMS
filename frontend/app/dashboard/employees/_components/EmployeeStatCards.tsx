@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useT } from "@/hooks/useI18n";
 
 export interface EmployeeStatCard {
   label: string;
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export default function EmployeeStatCards({ stats }: Props) {
+  const t = useT();
   return (
     <div className="stats">
       {stats.map(st => (
@@ -40,7 +42,7 @@ export default function EmployeeStatCards({ stats }: Props) {
           style={st.onClick ? { cursor: "pointer" } : undefined}
         >
           <div className="top">
-            <div className="lbl">{st.label}</div>
+            <div className="lbl">{t(st.label)}</div>
             <div className={`ico ${TINT_CLASS[st.tint]}`}>
               <i className={`ti ${st.icon}`} style={{ fontSize: 14 }} />
             </div>

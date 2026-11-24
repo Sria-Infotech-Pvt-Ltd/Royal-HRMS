@@ -7,6 +7,8 @@ import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import type { Assessment, AssessmentItem, AssessmentSection } from "../page";
 import { confirmDialog } from "@/components/DialogProvider";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,12 +39,13 @@ function toEmbedUrl(url: string): string | null {
 }
 
 function VideoLink({ url }: { url: string }) {
+  const t = useT();
   if (!url) return null;
   return (
     <a href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
       style={{ fontSize: ".75rem", color: "var(--primary)", display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none", marginTop: 2 }}>
       <i className="ti ti-external-link" style={{ fontSize: 11 }} />
-      {toEmbedUrl(url) ? "Watch video" : url.length > 48 ? url.slice(0, 48) + "…" : url}
+      {toEmbedUrl(url) ? t("Watch video") : url.length > 48 ? url.slice(0, 48) + "…" : url}
     </a>
   );
 }
@@ -63,7 +66,7 @@ function VideoPreview({ url }: { url: string }) {
 }
 
 function apiErr(e: unknown) {
-  return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Action failed.";
+  return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? tr("Action failed.");
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -71,6 +74,7 @@ function apiErr(e: unknown) {
 interface Props { assessment: Assessment; onClose: () => void; }
 
 export default function ItemsModal({ assessment, onClose }: Props) {
+  const t = useT();
   const { data: fetchedSections, loading: sectionsLoading, refetch: refetchSections } =
     useFetch<{ results: AssessmentSection[] } | AssessmentSection[]>(API.assessments.sections(assessment.id));
   const { data: fetchedItems, loading: itemsLoading, refetch: refetchItems } =
@@ -113,7 +117,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
     setEditSectionId(s.id); setFormErr(""); setPanelMode("section");
   }
   async function saveSection() {
-    if (!sectionForm.title.trim()) { setFormErr("Title is required."); return; }
+    if (!sectionForm.title.trim()) { setFormErr(t("Title is required.")); return; }
     setSaving(true); setFormErr("");
     const payload = { title: sectionForm.title.trim(), order: Number(sectionForm.order) || 1, score: Number(sectionForm.score) || 0 };
     try {
@@ -124,7 +128,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
     finally { setSaving(false); }
   }
   async function deleteSection(id: string) {
-    if (!(await confirmDialog("Delete this section? Items will become unsectioned."))) return;
+    if (!(await confirmDialog(t("Delete this section? Items will become unsectioned.")))) return;
     setFormErr("");
     try { await clientApi.delete(API.assessments.sectionDetail(assessment.id, id)); refetchSections(); refetchItems(); }
     catch (e) { setFormErr(apiErr(e)); }
@@ -154,10 +158,10 @@ export default function ItemsModal({ assessment, onClose }: Props) {
       setItemForm(p => ({ ...p, option_a: "True", option_b: "False", option_c: "", option_d: "", correct_option: p.correct_option === "c" || p.correct_option === "d" ? "a" : p.correct_option }));
   }
   async function saveItem() {
-    if (!itemForm.title.trim())                                                     { setFormErr("Title is required."); return; }
-    if (itemForm.item_type === "video" && !itemForm.video_url.trim())               { setFormErr("Video URL is required."); return; }
-    if (itemForm.item_type === "quiz"  && !itemForm.question.trim())                { setFormErr("Question is required."); return; }
-    if (itemForm.item_type === "quiz"  && (!itemForm.option_a.trim() || !itemForm.option_b.trim())) { setFormErr("Options A and B are required."); return; }
+    if (!itemForm.title.trim())                                                     { setFormErr(t("Title is required.")); return; }
+    if (itemForm.item_type === "video" && !itemForm.video_url.trim())               { setFormErr(t("Video URL is required.")); return; }
+    if (itemForm.item_type === "quiz"  && !itemForm.question.trim())                { setFormErr(t("Question is required.")); return; }
+    if (itemForm.item_type === "quiz"  && (!itemForm.option_a.trim() || !itemForm.option_b.trim())) { setFormErr(t("Options A and B are required.")); return; }
 
     const base = { item_type: itemForm.item_type, title: itemForm.title.trim(), order: Number(itemForm.order) || 1, section: forSectionId };
     const payload = itemForm.item_type === "video"
@@ -173,7 +177,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
     finally { setSaving(false); }
   }
   async function deleteItem(id: string) {
-    if (!(await confirmDialog("Remove this item?"))) return;
+    if (!(await confirmDialog(t("Remove this item?")))) return;
     setFormErr("");
     try { await clientApi.delete(API.assessments.itemDetail(id)); refetchItems(); }
     catch (e) { setFormErr(apiErr(e)); }
@@ -190,17 +194,17 @@ export default function ItemsModal({ assessment, onClose }: Props) {
 
   return (
     <Modal
-      title={<><i className="ti ti-layout-list mr-6" /> Sections — {assessment.title}</>}
+      title={<><i className="ti ti-layout-list mr-6" /> {t("Sections — {title}", { title: assessment.title })}</>}
       onClose={onClose}
       maxWidth={700}
       footer={
         <>
           {!panelMode && (
             <button className="btn btn-secondary" onClick={openAddSection}>
-              <i className="ti ti-plus" /> Add Section
+              <i className="ti ti-plus" /> {t("Add Section")}
             </button>
           )}
-          <button className="btn btn-ghost" onClick={onClose}>Done</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Done")}</button>
         </>
       }
     >
@@ -208,7 +212,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
 
           {!loading && sections.length === 0 && items.length === 0 && !panelMode && (
             <div className="text-center py-10" style={{ color: "var(--text-secondary)", fontSize: ".88rem" }}>
-              No sections or items yet. Click <strong>Add Section</strong> to get started.
+              {t("No sections or items yet. Click")} <strong>{t("Add Section")}</strong> {t("to get started.")}
             </div>
           )}
 
@@ -231,12 +235,12 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: ".88rem" }}>{section.title}</div>
                         <div style={{ fontSize: ".75rem", color: "var(--text-secondary)" }}>
-                          {section.score} marks · {section.item_count ?? sItems.length} item{(section.item_count ?? sItems.length) !== 1 ? "s" : ""}
+                          {(section.item_count ?? sItems.length) === 1 ? t("{score} marks · {count} item", { score: section.score, count: section.item_count ?? sItems.length }) : t("{score} marks · {count} items", { score: section.score, count: section.item_count ?? sItems.length })}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                        <button className="btn btn-ghost btn-sm" title="Edit section" onClick={() => openEditSection(section)} aria-label="Edit section"><i className="ti ti-edit" /></button>
-                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete section" onClick={() => deleteSection(section.id)} aria-label="Delete section"><i className="ti ti-trash" /></button>
+                        <button className="btn btn-ghost btn-sm" title={t("Edit section")} onClick={() => openEditSection(section)} aria-label={t("Edit section")}><i className="ti ti-edit" /></button>
+                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title={t("Delete section")} onClick={() => deleteSection(section.id)} aria-label={t("Delete section")}><i className="ti ti-trash" /></button>
                       </div>
                     </div>
 
@@ -250,14 +254,14 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                           <div style={{ fontSize: ".84rem", fontWeight: 500 }}>{ii + 1}. {item.title}</div>
                           <div style={{ fontSize: ".75rem", color: "var(--text-secondary)" }}>
                             {item.item_type === "video"
-                              ? (item.duration_secs ? `${Math.ceil(item.duration_secs / 60)} min` : "Video")
-                              : `${item.question?.slice(0, 60) ?? "—"}${(item.question?.length ?? 0) > 60 ? "…" : ""} · Correct: ${item.correct_option?.toUpperCase() || "—"}`}
+                              ? (item.duration_secs ? t("{count} min", { count: Math.ceil(item.duration_secs / 60) }) : t("Video"))
+                              : t("{question} · Correct: {option}", { question: `${item.question?.slice(0, 60) ?? "—"}${(item.question?.length ?? 0) > 60 ? "…" : ""}`, option: item.correct_option?.toUpperCase() || "—" })}
                           </div>
                           {item.item_type === "video" && <VideoLink url={item.video_url} />}
                         </div>
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button className="btn btn-ghost btn-sm" title="Edit item" onClick={() => openEditItem(item)} aria-label="Edit item"><i className="ti ti-edit" /></button>
-                          <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete item" onClick={() => deleteItem(item.id)} aria-label="Delete item"><i className="ti ti-trash" /></button>
+                          <button className="btn btn-ghost btn-sm" title={t("Edit item")} onClick={() => openEditItem(item)} aria-label={t("Edit item")}><i className="ti ti-edit" /></button>
+                          <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title={t("Delete item")} onClick={() => deleteItem(item.id)} aria-label={t("Delete item")}><i className="ti ti-trash" /></button>
                         </div>
                       </div>
                     ))}
@@ -265,7 +269,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                     {/* Add item row */}
                     <div style={{ padding: "6px 14px 6px 44px" }}>
                       <button className="btn btn-ghost btn-sm" style={{ color: "var(--primary)", fontSize: ".8rem" }} onClick={() => openAddItem(section.id)}>
-                        <i className="ti ti-plus mr-4" /> Add Item
+                        <i className="ti ti-plus mr-4" /> {t("Add Item")}
                       </button>
                     </div>
                   </div>
@@ -277,18 +281,18 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                 <div className="settings-card" style={{ padding: 10 }}>
                   <div style={{ fontSize: ".78rem", color: sections.length === 0 ? "var(--on-variant)" : "var(--warning)", marginBottom: 8 }}>
                     <i className={`ti ${sections.length === 0 ? "ti-list" : "ti-alert-triangle"} mr-4`} />
-                    {sections.length === 0 ? "Items" : "Items not assigned to any section"}
+                    {sections.length === 0 ? t("Items") : t("Items not assigned to any section")}
                   </div>
                   {unsectioned.map(item => (
                     <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: ".84rem", borderBottom: "1px solid var(--outline-v)" }}>
                       <i className={`ti ${item.item_type === "video" ? "ti-player-play" : "ti-help-circle"}`} style={{ color: "var(--on-variant)", fontSize: 13, flexShrink: 0 }} />
                       <span style={{ flex: 1 }}>{item.title}</span>
-                      <button className="btn btn-ghost btn-sm" title="Edit item" onClick={() => openEditItem(item)} aria-label="Edit item"><i className="ti ti-edit" /></button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete item" onClick={() => deleteItem(item.id)} aria-label="Delete item"><i className="ti ti-trash" /></button>
+                      <button className="btn btn-ghost btn-sm" title={t("Edit item")} onClick={() => openEditItem(item)} aria-label={t("Edit item")}><i className="ti ti-edit" /></button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title={t("Delete item")} onClick={() => deleteItem(item.id)} aria-label={t("Delete item")}><i className="ti ti-trash" /></button>
                     </div>
                   ))}
                   <button className="btn btn-ghost btn-sm mt-8" style={{ color: "var(--primary)", fontSize: ".8rem" }} onClick={() => openAddItem(null)}>
-                    <i className="ti ti-plus mr-4" /> Add Unsectioned Item
+                    <i className="ti ti-plus mr-4" /> {t("Add Unsectioned Item")}
                   </button>
                 </div>
               )}
@@ -298,26 +302,26 @@ export default function ItemsModal({ assessment, onClose }: Props) {
           {/* ── Section form ── */}
           {panelMode === "section" && (
             <div className="settings-card" style={{ padding: 16 }}>
-              <div className="settings-card-title mb-12">{editSectionId ? "Edit Section" : "Add Section"}</div>
+              <div className="settings-card-title mb-12">{editSectionId ? t("Edit Section") : t("Add Section")}</div>
               {formErr && <div className="alert alert-error mb-12"><i className="ti ti-alert-circle" /><div>{formErr}</div></div>}
               <div className="field-group mb-12">
-                <label className="field-label">Title *</label>
-                <input className="field-input" value={sectionForm.title} onChange={e => setSectionForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Technical Knowledge" />
+                <label className="field-label">{t("Title *")}</label>
+                <input className="field-input" value={sectionForm.title} onChange={e => setSectionForm(p => ({ ...p, title: e.target.value }))} placeholder={t("e.g. Technical Knowledge")} />
               </div>
               <div className="form-row cols-2 mb-12">
                 <div className="field-group">
-                  <label className="field-label">Order</label>
+                  <label className="field-label">{t("Order")}</label>
                   <input type="number" min={1} className="field-input" value={sectionForm.order} onChange={e => setSectionForm(p => ({ ...p, order: e.target.value }))} />
                 </div>
                 <div className="field-group">
-                  <label className="field-label">Score (marks allocated)</label>
-                  <input type="number" min={0} className="field-input" value={sectionForm.score} onChange={e => setSectionForm(p => ({ ...p, score: e.target.value }))} placeholder="e.g. 40" />
+                  <label className="field-label">{t("Score (marks allocated)")}</label>
+                  <input type="number" min={0} className="field-input" value={sectionForm.score} onChange={e => setSectionForm(p => ({ ...p, score: e.target.value }))} placeholder={t("e.g. 40")} />
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button className="btn btn-ghost" onClick={closePanel} disabled={saving}>Cancel</button>
+                <button className="btn btn-ghost" onClick={closePanel} disabled={saving}>{t("Cancel")}</button>
                 <button className="btn btn-filled" onClick={saveSection} disabled={saving}>
-                  {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : editSectionId ? "Update" : "Save"}
+                  {saving ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : editSectionId ? t("Update") : t("Save")}
                 </button>
               </div>
             </div>
@@ -326,33 +330,33 @@ export default function ItemsModal({ assessment, onClose }: Props) {
           {/* ── Item form ── */}
           {panelMode === "item" && (
             <div className="settings-card" style={{ padding: 16 }}>
-              <div className="settings-card-title mb-12">{editItemId ? "Edit Item" : "Add Item"}</div>
+              <div className="settings-card-title mb-12">{editItemId ? t("Edit Item") : t("Add Item")}</div>
               {formErr && <div className="alert alert-error mb-12"><i className="ti ti-alert-circle" /><div>{formErr}</div></div>}
 
               <div className="field-group mb-12">
-                <label className="field-label">Item Type *</label>
+                <label className="field-label">{t("Item Type *")}</label>
                 <select className="field-input field-select" value={itemForm.item_type}
                   onChange={e => { setItemForm(p => ({ ...p, item_type: e.target.value as "video" | "quiz" })); setQuestionType("mcq"); }}>
-                  <option value="quiz">Quiz</option>
-                  <option value="video">Video</option>
+                  <option value="quiz">{t("Quiz")}</option>
+                  <option value="video">{t("Video")}</option>
                 </select>
               </div>
 
               <div className="field-group mb-12">
-                <label className="field-label">Title *</label>
+                <label className="field-label">{t("Title *")}</label>
                 <input className="field-input" value={itemForm.title} onChange={e => setItem("title", e.target.value)}
-                  placeholder={itemForm.item_type === "video" ? "e.g. Company Introduction" : "e.g. HR Policy Question"} />
+                  placeholder={itemForm.item_type === "video" ? t("e.g. Company Introduction") : t("e.g. HR Policy Question")} />
               </div>
 
               {itemForm.item_type === "video" && (
                 <div className="form-row cols-2 mb-12">
                   <div className="field-group">
-                    <label className="field-label">Video URL *</label>
+                    <label className="field-label">{t("Video URL *")}</label>
                     <input className="field-input" value={itemForm.video_url} onChange={e => setItem("video_url", e.target.value)} placeholder="https://youtu.be/..." />
                     <VideoPreview url={itemForm.video_url} />
                   </div>
                   <div className="field-group">
-                    <label className="field-label">Duration (seconds)</label>
+                    <label className="field-label">{t("Duration (seconds)")}</label>
                     <input type="number" min={0} className="field-input" value={itemForm.duration_secs} onChange={e => setItem("duration_secs", e.target.value)} placeholder="180" />
                   </div>
                 </div>
@@ -361,33 +365,33 @@ export default function ItemsModal({ assessment, onClose }: Props) {
               {itemForm.item_type === "quiz" && (
                 <>
                   <div className="field-group mb-12">
-                    <label className="field-label">Question Type *</label>
+                    <label className="field-label">{t("Question Type *")}</label>
                     <select className="field-input field-select" value={questionType} onChange={e => changeQuestionType(e.target.value as "mcq" | "truefalse")}>
-                      <option value="mcq">Multiple Choice</option>
-                      <option value="truefalse">True / False</option>
+                      <option value="mcq">{t("Multiple Choice")}</option>
+                      <option value="truefalse">{t("True / False")}</option>
                     </select>
                   </div>
                   <div className="field-group mb-12">
-                    <label className="field-label">Question *</label>
-                    <input className="field-input" value={itemForm.question} onChange={e => setItem("question", e.target.value)} placeholder="e.g. What is the notice period?" />
+                    <label className="field-label">{t("Question *")}</label>
+                    <input className="field-input" value={itemForm.question} onChange={e => setItem("question", e.target.value)} placeholder={t("e.g. What is the notice period?")} />
                   </div>
                   <div className="form-row cols-2 mb-12">
                     {(questionType === "truefalse" ? ["a", "b"] as const : ["a", "b", "c", "d"] as const).map(opt => (
                       <div key={opt} className="field-group">
-                        <label className="field-label">Option {opt.toUpperCase()} *</label>
+                        <label className="field-label">{t("Option {letter} *", { letter: opt.toUpperCase() })}</label>
                         <input className="field-input"
                           value={itemForm[`option_${opt}` as keyof ItemForm]}
                           onChange={e => setItem(`option_${opt}` as keyof ItemForm, e.target.value)}
-                          placeholder={questionType === "truefalse" ? (opt === "a" ? "True" : "False") : `Option ${opt.toUpperCase()}`}
+                          placeholder={questionType === "truefalse" ? (opt === "a" ? t("True") : t("False")) : t("Option {letter}", { letter: opt.toUpperCase() })}
                           readOnly={questionType === "truefalse"} />
                       </div>
                     ))}
                   </div>
                   <div className="field-group mb-12">
-                    <label className="field-label">Correct Option *</label>
+                    <label className="field-label">{t("Correct Option *")}</label>
                     <select className="field-input field-select" value={itemForm.correct_option} onChange={e => setItem("correct_option", e.target.value)}>
                       {(questionType === "truefalse" ? ["a", "b"] : ["a", "b", "c", "d"]).map(o => (
-                        <option key={o} value={o}>{questionType === "truefalse" ? (o === "a" ? "True" : "False") : `Option ${o.toUpperCase()}`}</option>
+                        <option key={o} value={o}>{questionType === "truefalse" ? (o === "a" ? t("True") : t("False")) : t("Option {letter}", { letter: o.toUpperCase() })}</option>
                       ))}
                     </select>
                   </div>
@@ -395,9 +399,9 @@ export default function ItemsModal({ assessment, onClose }: Props) {
               )}
 
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button className="btn btn-ghost" onClick={closePanel} disabled={saving}>Cancel</button>
+                <button className="btn btn-ghost" onClick={closePanel} disabled={saving}>{t("Cancel")}</button>
                 <button className="btn btn-filled" onClick={saveItem} disabled={saving}>
-                  {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : editItemId ? "Update" : "Save"}
+                  {saving ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : editItemId ? t("Update") : t("Save")}
                 </button>
               </div>
             </div>

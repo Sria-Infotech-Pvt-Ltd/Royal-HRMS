@@ -13,11 +13,13 @@ import EmployeePickerPanel from "./_components/EmployeePickerPanel";
 import EmployeeFaceCard from "./_components/EmployeeFaceCard";
 import FaceCoverageCard from "./_components/FaceCoverageCard";
 import HRFaceCaptureModal from "./_components/HRFaceCaptureModal";
+import { useT } from "@/hooks/useI18n";
 
 const SEARCH_DELAY_MS = 300;
 
 export default function FaceIdRegistrationsPage() {
   const router = useRouter();
+  const t = useT();
   const canRegister = usePermission("facial_recognition.approve");
   const faceStatus = useFaceVerificationStatus();
   const [search, setSearch] = useState("");
@@ -36,8 +38,8 @@ export default function FaceIdRegistrationsPage() {
     return (
       <div className="empty-state">
         <i className="ti ti-lock" />
-        <h3>You don&apos;t have permission to manage face ID registrations</h3>
-        <p>Contact an HR administrator if you believe this is a mistake.</p>
+        <h3>{t("You don't have permission to manage face ID registrations")}</h3>
+        <p>{t("Contact an HR administrator if you believe this is a mistake.")}</p>
       </div>
     );
   }

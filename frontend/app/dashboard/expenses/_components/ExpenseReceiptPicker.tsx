@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
@@ -26,8 +28,8 @@ function sizeLabel(bytes: number): string {
 /** Checks the type and size of every file; returns the first problem, or null when all are fine. */
 function firstProblem(selected: File[]): string | null {
   for (const file of selected) {
-    if (file.size > MAX_RECEIPT_BYTES) return `"${file.name}" exceeds 5 MB.`;
-    if (!ALLOWED_TYPES.includes(file.type)) return `"${file.name}" must be PDF, JPG, or PNG.`;
+    if (file.size > MAX_RECEIPT_BYTES) return tr("\"{name}\" exceeds 5 MB.", { name: file.name });
+    if (!ALLOWED_TYPES.includes(file.type)) return tr("\"{name}\" must be PDF, JPG, or PNG.", { name: file.name });
   }
   return null;
 }
@@ -40,6 +42,7 @@ function useThumbnails(files: File[]): string[] {
 }
 
 export default function ExpenseReceiptPicker({ files, error, onChange, onError }: Props) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const thumbnails = useThumbnails(files);
@@ -65,10 +68,10 @@ export default function ExpenseReceiptPicker({ files, error, onChange, onError }
                 <div className="xf-file-name">{file.name}</div>
                 <div className="xf-file-size">{sizeLabel(file.size)}</div>
               </div>
-              <button type="button" className="xf-icon-btn" title="View receipt" aria-label={`View receipt ${file.name}`} onClick={() => openReceiptPreview(file)}>
+              <button type="button" className="xf-icon-btn" title={t("View receipt")} aria-label={t("View receipt {name}", { name: file.name })} onClick={() => openReceiptPreview(file)}>
                 <i className="ti ti-eye" />
               </button>
-              <button type="button" className="xf-icon-btn" style={{ color: "var(--error)" }} aria-label={`Remove receipt ${file.name}`} onClick={() => onChange(files.filter((_, i) => i !== index))}>
+              <button type="button" className="xf-icon-btn" style={{ color: "var(--error)" }} aria-label={t("Remove receipt {name}", { name: file.name })} onClick={() => onChange(files.filter((_, i) => i !== index))}>
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -87,8 +90,8 @@ export default function ExpenseReceiptPicker({ files, error, onChange, onError }
         onDrop={event => { event.preventDefault(); setIsDragging(false); accept(Array.from(event.dataTransfer.files)); }}
       >
         <i className="ti ti-cloud-upload" />
-        <p>{files.length > 0 ? "Add more receipts" : "Drag receipts here or click to upload"}</p>
-        <small>PDF, JPG, PNG up to 5 MB each — at least one required</small>
+        <p>{files.length > 0 ? t("Add more receipts") : t("Drag receipts here or click to upload")}</p>
+        <small>{t("PDF, JPG, PNG up to 5 MB each — at least one required")}</small>
       </div>
       <input
         ref={inputRef}

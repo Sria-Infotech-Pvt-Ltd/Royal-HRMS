@@ -4,6 +4,7 @@
 // then a divider-separated list of OverviewRow entries. Extracted so a
 // module's page.tsx only supplies data, not markup.
 
+import { useT } from "@/hooks/useI18n";
 import { OverviewRow } from "./ModuleOverviewKit";
 
 export interface OverviewListItem {
@@ -24,20 +25,21 @@ interface Props {
 
 export default function OverviewList({
   title,
-  subtitle = "Current records and items requiring attention.",
+  subtitle,
   items,
   emptyIcon = "ti-list-check",
-  emptyTitle = "Nothing to show yet",
+  emptyTitle,
 }: Props) {
+  const t = useT();
   return (
     <div className="module-card">
       <div className="mc-head">
-        <div className="mc-title">{title}</div>
-        <div className="mc-sub">{subtitle}</div>
+        <div className="mc-title">{t(title)}</div>
+        <div className="mc-sub">{subtitle ? t(subtitle) : t("Current records and items requiring attention.")}</div>
       </div>
       <div style={{ padding: "0 20px 4px" }}>
         {items.length === 0 ? (
-          <div className="empty-state"><i className={`ti ${emptyIcon}`} /><h3>{emptyTitle}</h3></div>
+          <div className="empty-state"><i className={`ti ${emptyIcon}`} /><h3>{emptyTitle ? t(emptyTitle) : t("Nothing to show yet")}</h3></div>
         ) : items.map((row, i) => (
           <OverviewRow
             key={i}

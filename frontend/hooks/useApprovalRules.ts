@@ -3,6 +3,7 @@
 // The global approval rules, the editor for one of them, "apply to all workflows", and Undo for the last save. Saving one rule sends the
 // same request as before; applying to all sends it once per workflow and reports any workflow the server refused.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -74,7 +75,7 @@ export function useApprovalRules() {
         done.labels.push(rule.workflow_label);
         done.previous.push({ workflow_type: rule.workflow_type, l1: toSelectValue(rule.l1_approver_kind, rule.l1_approver_user_id), l2: toSelectValue(rule.l2_approver_kind, rule.l2_approver_user_id) });
       } catch (err: unknown) {
-        refused.push(applyAll ? `${rule.workflow_label}: ${messageOf(err, "Failed to save rule.")}` : messageOf(err, "Failed to save rule."));
+        refused.push(applyAll ? `${rule.workflow_label}: ${messageOf(err, tr("Failed to save rule."))}` : messageOf(err, tr("Failed to save rule.")));
       }
     }
     if (done.previous.length > 0) { refetch(); setLastChange(done); }
@@ -89,7 +90,7 @@ export function useApprovalRules() {
     try {
       for (const entry of change.previous) await sendRule(entry.workflow_type, entry.l1, entry.l2);
     } catch (err: unknown) {
-      setApiError(messageOf(err, "Could not undo the change."));
+      setApiError(messageOf(err, tr("Could not undo the change.")));
     }
     refetch();
   }

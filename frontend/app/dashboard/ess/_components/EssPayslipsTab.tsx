@@ -105,8 +105,8 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
   const month = fmtMonth(slip.cycle_start);
   const gross = Number(slip.gross_earnings);
   const deductionsTotal = Number(slip.total_deductions);
-  const bankMasked = me?.profile?.account_number_masked ? `A/c ${me.profile.account_number_masked}` : null;
-  const credited = [`Credited on ${formatDate(slip.pay_date)}`, me?.profile?.bank_name, bankMasked].filter(Boolean).join(" · ");
+  const bankMasked = me?.profile?.account_number_masked ? tr("A/c {number}", { number: me.profile.account_number_masked }) : null;
+  const credited = [tr("Credited on {date}", { date: formatDate(slip.pay_date) }), me?.profile?.bank_name, bankMasked].filter(Boolean).join(" · ");
   const fyStart = currentFinancialYearStart(fyConfig?.financial_year_start_month ?? "April");
   const fyLabel = fyConfig?.current_financial_year ?? financialYearLabel(fyStart);
   const ytd = computeYtd(payslips, fyStart);
@@ -139,14 +139,14 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
       <div className="pay-layout">
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="ess-grid">
-            <PayTable title={tr("Earnings")} subtitle={`${month} payroll components.`} lines={earningsOf(slip)} totalLabel="Total earnings" total={gross} />
-            <PayTable title={tr("Deductions")} subtitle={`${month} payroll components.`} lines={deductionsOf(slip)} totalLabel="Total deductions" total={deductionsTotal} />
+            <PayTable title={tr("Earnings")} subtitle={tr("{month} payroll components.", { month })} lines={earningsOf(slip)} totalLabel={tr("Total earnings")} total={gross} />
+            <PayTable title={tr("Deductions")} subtitle={tr("{month} payroll components.", { month })} lines={deductionsOf(slip)} totalLabel={tr("Total deductions")} total={deductionsTotal} />
           </div>
           <div className="ess-card">
             <h2>{tr("Year-to-date summary")}</h2>
             <p>{tr("{range} cumulative payroll.", { range: ytd.monthRangeLabel })}</p>
             <div className="ess-metrics ess-metrics-3">
-              <article className="ess-metric"><i>{tr("GROSS EARNINGS")}</i><b>{INR(ytd.gross)}</b><span>{tr(ytd.periodCount === 1 ? "{count} payroll period" : "{count} payroll periods", { count: ytd.periodCount })}</span></article>
+              <article className="ess-metric"><i>{tr("GROSS EARNINGS")}</i><b>{INR(ytd.gross)}</b><span>{ytd.periodCount === 1 ? tr("{count} payroll period", { count: ytd.periodCount }) : tr("{count} payroll periods", { count: ytd.periodCount })}</span></article>
               <article className="ess-metric"><i>{tr("INCOME TAX")}</i><b>{INR(ytd.incomeTax)}</b><span>{tr("deducted to date")}</span></article>
               <article className="ess-metric"><i>{tr("NET PAY")}</i><b>{INR(ytd.net)}</b><span>{tr("credited to date")}</span></article>
             </div>
@@ -181,7 +181,7 @@ export default function EssPayslipsTab({ onNavigateToTax }: { onNavigateToTax: (
             <div className="ess-list">
               {payslips.map(item => (
                 <div className="ess-row" key={item.id}>
-                  <div><b>{fmtMonth(item.cycle_start)}</b><small>{INR(item.net_pay)} · PDF</small></div>
+                  <div><b>{fmtMonth(item.cycle_start)}</b><small>{tr("{amount} · PDF", { amount: INR(item.net_pay) })}</small></div>
                   <a className="rvbtn ghost" href={`${API_BASE}${API.payroll.payslipPdf(item.id)}`} onClick={() => logPayslipDownload(item.id)}>{tr("Download")}</a>
                 </div>
               ))}

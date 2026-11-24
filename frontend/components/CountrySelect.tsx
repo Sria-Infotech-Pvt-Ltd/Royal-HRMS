@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRIES } from "@/lib/countries";
 import { useCountries } from "@/hooks/useLocationOptions";
+import { useT } from "@/hooks/useI18n";
 
 const COLLATOR = new Intl.Collator("en", { sensitivity: "base" });
 
@@ -26,6 +27,7 @@ interface CountrySelectProps {
  * as-is and shown selected rather than silently cleared — nothing already
  * saved on an employee's profile appears broken. */
 export default function CountrySelect({ value, onChange, mode, placeholder, inputClassName = "field-input" }: CountrySelectProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -72,13 +74,13 @@ export default function CountrySelect({ value, onChange, mode, placeholder, inpu
         style={{ width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}
       >
         <span style={{ color: value ? "inherit" : "var(--on-variant, #7c8aa3)" }}>
-          {value || placeholder || (mode === "demonym" ? "Select nationality" : "Select country")}
+          {value || placeholder || (mode === "demonym" ? t("Select nationality") : t("Select country"))}
         </span>
         <i className="ti ti-chevron-down" style={{ fontSize: 14, color: "var(--on-variant)", flexShrink: 0 }} />
       </button>
       {!isKnownValue && (
         <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>
-          Not in the current list — pick one below to update it, or leave as-is.
+          {t("Not in the current list — pick one below to update it, or leave as-is.")}
         </div>
       )}
 
@@ -95,13 +97,13 @@ export default function CountrySelect({ value, onChange, mode, placeholder, inpu
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={mode === "demonym" ? "Search nationalities…" : "Search countries…"}
+            placeholder={mode === "demonym" ? t("Search nationalities…") : t("Search countries…")}
             className={inputClassName}
             style={{ margin: 6, width: "calc(100% - 12px)" }}
           />
           <div style={{ overflowY: "auto" }}>
             {filtered.length === 0 && (
-              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>No matches.</div>
+              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>{t("No matches.")}</div>
             )}
             {filtered.map(o => (
               <div

@@ -9,6 +9,7 @@
 // input uses, so it can replace one without touching the surrounding state ("" while the date is incomplete/invalid).
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   /** ISO "YYYY-MM-DD", or "" for no date. */
@@ -77,6 +78,7 @@ function formatDigits(raw: string, sep: string): string {
 }
 
 export default function DateInput({ value, onChange, id, className, style, disabled = false, readOnly = false, required = false, title, min, max, separator = "-" }: Props) {
+  const t = useT();
   const { wrapper: wrapperStyle, input: inputStyle } = splitStyle(style);
   const isLocked = disabled || readOnly;
   const [text, setText] = useState(() => isoToText(value, separator));
@@ -125,7 +127,7 @@ export default function DateInput({ value, onChange, id, className, style, disab
         type="text"
         inputMode="numeric"
         autoComplete="off"
-        placeholder={`DD${separator}MM${separator}YYYY`}
+        placeholder={separator === "-" ? t("DD-MM-YYYY") : t("DD/MM/YYYY")}
         maxLength={10}
         value={text}
         disabled={disabled}
@@ -139,7 +141,7 @@ export default function DateInput({ value, onChange, id, className, style, disab
       />
       <button
         type="button"
-        aria-label="Pick a date from the calendar"
+        aria-label={t("Pick a date from the calendar")}
         onClick={openCalendar}
         disabled={isLocked}
         tabIndex={-1}

@@ -1,10 +1,12 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { useT } from "@/hooks/useI18n";
 import type { EmployeeRow } from "./EmployeeAttendanceRow";
 
 /** Whole-team numbers for the cycle, added up from the per-employee rows already on screen. */
 export default function AttendanceTotals({ employees }: { employees: EmployeeRow[] }) {
+  const t = useT();
   const sum = (pick: (row: EmployeeRow) => number) => employees.reduce((total, row) => total + pick(row), 0);
   const lopDays = sum(row => row.lop_days);
   const absentDays = sum(row => row.absent_days);
@@ -21,7 +23,7 @@ export default function AttendanceTotals({ employees }: { employees: EmployeeRow
       {tiles.map(tile => (
         <div key={tile.label} className={`aa-total${tile.isAlert ? " is-alert" : ""}`} style={{ "--aa-accent": tile.accent } as CSSProperties}>
           <span className="aa-total-icon"><i className={`ti ${tile.icon}`} /></span>
-          <div><b>{tile.value}</b><span>{tile.label}</span></div>
+          <div><b>{tile.value}</b><span>{t(tile.label)}</span></div>
         </div>
       ))}
     </div>

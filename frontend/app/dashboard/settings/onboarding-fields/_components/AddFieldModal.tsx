@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
@@ -27,6 +28,7 @@ function Spin() {
 }
 
 export default function AddFieldModal({ step, onClose, onCreated }: Props) {
+  const t = useT();
   const [label, setLabel] = useState("");
   const [fieldType, setFieldType] = useState<OnboardingFieldType>("text");
   const [optionsText, setOptionsText] = useState("");
@@ -38,9 +40,9 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!label.trim()) e.label = "Label is required.";
+    if (!label.trim()) e.label = t("Label is required.");
     if (fieldType === "dropdown" && !optionsText.trim()) {
-      e.options = "Add at least one option, separated by commas.";
+      e.options = t("Add at least one option, separated by commas.");
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -64,7 +66,7 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
       await clientApi.post(API.settings.onboardingFields.list, payload);
       onCreated();
     } catch (err: unknown) {
-      setSubmitError((err as { message?: string })?.message ?? "Failed to create field.");
+      setSubmitError((err as { message?: string })?.message ?? t("Failed to create field."));
     } finally {
       setIsSubmitting(false);
     }
@@ -72,14 +74,14 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
 
   return (
     <Modal
-      title={<><i className="ti ti-plus" style={{ marginRight: 8 }} />Add Custom Field</>}
+      title={<><i className="ti ti-plus" style={{ marginRight: 8 }} />{t("Add Custom Field")}</>}
       onClose={onClose}
       maxWidth={460}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={submit} disabled={isSubmitting}>
-            {isSubmitting ? <><Spin />&nbsp;Creating…</> : "Create Field"}
+            {isSubmitting ? <><Spin />&nbsp;{t("Creating…")}</> : t("Create Field")}
           </button>
         </>
       }
@@ -91,11 +93,11 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
       )}
 
       <div className="field-group mb-16">
-        <label className="field-label">Field Label *</label>
+        <label className="field-label">{t("Field Label *")}</label>
         <input
           className={`field-input${errors.label ? " field-error" : ""}`}
           type="text"
-          placeholder="e.g. Blood Donor Card Number"
+          placeholder={t("e.g. Blood Donor Card Number")}
           value={label}
           onChange={e => { setLabel(e.target.value); setErrors(prev => ({ ...prev, label: "" })); }}
         />
@@ -103,29 +105,29 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
       </div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Field Type</label>
+        <label className="field-label">{t("Field Type")}</label>
         <select
           className="field-input field-select"
           value={fieldType}
           onChange={e => setFieldType(e.target.value as OnboardingFieldType)}
         >
-          {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
         </select>
       </div>
 
       {fieldType === "dropdown" && (
         <div className="field-group mb-16">
-          <label className="field-label">Dropdown Options *</label>
+          <label className="field-label">{t("Dropdown Options *")}</label>
           <input
             className={`field-input${errors.options ? " field-error" : ""}`}
             type="text"
-            placeholder="e.g. Option A, Option B, Option C"
+            placeholder={t("e.g. Option A, Option B, Option C")}
             value={optionsText}
             onChange={e => { setOptionsText(e.target.value); setErrors(prev => ({ ...prev, options: "" })); }}
           />
           {errors.options
             ? <p className="field-error-msg">{errors.options}</p>
-            : <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>Separate options with commas.</p>
+            : <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>{t("Separate options with commas.")}</p>
           }
         </div>
       )}
@@ -133,13 +135,13 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
       {fieldType === "file" && (
         <label className="module-check mb-16">
           <input type="checkbox" checked={allowMultiple} onChange={e => setAllowMultiple(e.target.checked)} />
-          <span>Allow multiple files</span>
+          <span>{t("Allow multiple files")}</span>
         </label>
       )}
 
       <label className="module-check">
         <input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)} />
-        <span>Required</span>
+        <span>{t("Required")}</span>
       </label>
     </Modal>
   );

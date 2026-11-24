@@ -3,6 +3,7 @@
 import { shiftISODate } from "@/app/dashboard/attendance/_components/attendanceDates";
 import { localISODate } from "@/app/dashboard/attendance/_components/monthView";
 import { tint } from "@/lib/colour";
+import { tr } from "@/lib/i18n/tr";
 
 export const MODULES = [
   { value: "accounts",      label: "Accounts",      colour: "var(--brand)", icon: "ti-user-shield" },
@@ -40,12 +41,12 @@ export function initialsOf(name: string): string {
 export function relativeTime(iso: string, now: Date = new Date()): string | null {
   const minutes = Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000);
   if (Number.isNaN(minutes)) return null;
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return tr("just now");
+  if (minutes < 60) return tr("{count} min ago", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
+  if (hours < 24) return tr("{count} h ago", { count: hours });
   const days = Math.floor(hours / 24);
-  return days < 7 ? `${days} d ago` : null;
+  return days < 7 ? tr("{count} d ago", { count: days }) : null;
 }
 
 export type RangeKey = "today" | "7d" | "30d" | "90d";

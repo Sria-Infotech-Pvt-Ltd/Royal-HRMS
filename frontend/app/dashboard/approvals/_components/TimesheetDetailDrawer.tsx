@@ -9,6 +9,7 @@ import RejectReasonModal, { type RejectReasonWording } from "./RejectReasonModal
 import TimesheetProjects from "@/components/timesheet/TimesheetProjects";
 import TimesheetHistory from "@/components/timesheet/TimesheetHistory";
 import TimesheetStatusBadge from "@/components/timesheet/TimesheetStatusBadge";
+import { useT } from "@/hooks/useI18n";
 import { useTimesheetDecision } from "@/hooks/useTimesheetDecision";
 import { toGridLines, weekRangeLabel } from "@/lib/timesheet";
 
@@ -33,15 +34,17 @@ const UNLOCK: Partial<RejectReasonWording> = {
 };
 
 function Fact({ label, value }: { label: string; value: string }) {
+  const t = useT();
   return (
     <div className="ta-drawer-row">
-      <span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{label}</span>
+      <span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t(label)}</span>
       <span style={{ fontWeight: 600, fontSize: 13 }}>{value}</span>
     </div>
   );
 }
 
 export default function TimesheetDetailDrawer({ timesheetId, onClose, onChanged }: Props) {
+  const t = useT();
   const { view, loading, error, isBusy, problem, clearProblem, approve, sendBack, unlock } = useTimesheetDecision(timesheetId, onChanged);
   const [asking, setAsking] = useState<Asking>(null);
 
@@ -58,16 +61,16 @@ export default function TimesheetDetailDrawer({ timesheetId, onClose, onChanged 
   return (
     <>
       <div className={`drawer-overlay ${timesheetId ? "open" : ""}`} onClick={onClose} />
-      <div className={`drawer emp-drawer ${timesheetId ? "open" : ""}`} role="dialog" aria-label="Timesheet details">
+      <div className={`drawer emp-drawer ${timesheetId ? "open" : ""}`} role="dialog" aria-label={t("Timesheet details")}>
         {timesheetId && (
           <>
             <div className="drawer-header">
-              <div className="drawer-title">Timesheet</div>
-              <button className="drawer-close" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
+              <div className="drawer-title">{t("Timesheet")}</div>
+              <button className="drawer-close" onClick={onClose} aria-label={t("Close")}><i className="ti ti-x" /></button>
             </div>
             <div className="drawer-body">
-              {loading && <p>Loading…</p>}
-              {!loading && !view && <p role="alert">{error ?? "This timesheet could not be loaded."}</p>}
+              {loading && <p>{t("Loading…")}</p>}
+              {!loading && !view && <p role="alert">{error ?? t("This timesheet could not be loaded.")}</p>}
               {view && (
                 <>
                   <div className="ta-drawer-section">
@@ -89,7 +92,7 @@ export default function TimesheetDetailDrawer({ timesheetId, onClose, onChanged 
                     />
                   </div>
                   <div className="ta-drawer-section">
-                    <div className="ta-drawer-label">History</div>
+                    <div className="ta-drawer-label">{t("History")}</div>
                     <TimesheetHistory events={view.events} />
                   </div>
                   {problem && !asking && <p role="alert" style={{ color: "var(--error)" }}>{problem}</p>}
@@ -100,16 +103,16 @@ export default function TimesheetDetailDrawer({ timesheetId, onClose, onChanged 
               <div className="drawer-footer">
                 {view.can_unlock && (
                   <button className="ta-bulk-btn" style={{ padding: "9px 18px" }} disabled={isBusy} onClick={() => ask("unlock")}>
-                    <i className="ti ti-lock-open" /> Reopen for correction
+                    <i className="ti ti-lock-open" /> {t("Reopen for correction")}
                   </button>
                 )}
                 {view.can_decide && (
                   <>
                     <button className="ta-bulk-btn ta-bulk-reject" style={{ padding: "9px 18px" }} disabled={isBusy} onClick={() => ask("send_back")}>
-                      <i className="ti ti-arrow-back-up" /> Send back
+                      <i className="ti ti-arrow-back-up" /> {t("Send back")}
                     </button>
                     <button className="ta-bulk-btn ta-bulk-approve" style={{ padding: "9px 18px" }} disabled={isBusy} onClick={approve}>
-                      <i className="ti ti-check" /> {isBusy ? "Working…" : "Approve"}
+                      <i className="ti ti-check" /> {isBusy ? t("Working…") : t("Approve")}
                     </button>
                   </>
                 )}
@@ -120,7 +123,7 @@ export default function TimesheetDetailDrawer({ timesheetId, onClose, onChanged 
       </div>
       {asking && view && (
         <RejectReasonModal
-          employeeName={view.employee?.name ?? "employee"} isSaving={isBusy} serverError={problem}
+          employeeName={view.employee?.name ?? t("employee")} isSaving={isBusy} serverError={problem}
           wording={asking === "unlock" ? UNLOCK : SEND_BACK} onSubmit={submitReason} onCancel={() => setAsking(null)}
         />
       )}

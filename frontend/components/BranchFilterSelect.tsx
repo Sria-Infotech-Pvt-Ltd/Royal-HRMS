@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+
 interface BranchOption {
   id:          number;
   branch_name: string;
@@ -25,11 +27,12 @@ interface Props {
 // which just doesn't match what it actually filters by. Labeled "Location"
 // here to match the real data source instead of relabeling the data.
 export default function BranchFilterSelect({ branches, value, onChange, locked, lockedBranchName, width = 180, variant = "default" }: Props) {
+  const t = useT();
   const isReference = variant === "reference";
   if (locked) {
     const label = lockedBranchName || "—";
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }} title="Scoped to your Location">
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }} title={t("Scoped to your Location")}>
         <select
           className={isReference ? "sel" : "field-input field-select"}
           style={isReference ? { cursor: "not-allowed", opacity: 0.8 } : { width, background: "var(--bg-low)", cursor: "not-allowed" }}
@@ -55,7 +58,7 @@ export default function BranchFilterSelect({ branches, value, onChange, locked, 
       className={isReference ? "sel" : "field-input field-select"}
       style={isReference ? undefined : { width }} value={value} onChange={e => onChange(e.target.value)}
     >
-      <option value="">All Locations</option>
+      <option value="">{t("All Locations")}</option>
       {branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_name}</option>)}
     </select>
   );

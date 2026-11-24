@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
@@ -19,6 +20,7 @@ function Spin() {
 // dropdown-options input like AddFieldModal (those only make sense for
 // text-like custom fields).
 export default function AddDocumentTypeModal({ onClose, onCreated }: Props) {
+  const t = useT();
   const [label, setLabel] = useState("");
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [required, setRequired] = useState(false);
@@ -28,7 +30,7 @@ export default function AddDocumentTypeModal({ onClose, onCreated }: Props) {
 
   function validate(): boolean {
     if (!label.trim()) {
-      setLabelError("Label is required.");
+      setLabelError(t("Label is required."));
       return false;
     }
     return true;
@@ -47,7 +49,7 @@ export default function AddDocumentTypeModal({ onClose, onCreated }: Props) {
       await clientApi.post(API.settings.documentTypes.list, payload);
       onCreated();
     } catch (err: unknown) {
-      setSubmitError((err as { message?: string })?.message ?? "Failed to create document type.");
+      setSubmitError((err as { message?: string })?.message ?? t("Failed to create document type."));
     } finally {
       setIsSubmitting(false);
     }
@@ -55,14 +57,14 @@ export default function AddDocumentTypeModal({ onClose, onCreated }: Props) {
 
   return (
     <Modal
-      title={<><i className="ti ti-plus" style={{ marginRight: 8 }} />Add Document Type</>}
+      title={<><i className="ti ti-plus" style={{ marginRight: 8 }} />{t("Add Document Type")}</>}
       onClose={onClose}
       maxWidth={460}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={submit} disabled={isSubmitting}>
-            {isSubmitting ? <><Spin />&nbsp;Creating…</> : "Create Document Type"}
+            {isSubmitting ? <><Spin />&nbsp;{t("Creating…")}</> : t("Create Document Type")}
           </button>
         </>
       }
@@ -74,28 +76,28 @@ export default function AddDocumentTypeModal({ onClose, onCreated }: Props) {
       )}
 
       <div className="field-group mb-16">
-        <label className="field-label">Document Label *</label>
+        <label className="field-label">{t("Document Label *")}</label>
         <input
           className={`field-input${labelError ? " field-error" : ""}`}
           type="text"
-          placeholder="e.g. Voter ID Card"
+          placeholder={t("e.g. Voter ID Card")}
           value={label}
           onChange={e => { setLabel(e.target.value); setLabelError(null); }}
         />
         {labelError && <p className="field-error-msg">{labelError}</p>}
         <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-          Accepts PDF, JPG, and PNG files up to 5 MB, same as every other document type.
+          {t("Accepts PDF, JPG, and PNG files up to 5 MB, same as every other document type.")}
         </p>
       </div>
 
       <label className="module-check mb-16">
         <input type="checkbox" checked={allowMultiple} onChange={e => setAllowMultiple(e.target.checked)} />
-        <span>Allow multiple files</span>
+        <span>{t("Allow multiple files")}</span>
       </label>
 
       <label className="module-check">
         <input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)} />
-        <span>Required</span>
+        <span>{t("Required")}</span>
       </label>
     </Modal>
   );

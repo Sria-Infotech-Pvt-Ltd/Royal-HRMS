@@ -1,6 +1,7 @@
 // Pure helpers for the HR Performance hub: where each review is in the process, filtering, and how far a cycle has run.
 // No component state, so everything here is unit-tested and safe to import anywhere.
 
+import { tr } from "@/lib/i18n/tr"
 import type { ApiCycle, ApiReview } from "@/types/performanceHub"
 
 /** The steps a review passes through, in order. */
@@ -132,8 +133,8 @@ export function relativeDay(value: string, today: Date): string {
   const day = parseDay(value)
   if (!day) return ""
   const diff = daysBetween(today, day)
-  if (diff === 0) return "today"
-  if (diff === 1) return "tomorrow"
-  if (diff === -1) return "yesterday"
-  return diff > 0 ? `in ${diff} days` : `${-diff} days ago`
+  if (diff === 0) return tr("today")
+  if (diff === 1) return tr("tomorrow")
+  if (diff === -1) return tr("yesterday")
+  return diff > 0 ? tr("in {count} days", { count: diff }) : tr("{count} days ago", { count: -diff })
 }

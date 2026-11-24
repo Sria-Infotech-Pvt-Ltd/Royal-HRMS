@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "@/hooks/useI18n";
 
 export interface SearchableSelectOption {
   value: string;
@@ -30,6 +31,7 @@ interface Props {
 export default function SearchableSelect({
   value, onChange, options, placeholder, inputClassName = "finput", disabled, searchPlaceholder,
 }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -96,7 +98,7 @@ export default function SearchableSelect({
           color: selected ? "inherit" : "var(--on-variant, #7c8aa3)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0,
         }}>
-          {selected?.label || placeholder || "Select"}
+          {selected?.label || placeholder || t("Select")}
         </span>
         <i className="ti ti-chevron-down" style={{ fontSize: 14, color: "var(--on-variant)", flexShrink: 0 }} />
       </button>
@@ -115,13 +117,13 @@ export default function SearchableSelect({
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={searchPlaceholder ?? "Search…"}
+            placeholder={searchPlaceholder ?? t("Search…")}
             className={inputClassName}
             style={{ margin: 6, width: "calc(100% - 12px)" }}
           />
           <div style={{ overflowY: "auto" }}>
             {filtered.length === 0 && (
-              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>No matches.</div>
+              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>{t("No matches.")}</div>
             )}
             {filtered.map(o => (
               <div

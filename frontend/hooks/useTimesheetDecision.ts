@@ -4,6 +4,7 @@
 // Every action answers with the refreshed sheet, which replaces what the drawer shows; a refused action keeps the sheet and
 // reports why (for example "already approved by someone else").
 
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useState } from "react";
 import { useToast } from "@/components/ToastProvider";
 import { useFetch } from "@/hooks/useFetch";
@@ -41,16 +42,16 @@ export function useTimesheetDecision(timesheetId: string | null, onChanged: () =
       onChanged();
       return true;
     } catch (caught: unknown) {
-      setProblem(problemsFromError(caught, "That did not go through. Please try again.")[0]);
+      setProblem(problemsFromError(caught, tr("That did not go through. Please try again."))[0]);
       return false;
     } finally {
       setIsBusy(false);
     }
   }, [timesheetId, onChanged, showToast]);
 
-  const approve = useCallback(() => act(timesheetId ? API.attendance.timesheets.approve(timesheetId) : "", {}, "Timesheet approved."), [act, timesheetId]);
-  const sendBack = useCallback((reason: string) => act(timesheetId ? API.attendance.timesheets.returnBack(timesheetId) : "", { reason }, "Timesheet sent back to the employee."), [act, timesheetId]);
-  const unlock = useCallback((reason: string) => act(timesheetId ? API.attendance.timesheets.unlock(timesheetId) : "", { reason }, "Timesheet reopened for correction."), [act, timesheetId]);
+  const approve = useCallback(() => act(timesheetId ? API.attendance.timesheets.approve(timesheetId) : "", {}, tr("Timesheet approved.")), [act, timesheetId]);
+  const sendBack = useCallback((reason: string) => act(timesheetId ? API.attendance.timesheets.returnBack(timesheetId) : "", { reason }, tr("Timesheet sent back to the employee.")), [act, timesheetId]);
+  const unlock = useCallback((reason: string) => act(timesheetId ? API.attendance.timesheets.unlock(timesheetId) : "", { reason }, tr("Timesheet reopened for correction.")), [act, timesheetId]);
   const clearProblem = useCallback(() => setProblem(""), []);
 
   return { view, loading: loading && !view, error, isBusy, problem, clearProblem, approve, sendBack, unlock };

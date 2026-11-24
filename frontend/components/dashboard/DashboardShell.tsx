@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useRouter, usePathname } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
 import { clearAuth } from "@/lib/auth";
@@ -34,6 +35,7 @@ export default function DashboardShell({
   session: SessionPayload;
   children: React.ReactNode;
 }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const isFitPage = pathname === "/dashboard/employees";
@@ -153,7 +155,7 @@ export default function DashboardShell({
           <NotificationBell />
           <ProfileMenu
             name={session.name}
-            subtitle={currentUser?.is_superuser ? "All permissions" : (session.designation || session.email)}
+            subtitle={currentUser?.is_superuser ? t("All permissions") : (session.designation || session.email)}
             photoUrl={myProfile?.profile_photo_url}
             items={profileItems}
             activeNavId={activeNavId}

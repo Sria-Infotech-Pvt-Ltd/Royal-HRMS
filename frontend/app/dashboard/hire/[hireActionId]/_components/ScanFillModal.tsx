@@ -11,6 +11,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 
 export interface ScanSuggestions {
   full_name?: string;
@@ -39,6 +40,7 @@ interface Props {
 }
 
 export default function ScanFillModal({ hireActionId, onClose, onApply }: Props) {
+  const t = useT();
   const [scanning, setScanning] = useState(false);
   const [suggestions, setSuggestions] = useState<ScanSuggestions | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -63,7 +65,7 @@ export default function ScanFillModal({ hireActionId, onClose, onApply }: Props)
       setSelected(new Set(Object.keys(found)));
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg ?? "Could not scan this document. Please try again.");
+      setError(msg ?? t("Could not scan this document. Please try again."));
     } finally {
       setScanning(false);
     }
@@ -93,27 +95,25 @@ export default function ScanFillModal({ hireActionId, onClose, onApply }: Props)
 
   return (
     <Modal
-      title={<><i className="ti ti-scan" style={{ color: "var(--primary)" }} /> Scan &amp; fill</>}
+      title={<><i className="ti ti-scan" style={{ color: "var(--primary)" }} /> {t("Scan & fill")}</>}
       onClose={onClose}
       zIndex={1100}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={apply} disabled={!suggestions || selected.size === 0}>
-            Apply selected
+            {t("Apply selected")}
           </button>
         </>
       }
     >
       <p className="hint" style={{ marginBottom: 12 }}>
-        Upload a text-based PDF (an offer letter, ID or resume exported as PDF). This reads the
-        actual text in the document and matches recognizable fields — it does not guess anything
-        not on the page.
+        {t("Upload a text-based PDF (an offer letter, ID or resume exported as PDF). This reads the actual text in the document and matches recognizable fields — it does not guess anything not on the page.")}
       </p>
 
       <label className="filebtn" style={{ width: "100%", justifyContent: "center", padding: "18px 16px" }}>
         <i className="ti ti-upload" />
-        {scanning ? "Scanning…" : "Choose a PDF, JPG or PNG"}
+        {scanning ? t("Scanning…") : t("Choose a PDF, JPG or PNG")}
         <input
           type="file"
           accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
@@ -136,11 +136,11 @@ export default function ScanFillModal({ hireActionId, onClose, onApply }: Props)
 
       {suggestionEntries.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div className="sechead">FOUND IN DOCUMENT</div>
+          <div className="sechead">{t("FOUND IN DOCUMENT")}</div>
           {suggestionEntries.map(([key, value]) => (
             <label key={key} className="chkline" style={{ padding: "8px 0" }}>
               <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)} />
-              <span style={{ minWidth: 110 }}>{FIELD_LABELS[key]}</span>
+              <span style={{ minWidth: 110 }}>{t(FIELD_LABELS[key])}</span>
               <span style={{ fontWeight: 400, color: "var(--muted)" }}>{value}</span>
             </label>
           ))}

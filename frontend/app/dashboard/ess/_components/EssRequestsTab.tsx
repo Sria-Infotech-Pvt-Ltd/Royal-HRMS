@@ -26,6 +26,7 @@ import {
   MyCorrectionRequest, MyRequestItem, PaginatedResponse, STATUS_LABEL,
   correctionToMyItem, expenseToMyItem, hrHelpToMyItem, leaveToMyItem, toSortableTime, wfhToMyItem,
 } from "../../my-requests/_data";
+import { useT } from "@/hooks/useI18n";
 
 const MAX_ROWS = 50;
 
@@ -33,6 +34,7 @@ const MAX_ROWS = 50;
  *  always did, because a WFH request made from there would be filed on the admin's own account (see EssAttendanceTab). */
 export default function EssRequestsTab({ isReadOnly = false }: { isReadOnly?: boolean }) {
   const { showToast } = useToast();
+  const t = useT();
   const [detail, setDetail] = useState<MyRequestItem | null>(null);
   // "New request" first asks what kind (chooser), then opens that request's own dialog.
   const [newRequest, setNewRequest] = useState<"choose" | NewRequestKind | null>(null);
@@ -61,7 +63,7 @@ export default function EssRequestsTab({ isReadOnly = false }: { isReadOnly?: bo
       showToast(response.data.message, "success");
       leave.refetch();
     } catch (err: unknown) {
-      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to cancel leave request.", "error");
+      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message || t("Failed to cancel leave request."), "error");
     } finally {
       setDetail(null);
     }
@@ -71,31 +73,31 @@ export default function EssRequestsTab({ isReadOnly = false }: { isReadOnly?: bo
     <section className="ess-page">
       <div className="ess-pagehead">
         <div>
-          <h2>My requests</h2>
-          <p>Track every employee submission and approval step. Select any request to open its full details.</p>
+          <h2>{t("My requests")}</h2>
+          <p>{t("Track every employee submission and approval step. Select any request to open its full details.")}</p>
         </div>
-        <button className="rvbtn pri" type="button" onClick={() => setNewRequest(isReadOnly ? "hr_help" : "choose")}>New request</button>
+        <button className="rvbtn pri" type="button" onClick={() => setNewRequest(isReadOnly ? "hr_help" : "choose")}>{t("New request")}</button>
       </div>
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
 
       <div className="ess-card">
-        <h2>Request register</h2>
-        <p>Open, completed and returned requests.</p>
+        <h2>{t("Request register")}</h2>
+        <p>{t("Open, completed and returned requests.")}</p>
         <div className="ess-list">
-          {loading && <div className="ess-row"><div><b>Loading requests…</b></div></div>}
+          {loading && <div className="ess-row"><div><b>{t("Loading requests…")}</b></div></div>}
           {!loading && items.length === 0 && (
-            <div className="ess-row"><div><b>No requests found</b><small>You haven&apos;t submitted any requests yet.</small></div></div>
+            <div className="ess-row"><div><b>{t("No requests found")}</b><small>{t("You haven't submitted any requests yet.")}</small></div></div>
           )}
           {items.map(item => (
-            <button key={item.key} className="ess-row ess-row-link" type="button" aria-label={`Open request ${item.requestCode}`} onClick={() => setDetail(item)}>
+            <button key={item.key} className="ess-row ess-row-link" type="button" aria-label={t("Open request {code}", { code: item.requestCode })} onClick={() => setDetail(item)}>
               <div>
                 <b>{item.requestCode} · {item.title}</b>
-                <small>{item.detailSecondary}{item.approver ? ` · Owner: ${item.approver}` : ""}</small>
+                <small>{item.detailSecondary}{item.approver ? ` · ${t("Owner: {name}", { name: item.approver })}` : ""}</small>
               </div>
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className={`state${item.displayStatus === "approved" || item.displayStatus === "completed" ? " ok" : ""}`}>
-                  {STATUS_LABEL[item.displayStatus].toUpperCase()}
+                  {t(STATUS_LABEL[item.displayStatus]).toUpperCase()}
                 </span>
                 <span className="row-go" aria-hidden="true">›</span>
               </span>
@@ -121,7 +123,7 @@ export default function EssRequestsTab({ isReadOnly = false }: { isReadOnly?: bo
       {newRequest === "hr_help" && (
         <EmployeeRequestModal
           onClose={() => setNewRequest(null)}
-          onSubmitted={() => { setNewRequest(null); showToast("Your request was submitted.", "success"); hrHelp.refetch(); }}
+          onSubmitted={() => { setNewRequest(null); showToast(t("Your request was submitted."), "success"); hrHelp.refetch(); }}
         />
       )}
       {/* The WFH form shows its own "Request Submitted" screen, so no extra toast; the list is refetched (replaced, not appended) as soon as it saves. */}

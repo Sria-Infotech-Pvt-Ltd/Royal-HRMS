@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -33,6 +34,7 @@ interface ModalState {
 }
 
 export default function TeamApprovalsSection({ initialFilters }: { initialFilters?: ApprovalLinkFilters }) {
+  const t = useT();
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -165,8 +167,8 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
     if (item.kind === "attendance_correction") {
       if (!(await confirmDialog(
         action === "approve"
-          ? `Approve this correction? ${item.employeeName}'s attendance record will be updated immediately.`
-          : `Reject this correction request for ${item.employeeName}?`,
+          ? t("Approve this correction? {name}'s attendance record will be updated immediately.", { name: item.employeeName })
+          : t("Reject this correction request for {name}?", { name: item.employeeName }),
       ))) return;
       runCorrectionAction(item.id, action);
       return;
@@ -178,8 +180,8 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
     if (item.kind === "wfh") {
       if (!(await confirmDialog(
         action === "approve"
-          ? `Approve ${item.employeeName}'s work-from-home request?`
-          : `Reject ${item.employeeName}'s work-from-home request?`,
+          ? t("Approve {name}'s work-from-home request?", { name: item.employeeName })
+          : t("Reject {name}'s work-from-home request?", { name: item.employeeName }),
       ))) return;
       runWfhAction(item.id, action);
       return;
@@ -187,13 +189,13 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
     if (item.kind === "leave") {
       const r = item.raw as LeaveRequest;
       setModal({
-        id: item.id, action, label: `${item.employeeName}'s leave`, kind: "leave",
+        id: item.id, action, label: t("{name}'s leave", { name: item.employeeName }), kind: "leave",
         employeeName: item.employeeName, employeeEmail: r.employee_email ?? "", autoVars: leaveAutoVars(r),
       });
     } else {
       const r = item.raw as ExpenseRequest;
       setModal({
-        id: item.id, action, label: `${item.employeeName}'s expense`, kind: "expense",
+        id: item.id, action, label: t("{name}'s expense", { name: item.employeeName }), kind: "expense",
         employeeName: item.employeeName, employeeEmail: r.employee_email ?? "",
       });
     }
@@ -202,10 +204,10 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
   async function runCorrectionAction(id: string, action: "approve" | "reject") {
     try {
       await clientApi.patch(API.attendance.correctionReview(id), { action });
-      showToast(action === "approve" ? "Correction approved. Attendance record updated." : "Correction rejected.", "success");
+      showToast(action === "approve" ? t("Correction approved. Attendance record updated.") : t("Correction rejected."), "success");
       refetchCorrections();
     } catch (err: unknown) {
-      const message = (err as { message?: string })?.message ?? "Failed to review correction.";
+      const message = (err as { message?: string })?.message ?? t("Failed to review correction.");
       showToast(message, "error");
     }
   }
@@ -213,10 +215,10 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
   async function runWfhAction(id: string, action: "approve" | "reject") {
     try {
       await clientApi.post(API.approvals.approveWfh(id), { action });
-      showToast(action === "approve" ? "Work from home request approved." : "Work from home request rejected.", "success");
+      showToast(action === "approve" ? t("Work from home request approved.") : t("Work from home request rejected."), "success");
       refetchWfh();
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to review request.";
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Failed to review request.");
       showToast(message, "error");
     }
   }
@@ -241,11 +243,11 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
         });
         refetchExpense();
       }
-      showToast(modal.action === "approve" ? "Request approved." : "Request rejected.", "success");
+      showToast(modal.action === "approve" ? t("Request approved.") : t("Request rejected."), "success");
       setModal(null);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setApiErr(msg || "Action failed. Please try again.");
+      setApiErr(msg || t("Action failed. Please try again."));
     } finally { setSaving(false); }
   }
 
@@ -274,11 +276,15 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
 
     const succeeded = results.filter(r => r.status === "fulfilled").length;
     const failed = results.length - succeeded;
-    const verb = bulkAction === "approve" ? "approved" : "rejected";
+    const isApproved = bulkAction === "approve";
     showToast(
       failed === 0
-        ? `${succeeded} request${succeeded === 1 ? "" : "s"} ${verb}.`
-        : `${succeeded} ${verb}, ${failed} failed — please retry those individually.`,
+        ? (succeeded === 1
+          ? (isApproved ? t("{count} request approved.", { count: succeeded }) : t("{count} request rejected.", { count: succeeded }))
+          : (isApproved ? t("{count} requests approved.", { count: succeeded }) : t("{count} requests rejected.", { count: succeeded })))
+        : (isApproved
+          ? t("{succeeded} approved, {failed} failed — please retry those individually.", { succeeded, failed })
+          : t("{succeeded} rejected, {failed} failed — please retry those individually.", { succeeded, failed })),
       failed === 0 ? "success" : "error",
     );
 
@@ -297,16 +303,16 @@ export default function TeamApprovalsSection({ initialFilters }: { initialFilter
       <SummaryCards pending={counts.pending} leave={counts.leave} expense={counts.expense} correction={counts.correction} loading={initialLoading} />
 
       <div className="ta-tabs">
-        {TYPE_TABS.map(t => (
+        {TYPE_TABS.map(tab => (
           <button
-            key={t.key}
-            className={`ta-tab ${activeTab === t.key ? "active" : ""}`}
-            onClick={() => setActiveTab(t.key)}
+            key={tab.key}
+            className={`ta-tab ${activeTab === tab.key ? "active" : ""}`}
+            onClick={() => setActiveTab(tab.key)}
             suppressHydrationWarning
           >
-            <i className={`ti ${t.icon}`} />
-            {t.label}
-            <span className="ta-tab-count">{tabCounts[t.key]}</span>
+            <i className={`ti ${tab.icon}`} />
+            {t(tab.label)}
+            <span className="ta-tab-count">{tabCounts[tab.key]}</span>
           </button>
         ))}
       </div>

@@ -16,10 +16,10 @@ const RECENT_COUNT = 5;
 // "2 September correction" — day (no leading zero) + full month name, matching
 // the reference copy pattern for a request row's title.
 function correctionDateLabel(dateStr: string): string {
-  if (!dateStr) return "Correction";
+  if (!dateStr) return tr("Correction");
   const d = new Date(dateStr + "T12:00:00");
-  if (isNaN(d.getTime())) return "Correction";
-  return `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "long" })} correction`;
+  if (isNaN(d.getTime())) return tr("Correction");
+  return tr("{day} {month} correction", { day: d.getDate(), month: d.toLocaleDateString("en-US", { month: "long" }) });
 }
 
 export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { autoOpenNew?: boolean }) {
@@ -85,10 +85,10 @@ export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { auto
                     <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>
                       {displayStatus === "approved" && approver
                         ? tr("Approved by {approver}", { approver: approver })
-                        : STATUS_LABEL[displayStatus]} · {tr("View details")}
+                        : tr(STATUS_LABEL[displayStatus])} · {tr("View details")}
                     </div>
                   </div>
-                  <span className={STATUS_BADGE_CLASS[displayStatus]}>{STATUS_LABEL[displayStatus].toUpperCase()}</span>
+                  <span className={STATUS_BADGE_CLASS[displayStatus]}>{tr(STATUS_LABEL[displayStatus]).toUpperCase()}</span>
                 </div>
               );
             })

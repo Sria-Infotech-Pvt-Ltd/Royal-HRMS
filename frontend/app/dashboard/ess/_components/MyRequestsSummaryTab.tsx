@@ -8,6 +8,7 @@
 // (app/dashboard/my-requests/_client.tsx), which keeps its own full
 // search/filter/sort/pagination UI untouched for that separate screen.
 
+import { tr } from "@/lib/i18n/tr";
 import { useMemo, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -53,7 +54,7 @@ export default function MyRequestsSummaryTab() {
       showToast(res.data.message, "success");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to cancel leave request.", "error");
+      showToast(msg || tr("Failed to cancel leave request."), "error");
     } finally {
       setDetailItem(null);
     }
@@ -63,12 +64,12 @@ export default function MyRequestsSummaryTab() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">My requests</div>
-          <div className="page-sub">Track every employee submission and approval step. Select any request to open its full details.</div>
+          <div className="page-title">{tr("My requests")}</div>
+          <div className="page-sub">{tr("Track every employee submission and approval step. Select any request to open its full details.")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-filled" onClick={() => setShowNewRequest(true)}>
-            New request
+            {tr("New request")}
           </button>
         </div>
       </div>
@@ -76,15 +77,15 @@ export default function MyRequestsSummaryTab() {
       <div className="card">
         <div className="card-header">
           <div>
-            <div className="card-title">Request register</div>
-            <div className="page-sub" style={{ marginTop: 2 }}>Open, completed and returned requests.</div>
+            <div className="card-title">{tr("Request register")}</div>
+            <div className="page-sub" style={{ marginTop: 2 }}>{tr("Open, completed and returned requests.")}</div>
           </div>
         </div>
         {items.length === 0 ? (
           <div style={{ padding: "4px 24px 20px" }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>No requests yet</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{tr("No requests yet")}</div>
             <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
-              Anything you submit will appear here.
+              {tr("Anything you submit will appear here.")}
             </div>
           </div>
         ) : (
@@ -102,12 +103,12 @@ export default function MyRequestsSummaryTab() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{item.requestCode} · {item.title}</div>
                   <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                    {item.detailSecondary} · Owner: {item.approver !== "—" ? item.approver : "Reporting Manager"}
+                    {item.detailSecondary} · {tr("Owner: {owner}", { owner: item.approver !== "—" ? item.approver : tr("Reporting Manager") })}
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                   <i className="ti ti-chevron-right" style={{ color: "var(--primary)" }} />
-                  <span className={STATUS_BADGE_CLASS[item.displayStatus]}>{STATUS_LABEL[item.displayStatus]}</span>
+                  <span className={STATUS_BADGE_CLASS[item.displayStatus]}>{tr(STATUS_LABEL[item.displayStatus])}</span>
                 </div>
               </div>
             ))}
@@ -150,7 +151,7 @@ export default function MyRequestsSummaryTab() {
           onClose={() => setShowNewRequest(false)}
           onSubmitted={() => {
             setShowNewRequest(false);
-            showToast("Your request was submitted.", "success");
+            showToast(tr("Your request was submitted."), "success");
             refetchHrHelp();
           }}
         />

@@ -1,6 +1,7 @@
 // Small pure helpers for the Separation & Exit list: which group a status belongs to, the numbers for the summary row,
 // and the "last working day" countdown. Statuses are opaque backend codes (see _workflow.ts), so groups match on keywords.
 import type { SeparationRequest } from "@/types/separation";
+import { tr } from "@/lib/i18n/tr";
 import { daysBetween, todayIso } from "./_workflow";
 
 export type StatusGroup = "waiting" | "approved" | "closed";
@@ -41,7 +42,7 @@ export function lastDayCountdown(lastDayIso: string | null | undefined, today: s
   if (!lastDayIso) return null;
   const days = daysBetween(today, lastDayIso);
   if (Number.isNaN(days)) return null;
-  if (days === 0) return { label: "Today", tone: "soon" };
-  if (days < 0) return { label: `${-days} day${days === -1 ? "" : "s"} ago`, tone: "passed" };
-  return { label: `in ${days} day${days === 1 ? "" : "s"}`, tone: days <= SOON_WITHIN_DAYS ? "soon" : "later" };
+  if (days === 0) return { label: tr("Today"), tone: "soon" };
+  if (days < 0) return { label: days === -1 ? tr("{count} day ago", { count: 1 }) : tr("{count} days ago", { count: -days }), tone: "passed" };
+  return { label: days === 1 ? tr("in {count} day", { count: 1 }) : tr("in {count} days", { count: days }), tone: days <= SOON_WITHIN_DAYS ? "soon" : "later" };
 }

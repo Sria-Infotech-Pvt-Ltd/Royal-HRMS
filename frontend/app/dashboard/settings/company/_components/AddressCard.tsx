@@ -2,47 +2,49 @@
 
 import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
+import { useT } from "@/hooks/useI18n";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import { STATES } from "../_data";
 
 export default function AddressCard({ form, errors, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
+  const t = useT();
   const isIndia = form.jurisdiction === "india";
   const sameAsRegistered = form.communication_address_same_as_registered;
 
   return (
     <ProfileCard
       icon="ti-map-pin"
-      title="Registered office"
-      subtitle={isIndia ? "The statutory address on record. Must be in India." : "The registered address in the company's home country."}
+      title={t("Registered office")}
+      subtitle={isIndia ? t("The statutory address on record. Must be in India.") : t("The registered address in the company's home country.")}
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
     >
       <div className="field-group mb-16">
-        <label className="field-label">Address Line 1 <span style={{ color: "var(--error)" }}>*</span></label>
+        <label className="field-label">{t("Address Line 1")} <span style={{ color: "var(--error)" }}>*</span></label>
         <textarea
           className={`field-input${errors.address ? " field-error" : ""}`}
           value={form.address}
           disabled={!canEdit}
           onChange={e => onFieldChange("address", e.target.value)}
-          placeholder="Street address, building, floor…"
+          placeholder={t("Street address, building, floor…")}
           rows={2}
         />
         {errors.address && <div className="field-error-msg">{errors.address}</div>}
       </div>
       <div className="form-row cols-3 mb-16">
         <div className="field-group">
-          <label className="field-label">City <span style={{ color: "var(--error)" }}>*</span></label>
+          <label className="field-label">{t("City")} <span style={{ color: "var(--error)" }}>*</span></label>
           <input
             className={`field-input${errors.city ? " field-error" : ""}`}
             value={form.city}
             disabled={!canEdit}
             onChange={e => onFieldChange("city", e.target.value)}
-            placeholder="Hyderabad"
+            placeholder={t("Hyderabad")}
           />
           {errors.city && <div className="field-error-msg">{errors.city}</div>}
         </div>
         <div className="field-group">
-          <label className="field-label">State <span style={{ color: "var(--error)" }}>*</span></label>
+          <label className="field-label">{t("State")} <span style={{ color: "var(--error)" }}>*</span></label>
           {isIndia ? (
             <select
               className="field-input field-select"
@@ -50,7 +52,7 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
               disabled={!canEdit}
               onChange={e => onFieldChange("state", e.target.value)}
             >
-              <option value="">Select…</option>
+              <option value="">{t("Select…")}</option>
               {STATES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           ) : (
@@ -59,12 +61,12 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
               value={form.state}
               disabled={!canEdit}
               onChange={e => onFieldChange("state", e.target.value)}
-              placeholder="State / Province"
+              placeholder={t("State / Province")}
             />
           )}
         </div>
         <div className="field-group">
-          <label className="field-label">PIN <span style={{ color: "var(--error)" }}>*</span></label>
+          <label className="field-label">{t("PIN")} <span style={{ color: "var(--error)" }}>*</span></label>
           <input
             className={`field-input${errors.pin_code ? " field-error" : ""}`}
             value={form.pin_code}
@@ -73,7 +75,7 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
               "pin_code",
               isIndia ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value,
             )}
-            placeholder={isIndia ? "500081" : "Postal code"}
+            placeholder={isIndia ? "500081" : t("Postal code")}
             maxLength={isIndia ? 6 : 12}
           />
           {errors.pin_code && <div className="field-error-msg">{errors.pin_code}</div>}
@@ -85,27 +87,27 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
           checked={sameAsRegistered}
           disabled={!canEdit}
           onChange={checked => onFieldChange("communication_address_same_as_registered", checked)}
-          label="Communication address is the same as registered office"
+          label={t("Communication address is the same as registered office")}
         />
       </div>
 
       {!sameAsRegistered && (
         <>
           <div className="field-group mb-16">
-            <label className="field-label">Communication Address <span style={{ color: "var(--error)" }}>*</span></label>
+            <label className="field-label">{t("Communication Address")} <span style={{ color: "var(--error)" }}>*</span></label>
             <textarea
               className={`field-input${errors.communication_address ? " field-error" : ""}`}
               value={form.communication_address}
               disabled={!canEdit}
               onChange={e => onFieldChange("communication_address", e.target.value)}
-              placeholder="Street address, building, floor…"
+              placeholder={t("Street address, building, floor…")}
               rows={2}
             />
             {errors.communication_address && <div className="field-error-msg">{errors.communication_address}</div>}
           </div>
           <div className="form-row cols-3">
             <div className="field-group">
-              <label className="field-label">City <span style={{ color: "var(--error)" }}>*</span></label>
+              <label className="field-label">{t("City")} <span style={{ color: "var(--error)" }}>*</span></label>
               <input
                 className={`field-input${errors.communication_city ? " field-error" : ""}`}
                 value={form.communication_city}
@@ -115,7 +117,7 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
               {errors.communication_city && <div className="field-error-msg">{errors.communication_city}</div>}
             </div>
             <div className="field-group">
-              <label className="field-label">State</label>
+              <label className="field-label">{t("State")}</label>
               {isIndia ? (
                 <select
                   className="field-input field-select"
@@ -123,7 +125,7 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
                   disabled={!canEdit}
                   onChange={e => onFieldChange("communication_state", e.target.value)}
                 >
-                  <option value="">Select…</option>
+                  <option value="">{t("Select…")}</option>
                   {STATES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               ) : (
@@ -136,7 +138,7 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
               )}
             </div>
             <div className="field-group">
-              <label className="field-label">PIN</label>
+              <label className="field-label">{t("PIN")}</label>
               <input
                 className={`field-input${errors.communication_pin_code ? " field-error" : ""}`}
                 value={form.communication_pin_code}

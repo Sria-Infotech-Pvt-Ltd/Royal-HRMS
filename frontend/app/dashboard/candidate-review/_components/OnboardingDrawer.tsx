@@ -13,6 +13,7 @@ import { maritalStatusLabel } from "@/lib/maritalStatus";
 import { SectionCard, Row } from "@/app/dashboard/employees/_components/EmployeeDrawerParts";
 import { confirmDialog } from "@/components/DialogProvider";
 import { approvalFieldError, usablePan } from "@/lib/onboardingApproval";
+import { useT } from "@/hooks/useI18n";
 
 interface OnboardingDocument {
   id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number;
@@ -68,6 +69,7 @@ interface Props {
 }
 
 export default function OnboardingDrawer({ user, remarks, acting, actionErr, onRemarksChange, onAction, onClose }: Props) {
+  const t = useT();
   // A Hire-wizard-hired employee already has a Position (assigned at hire
   // completion, before onboarding even started) — employee_id is only ever
   // set at that point or at this same approval's own conversion branch, so
@@ -119,7 +121,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   async function handleVerifyDoc(d: OnboardingDocument, status: "verified" | "needs_correction") {
     const note = status === "needs_correction" ? (docNoteDrafts[d.id] ?? "").trim() : "";
     if (status === "needs_correction" && !note) {
-      setDocVerifyErr(prev => ({ ...prev, [d.id]: "Add a note explaining what needs correcting." }));
+      setDocVerifyErr(prev => ({ ...prev, [d.id]: t("Add a note explaining what needs correcting.") }));
       return;
     }
     setDocVerifying(d.id);
@@ -130,7 +132,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       });
       setDocOverrides(prev => ({ ...prev, [d.id]: { verification_status: status, verification_note: note } }));
     } catch (err: unknown) {
-      setDocVerifyErr(prev => ({ ...prev, [d.id]: (err as { message?: string })?.message ?? "Could not save this review." }));
+      setDocVerifyErr(prev => ({ ...prev, [d.id]: (err as { message?: string })?.message ?? t("Could not save this review.") }));
     } finally {
       setDocVerifying(null);
     }
@@ -155,7 +157,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       );
       setRevealed(data.data ?? {});
     } catch (err: unknown) {
-      setRevealErr((err as { message?: string })?.message ?? "Could not reveal these fields.");
+      setRevealErr((err as { message?: string })?.message ?? t("Could not reveal these fields."));
     } finally {
       setRevealing(false);
     }
@@ -210,7 +212,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
 
   async function handleConfirm() {
     if (positionRequiredHere && !selPosition) {
-      setAssignErr("Select a Position before confirming.");
+      setAssignErr(t("Select a Position before confirming."));
       return;
     }
     const fieldErr = fieldValidationError();
@@ -223,7 +225,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setShowAssessment(true);
       return;
     }
-    if (!(await confirmDialog(`Approve and activate ${user.full_name}'s account? They'll get full access immediately.`))) return;
+    if (!(await confirmDialog(t("Approve and activate {name}'s account? They'll get full access immediately.", { name: user.full_name })))) return;
     onAction(user.id, "approve", {
       position: positionRequiredHere ? selPosition : undefined,
       uanNumber: uanNumber || undefined, aadharName: aadharName || undefined,
@@ -237,7 +239,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
     // without this, clearing the position after passing that first check
     // would silently submit a bad value and the backend would reject it.
     if (positionRequiredHere && !selPosition) {
-      setAssignErr("Select a Position before confirming.");
+      setAssignErr(t("Select a Position before confirming."));
       setShowAssessment(false);
       return;
     }
@@ -246,7 +248,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setAssignErr(fieldErr);
       return;
     }
-    if (!(await confirmDialog(`Approve and activate ${user.full_name}'s account? They'll get full access immediately.`))) return;
+    if (!(await confirmDialog(t("Approve and activate {name}'s account? They'll get full access immediately.", { name: user.full_name })))) return;
     onAction(user.id, "approve", {
       position:     positionRequiredHere ? selPosition : undefined,
       assessmentId: selAssessment || undefined,
@@ -268,7 +270,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       />
     )}
     <Modal
-      title={`Review — ${user.full_name}`}
+      title={t("Review — {name}", { name: user.full_name })}
       onClose={onClose}
       maxWidth={880}
       footer={
@@ -278,40 +280,39 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
             style={{ color: "var(--error)", borderColor: "var(--error)" }}
             onClick={async () => {
               if (!remarks.trim()) {
-                setRejectErr("Describe what needs to be corrected — the candidate only sees this exact text, so it can't be sent blank.");
+                setRejectErr(t("Describe what needs to be corrected — the candidate only sees this exact text, so it can't be sent blank."));
                 return;
               }
               setRejectErr(null);
               if (!(await confirmDialog(
-                `Send ${user.full_name}'s onboarding back for corrections? They'll see your remarks and need to ` +
-                `resubmit before this can be reviewed again.`,
+                t("Send {name}'s onboarding back for corrections? They'll see your remarks and need to resubmit before this can be reviewed again.", { name: user.full_name }),
               ))) return;
               onAction(user.id, "reject");
             }}
             disabled={acting}
           >
-            {acting ? "…" : "Send Back for Corrections"}
+            {acting ? "…" : t("Send Back for Corrections")}
           </button>
 
           {showAssessment ? (
             <button className="btn btn-filled" onClick={handleAssessmentConfirm} disabled={acting || loadAssess}>
               {acting
-                ? <><i className="ti ti-loader-2 spin" /> Activating…</>
-                : <><i className="ti ti-check" /> Confirm & Activate</>
+                ? <><i className="ti ti-loader-2 spin" /> {t("Activating…")}</>
+                : <><i className="ti ti-check" /> {t("Confirm & Activate")}</>
               }
             </button>
           ) : showAssign ? (
             <button className="btn btn-filled" onClick={handleConfirm} disabled={acting}>
               {acting
-                ? <><i className="ti ti-loader-2 spin" /> Activating…</>
+                ? <><i className="ti ti-loader-2 spin" /> {t("Activating…")}</>
                 : user.candidate_id
-                  ? <><i className="ti ti-arrow-right" /> Continue</>
-                  : <><i className="ti ti-check" /> Confirm & Activate</>
+                  ? <><i className="ti ti-arrow-right" /> {t("Continue")}</>
+                  : <><i className="ti ti-check" /> {t("Confirm & Activate")}</>
               }
             </button>
           ) : (
             <button className="btn btn-filled" onClick={handleApproveClick} disabled={acting}>
-              Approve & Activate ✓
+              {t("Approve & Activate ✓")}
             </button>
           )}
         </>
@@ -327,61 +328,61 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <SectionCard icon="ti-briefcase" title="Basic Info">
-              <Row label="Email"       value={user.email} />
-              <Row label="Phone"       value={user.phone} />
-              <Row label="Org Unit"    value={user.department} />
-              <Row label="Designation" value={user.designation} />
-              <Row label="Company Code" value={user.branch} />
-              <Row label="Designation" value={user.designation || "Candidate"} />
+            <SectionCard icon="ti-briefcase" title={t("Basic Info")}>
+              <Row label={t("Email")}       value={user.email} />
+              <Row label={t("Phone")}       value={user.phone} />
+              <Row label={t("Org Unit")}    value={user.department} />
+              <Row label={t("Designation")} value={user.designation} />
+              <Row label={t("Company Code")} value={user.branch} />
+              <Row label={t("Designation")} value={user.designation || t("Candidate")} />
             </SectionCard>
 
             {user.profile && (
               <>
-                <SectionCard icon="ti-id-badge-2" title="Personal">
-                  <Row label="DOB"             value={user.profile.date_of_birth ? formatDate(user.profile.date_of_birth) : ""} />
-                  <Row label="Gender"          value={user.profile.gender} />
-                  <Row label="Marital Status"  value={maritalStatusLabel(user.profile.marital_status)} />
-                  <Row label="Father Name"     value={user.profile.father_name} />
-                  <Row label="Blood Group"     value={user.profile.blood_group} />
-                  <Row label="Address Line 1"  value={user.profile.current_address} />
-                  <Row label="Address Line 2"  value={user.profile.current_address_line2} />
-                  <Row label="Village / Town / Area" value={user.profile.current_village} />
-                  <Row label="District"        value={user.profile.current_district} />
-                  <Row label="State"           value={user.profile.current_state} />
-                  <Row label="PIN Code"        value={user.profile.current_pin_code} />
+                <SectionCard icon="ti-id-badge-2" title={t("Personal")}>
+                  <Row label={t("DOB")}             value={user.profile.date_of_birth ? formatDate(user.profile.date_of_birth) : ""} />
+                  <Row label={t("Gender")}          value={user.profile.gender} />
+                  <Row label={t("Marital Status")}  value={maritalStatusLabel(user.profile.marital_status)} />
+                  <Row label={t("Father Name")}     value={user.profile.father_name} />
+                  <Row label={t("Blood Group")}     value={user.profile.blood_group} />
+                  <Row label={t("Address Line 1")}  value={user.profile.current_address} />
+                  <Row label={t("Address Line 2")}  value={user.profile.current_address_line2} />
+                  <Row label={t("Village / Town / Area")} value={user.profile.current_village} />
+                  <Row label={t("District")}        value={user.profile.current_district} />
+                  <Row label={t("State")}           value={user.profile.current_state} />
+                  <Row label={t("PIN Code")}        value={user.profile.current_pin_code} />
                   {user.profile.permanent_same_as_current ? (
-                    <Row label="Permanent Address" value="Same as current address" />
+                    <Row label={t("Permanent Address")} value={t("Same as current address")} />
                   ) : (
                     <>
-                      <Row label="Address Line 1"  value={user.profile.permanent_address} />
-                      <Row label="Address Line 2"  value={user.profile.permanent_address_line2} />
-                      <Row label="Village / Town / Area" value={user.profile.permanent_village} />
-                      <Row label="District"        value={user.profile.permanent_district} />
-                      <Row label="State"           value={user.profile.permanent_state} />
-                      <Row label="PIN Code"        value={user.profile.permanent_pin_code} />
+                      <Row label={t("Address Line 1")}  value={user.profile.permanent_address} />
+                      <Row label={t("Address Line 2")}  value={user.profile.permanent_address_line2} />
+                      <Row label={t("Village / Town / Area")} value={user.profile.permanent_village} />
+                      <Row label={t("District")}        value={user.profile.permanent_district} />
+                      <Row label={t("State")}           value={user.profile.permanent_state} />
+                      <Row label={t("PIN Code")}        value={user.profile.permanent_pin_code} />
                     </>
                   )}
                 </SectionCard>
-                <SectionCard icon="ti-school" title="Education & Experience">
-                  <Row label="Qualification"    value={user.profile.highest_qualification} />
-                  <Row label="Institution"      value={user.profile.institution} />
-                  <Row label="Year of Passing"  value={user.profile.year_of_passing?.toString()} />
-                  <Row label="Experience (yrs)" value={user.profile.total_experience_years} />
-                  <Row label="Prev Employer"    value={user.profile.previous_employer} />
+                <SectionCard icon="ti-school" title={t("Education & Experience")}>
+                  <Row label={t("Qualification")}    value={user.profile.highest_qualification} />
+                  <Row label={t("Institution")}      value={user.profile.institution} />
+                  <Row label={t("Year of Passing")}  value={user.profile.year_of_passing?.toString()} />
+                  <Row label={t("Experience (yrs)")} value={user.profile.total_experience_years} />
+                  <Row label={t("Prev Employer")}    value={user.profile.previous_employer} />
                 </SectionCard>
-                <SectionCard icon="ti-currency-rupee" title="Bank Details">
-                  <Row label="Account Holder" value={user.profile.account_holder_name} />
-                  <Row label="Account No."    value={revealed?.account_number || user.profile.account_number} />
-                  <Row label="IFSC"           value={revealed?.ifsc_code || user.profile.ifsc_code} />
-                  <Row label="Bank"           value={user.profile.bank_name} />
-                  <Row label="Branch"         value={user.profile.bank_branch_name} />
-                  <Row label="Account Type"   value={user.profile.account_type} />
+                <SectionCard icon="ti-currency-rupee" title={t("Bank Details")}>
+                  <Row label={t("Account Holder")} value={user.profile.account_holder_name} />
+                  <Row label={t("Account No.")}    value={revealed?.account_number || user.profile.account_number} />
+                  <Row label={t("IFSC")}           value={revealed?.ifsc_code || user.profile.ifsc_code} />
+                  <Row label={t("Bank")}           value={user.profile.bank_name} />
+                  <Row label={t("Branch")}         value={user.profile.bank_branch_name} />
+                  <Row label={t("Account Type")}   value={user.profile.account_type} />
                 </SectionCard>
-                <SectionCard icon="ti-shield-lock" title="Government IDs · Masked">
+                <SectionCard icon="ti-shield-lock" title={t("Government IDs · Masked")}>
                   {revealErr && <div className="alert alert-error" style={{ marginBottom: ".5rem", padding: "6px 10px", fontSize: ".78rem" }}>{revealErr}</div>}
-                  <Row label="PAN"     value={revealed?.pan_number || user.profile.pan_number} />
-                  <Row label="Aadhaar" value={revealed?.aadhaar_number || user.profile.aadhaar_number} />
+                  <Row label={t("PAN")}     value={revealed?.pan_number || user.profile.pan_number} />
+                  <Row label={t("Aadhaar")} value={revealed?.aadhaar_number || user.profile.aadhaar_number} />
                   {alreadyPositioned && (
                     canViewSensitive ? (
                       !revealed && (
@@ -392,35 +393,35 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                           onClick={handleReveal}
                           style={{ marginTop: 6, alignSelf: "flex-start" }}
                         >
-                          {revealing ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-eye" />} Reveal full values
+                          {revealing ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-eye" />} {t("Reveal full values")}
                         </button>
                       )
                     ) : (
                       <p style={{ fontSize: ".72rem", color: "var(--on-variant)", marginTop: 6 }}>
-                        Masked values above are placeholders — revealing the real ones requires the employees.view_sensitive permission.
+                        {t("Masked values above are placeholders — revealing the real ones requires the employees.view_sensitive permission.")}
                       </p>
                     )
                   )}
                   {revealed && (
                     <p style={{ fontSize: ".72rem", color: "var(--on-variant)", marginTop: 6 }}>
-                      This reveal was recorded in the audit log.
+                      {t("This reveal was recorded in the audit log.")}
                     </p>
                   )}
                 </SectionCard>
-                <SectionCard icon="ti-phone" title="Emergency Contact">
-                  <Row label="Name"         value={user.profile.emergency_name} />
-                  <Row label="Relationship" value={user.profile.emergency_relationship} />
-                  <Row label="Phone"        value={user.profile.emergency_phone} />
-                  <Row label="Email"        value={user.profile.emergency_email} />
+                <SectionCard icon="ti-phone" title={t("Emergency Contact")}>
+                  <Row label={t("Name")}         value={user.profile.emergency_name} />
+                  <Row label={t("Relationship")} value={user.profile.emergency_relationship} />
+                  <Row label={t("Phone")}        value={user.profile.emergency_phone} />
+                  <Row label={t("Email")}        value={user.profile.emergency_email} />
                 </SectionCard>
               </>
             )}
           </div>
 
           {((user.family_members?.length ?? 0) > 0 || (user.nominees?.length ?? 0) > 0) && (
-            <SectionCard icon="ti-users" title="Family & Nomination">
+            <SectionCard icon="ti-users" title={t("Family & Nomination")}>
               {(user.family_members ?? []).map(m => (
-                <Row key={m.id} label={`${m.name} (${m.relationship})`} value={m.is_dependent ? "Dependent" : "Not dependent"} />
+                <Row key={m.id} label={`${m.name} (${m.relationship})`} value={m.is_dependent ? t("Dependent") : t("Not dependent")} />
               ))}
               {(user.nominees ?? []).length > 0 && (
                 <div style={{ marginTop: ".5rem" }}>
@@ -431,14 +432,14 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                     return (
                       <div key={scheme} style={{ marginBottom: ".5rem" }}>
                         <div style={{ fontSize: ".78rem", fontWeight: 600, color: "var(--on-variant)", marginBottom: 2 }}>
-                          {scheme === "epf_eps" ? "EPF + EPS" : scheme === "gratuity" ? "Gratuity" : "Both"}
+                          {scheme === "epf_eps" ? t("EPF + EPS") : scheme === "gratuity" ? t("Gratuity") : t("Both")}
                         </div>
                         {rows.map(n => (
                           <Row key={n.id} label={n.family_member_name} value={`${n.share_percentage}%`} />
                         ))}
                         {total !== 100 && (
                           <div style={{ color: "var(--error, #dc2626)", fontSize: ".78rem", marginTop: 2 }}>
-                            <i className="ti ti-alert-triangle" /> Shares total {total}%, not 100% — check before approving.
+                            <i className="ti ti-alert-triangle" /> {t("Shares total {total}%, not 100% — check before approving.", { total })}
                           </div>
                         )}
                       </div>
@@ -449,9 +450,9 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
             </SectionCard>
           )}
 
-          <SectionCard icon="ti-file-text" title={`Documents (${user.documents.length})`}>
+          <SectionCard icon="ti-file-text" title={t("Documents ({count})", { count: user.documents.length })}>
             {user.documents.length === 0
-              ? <p style={{ color: "var(--on-variant)", fontSize: ".85rem" }}>No documents uploaded.</p>
+              ? <p style={{ color: "var(--on-variant)", fontSize: ".85rem" }}>{t("No documents uploaded.")}</p>
               : user.documents.map(d => {
                 const status = docStatus(d);
                 const isVerifying = docVerifying === d.id;
@@ -467,16 +468,16 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                       {status === "verified" && (
-                        <span className="badge badge-success" style={{ fontSize: ".7rem" }}><i className="ti ti-check" /> Verified</span>
+                        <span className="badge badge-success" style={{ fontSize: ".7rem" }}><i className="ti ti-check" /> {t("Verified")}</span>
                       )}
                       {status === "needs_correction" && (
-                        <span className="badge" style={{ fontSize: ".7rem", background: "var(--error-c)", color: "var(--error)" }}><i className="ti ti-alert-triangle" /> Needs Correction</span>
+                        <span className="badge" style={{ fontSize: ".7rem", background: "var(--error-c)", color: "var(--error)" }}><i className="ti ti-alert-triangle" /> {t("Needs Correction")}</span>
                       )}
                       {d.file_url
-                        ? <button className="btn btn-ghost btn-sm" onClick={() => setPreviewDoc(d)} title="Preview" aria-label="Preview">
+                        ? <button className="btn btn-ghost btn-sm" onClick={() => setPreviewDoc(d)} title={t("Preview")} aria-label={t("Preview")}>
                             <i className="ti ti-eye" style={{ fontSize: 15 }} />
                           </button>
-                        : <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>No link</span>
+                        : <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>{t("No link")}</span>
                       }
                     </div>
                   </div>
@@ -489,7 +490,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                       disabled={isVerifying}
                       onClick={() => handleVerifyDoc(d, "verified")}
                     >
-                      {isVerifying ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-check" />} Verified
+                      {isVerifying ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-check" />} {t("Verified")}
                     </button>
                     <button
                       type="button"
@@ -498,7 +499,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                       disabled={isVerifying}
                       onClick={() => handleVerifyDoc(d, "needs_correction")}
                     >
-                      <i className="ti ti-alert-triangle" /> Needs Correction
+                      <i className="ti ti-alert-triangle" /> {t("Needs Correction")}
                     </button>
                   </div>
 
@@ -506,7 +507,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                     <input
                       className="field-input"
                       style={{ marginTop: 6, fontSize: ".8rem" }}
-                      placeholder="What needs to be corrected?"
+                      placeholder={t("What needs to be corrected?")}
                       value={docNoteDrafts[d.id] ?? docNote(d)}
                       onChange={e => setDocNoteDrafts(prev => ({ ...prev, [d.id]: e.target.value }))}
                     />
@@ -522,14 +523,14 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
 
           <div className="field-group" style={{ marginTop: "1rem" }}>
             <label className="field-label">
-              Remarks <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>— optional to approve, required to send back for corrections</span>
+              {t("Remarks")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("— optional to approve, required to send back for corrections")}</span>
             </label>
             <textarea
               className="field-input"
               rows={3}
               value={remarks}
               onChange={e => { onRemarksChange(e.target.value); if (rejectErr) setRejectErr(null); }}
-              placeholder="What needs to be corrected? (e.g. PAN document is blurred, Aadhaar number doesn't match the name on file) — this is exactly what the candidate will see."
+              placeholder={t("What needs to be corrected? (e.g. PAN document is blurred, Aadhaar number doesn't match the name on file) — this is exactly what the candidate will see.")}
               style={rejectErr ? { borderColor: "var(--error)" } : undefined}
             />
             {rejectErr && (
@@ -544,7 +545,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           {showAssign && !alreadyPositioned && (
             <div style={{ marginTop: "1.25rem", padding: "1rem", borderRadius: 8, border: "1px solid var(--outline-v)", background: "var(--bg-mid)" }}>
               <div style={{ fontWeight: 700, fontSize: ".82rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--primary)", marginBottom: ".75rem" }}>
-                <i className="ti ti-user-check" style={{ marginRight: 6 }} />Assign Position
+                <i className="ti ti-user-check" style={{ marginRight: 6 }} />{t("Assign Position")}
               </div>
 
               {assignErr && (
@@ -554,25 +555,25 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               )}
 
               <div className="field-group" style={{ marginBottom: ".75rem" }}>
-                <label className="field-label">Org Unit <span style={{ color: "var(--error)" }}>*</span></label>
+                <label className="field-label">{t("Org Unit")} <span style={{ color: "var(--error)" }}>*</span></label>
                 <SearchableSelect
                   inputClassName="field-input"
                   value={orgUnitId}
                   disabled={positionsLoading}
                   onChange={v => { setOrgUnitId(v); setSelPosition(""); setAssignErr(""); }}
-                  placeholder="— Select an org unit —"
+                  placeholder={t("— Select an org unit —")}
                   options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
                 />
               </div>
 
               <div className="field-group" style={{ marginBottom: ".75rem" }}>
-                <label className="field-label">Position <span style={{ color: "var(--error)" }}>*</span></label>
+                <label className="field-label">{t("Position")} <span style={{ color: "var(--error)" }}>*</span></label>
                 <SearchableSelect
                   inputClassName="field-input"
                   value={selPosition}
                   disabled={!orgUnitId}
                   onChange={v => { setSelPosition(v); setAssignErr(""); }}
-                  placeholder={!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
+                  placeholder={!orgUnitId ? t("Select an org unit first") : positionOptions.length === 0 ? t("No vacant positions in this unit") : t("— Select Position —")}
                   options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
                 />
               </div>
@@ -580,14 +581,14 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               {selPosition && (
                 <>
                   <div className="field-group" style={{ marginBottom: ".75rem" }}>
-                    <label className="field-label">Org Unit</label>
+                    <label className="field-label">{t("Org Unit")}</label>
                     <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
-                      {derivedDepartmentName || "(no department-level unit in this org unit's chain)"}
+                      {derivedDepartmentName || t("(no department-level unit in this org unit's chain)")}
                     </div>
                   </div>
 
                   <div className="field-group">
-                    <label className="field-label">Designation</label>
+                    <label className="field-label">{t("Designation")}</label>
                     <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
                       {selectedPosition?.job_template_name || selectedPosition?.title}
                     </div>
@@ -602,21 +603,21 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           {showAssessment && (
             <div style={{ marginTop: "1.25rem", padding: "1rem", borderRadius: 8, border: "1px solid var(--outline-v)", background: "var(--bg-mid)" }}>
               <div style={{ fontWeight: 700, fontSize: ".82rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--primary)", marginBottom: ".5rem" }}>
-                <i className="ti ti-clipboard-list" style={{ marginRight: 6 }} />Assign Assessment
+                <i className="ti ti-clipboard-list" style={{ marginRight: 6 }} />{t("Assign Assessment")}
               </div>
               <p style={{ fontSize: ".82rem", color: "var(--on-variant)", marginBottom: ".75rem", lineHeight: 1.5 }}>
-                This candidate came from the recruitment pipeline. You can assign an assessment for their onboarding period, or leave blank to skip.
+                {t("This candidate came from the recruitment pipeline. You can assign an assessment for their onboarding period, or leave blank to skip.")}
               </p>
               <div className="field-group">
-                <label className="field-label">Assessment <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(optional)</span></label>
+                <label className="field-label">{t("Assessment")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("(optional)")}</span></label>
                 {loadAssess ? (
-                  <div style={{ fontSize: ".85rem", color: "var(--on-variant)" }}><i className="ti ti-loader-2 spin" /> Loading…</div>
+                  <div style={{ fontSize: ".85rem", color: "var(--on-variant)" }}><i className="ti ti-loader-2 spin" /> {t("Loading…")}</div>
                 ) : (
                   <SearchableSelect
                     inputClassName="field-input"
                     value={selAssessment}
                     onChange={setSelAssessment}
-                    placeholder="— No assessment —"
+                    placeholder={t("— No assessment —")}
                     options={assessments.map(a => ({ value: a.id, label: a.title }))}
                   />
                 )}

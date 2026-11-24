@@ -3,6 +3,7 @@
 import { useLeaveBalances } from "@/hooks/useEmployeeDashboard";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import AssessmentLockedNotice from "./AssessmentLockedNotice";
+import { useT } from "@/hooks/useI18n";
 
 const LEAVE_TYPE_LABEL: Record<string, string> = {
   casual:    "Casual Leave",
@@ -23,6 +24,7 @@ const LEAVE_TYPE_COLOR: Record<string, string> = {
 };
 
 export default function EmpLeaveBalances() {
+  const t = useT();
   const year = getLeaveYear();
   const { data, loading, status } = useLeaveBalances(year);
 
@@ -31,19 +33,19 @@ export default function EmpLeaveBalances() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-beach" /> Leave Balances — {year}</div>
-        <a href="/dashboard/leave" className="btn btn-ghost btn-sm">Apply Leave</a>
+        <div className="card-title"><i className="ti ti-beach" /> {t("Leave Balances — {year}", { year })}</div>
+        <a href="/dashboard/leave" className="btn btn-ghost btn-sm">{t("Apply Leave")}</a>
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : status === 403 ? (
         <AssessmentLockedNotice />
       ) : balances.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
-          No leave balances found. Contact HR to credit your leave.
+          {t("No leave balances found. Contact HR to credit your leave.")}
         </div>
       ) : (
         <>
@@ -51,7 +53,7 @@ export default function EmpLeaveBalances() {
             {balances.map(b => {
               const pct   = b.total_days > 0 ? Math.min(100, (b.remaining / b.total_days) * 100) : 0;
               const color = LEAVE_TYPE_COLOR[b.leave_type] ?? "var(--primary)";
-              const label = LEAVE_TYPE_LABEL[b.leave_type] ?? b.leave_type;
+              const label = LEAVE_TYPE_LABEL[b.leave_type] ? t(LEAVE_TYPE_LABEL[b.leave_type]) : b.leave_type;
               return (
                 <div key={b.leave_type} style={{ padding: "12px 16px", borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
@@ -60,13 +62,13 @@ export default function EmpLeaveBalances() {
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                     <span style={{ fontSize: 20, fontWeight: 800, color: "var(--on-bg)", lineHeight: 1 }}>{b.remaining}</span>
-                    <span style={{ fontSize: 11, color: "var(--on-variant)", alignSelf: "flex-end" }}>of {b.total_days} days</span>
+                    <span style={{ fontSize: 11, color: "var(--on-variant)", alignSelf: "flex-end" }}>{t("of {count} days", { count: b.total_days })}</span>
                   </div>
                   <div style={{ height: 5, borderRadius: 3, background: "var(--bg-high)", overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 3, transition: "width 0.4s ease" }} />
                   </div>
                   {b.used_days > 0 && (
-                    <div style={{ fontSize: 10, color: "var(--on-variant)", marginTop: 4 }}>{b.used_days} used{b.carried_forward > 0 ? ` · ${b.carried_forward} carried forward` : ""}</div>
+                    <div style={{ fontSize: 10, color: "var(--on-variant)", marginTop: 4 }}>{b.carried_forward > 0 ? t("{used} used · {carried} carried forward", { used: b.used_days, carried: b.carried_forward }) : t("{used} used", { used: b.used_days })}</div>
                   )}
                 </div>
               );
@@ -75,7 +77,7 @@ export default function EmpLeaveBalances() {
           {(data?.lop_days ?? 0) > 0 && (
             <div style={{ padding: "8px 16px", borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--error)", display: "flex", alignItems: "center", gap: 6 }}>
               <i className="ti ti-alert-circle" style={{ fontSize: 13 }} />
-              {data?.lop_days} LOP day{(data?.lop_days ?? 0) !== 1 ? "s" : ""} this year
+              {data?.lop_days === 1 ? t("{count} LOP day this year", { count: 1 }) : t("{count} LOP days this year", { count: data?.lop_days ?? 0 })}
             </div>
           )}
         </>

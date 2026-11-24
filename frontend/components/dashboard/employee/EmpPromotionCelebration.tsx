@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import type { Notification, NotificationListResponse } from "@/types/notifications";
+import { useT } from "@/hooks/useI18n";
 
 // Source of truth is the persisted Notification row (created server-side by
 // the promotion signal handler), not local component state — this widget
@@ -13,6 +14,7 @@ import type { Notification, NotificationListResponse } from "@/types/notificatio
 // mark-as-read endpoint NotificationBell already uses, so the celebration
 // correctly stays gone after a refresh/relogin instead of just hiding locally.
 export default function EmpPromotionCelebration() {
+  const t = useT();
   const { data, loading, refetch } = useFetch<NotificationListResponse>(
     `${API.notifications.list}?notification_type=promotion&is_read=false&page_size=1`
   );
@@ -30,7 +32,7 @@ export default function EmpPromotionCelebration() {
       await clientApi.patch(API.notifications.markRead(notification!.id));
       refetch();
     } catch {
-      setError("Couldn't dismiss — please try again.");
+      setError(t("Couldn't dismiss — please try again."));
     } finally {
       setDismissing(false);
     }
@@ -67,7 +69,7 @@ export default function EmpPromotionCelebration() {
           disabled={dismissing}
           style={{ flexShrink: 0 }}
         >
-          {dismissing ? "…" : "Got it"}
+          {dismissing ? "…" : t("Got it")}
         </button>
       </div>
     </div>

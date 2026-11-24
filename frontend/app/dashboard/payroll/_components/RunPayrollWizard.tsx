@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollSettings } from "@/types/payroll";
 import PayrollPeriodStep      from "./PayrollPeriodStep";
@@ -54,6 +55,7 @@ export default function RunPayrollWizard({
   initialBranchId,
   isAdmin,
 }: Props) {
+  const t = useT();
   const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
   const [step,    setStep]    = useState(0);
   const [cycleId, setCycleId] = useState<string | null>(initialCycleId ?? null);
@@ -99,10 +101,10 @@ export default function RunPayrollWizard({
         <div style={{ padding: "16px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
-              Step {step + 1} of {STEPS.length} — {STEPS[step]?.label}
+              {t("Step {current} of {total} — {label}", { current: step + 1, total: STEPS.length, label: t(STEPS[step]?.label ?? "") })}
             </span>
             <button className="btn btn-ghost btn-sm" onClick={onCancel}>
-              <i className="ti ti-x" /> Cancel
+              <i className="ti ti-x" /> {t("Cancel")}
             </button>
           </div>
 
@@ -130,7 +132,7 @@ export default function RunPayrollWizard({
                     fontSize: 10, whiteSpace: "nowrap", fontWeight: idx === step ? 600 : 400,
                     color: idx === step ? "var(--primary)" : idx < step ? "var(--success)" : "var(--outline)",
                   }}>
-                    {s.label}
+                    {t(s.label)}
                   </span>
                 </div>
                 {idx < STEPS.length - 1 && (

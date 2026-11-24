@@ -94,9 +94,9 @@ export function LeaveBalanceStats() {
               <span className="lv-icon"><i className={`ti ${icon}`} /></span>
             </div>
             <div className="lv-tile-value"><b>{fmtDays(available)}</b><span>{tr("days available")}</span></div>
-            <div className="lv-bar" role="img" aria-label={`${Math.round(percentLeft)} percent of ${label} left`}><i style={{ width: `${percentLeft}%` }} /></div>
+            <div className="lv-bar" role="img" aria-label={tr("{percent} percent of {label} left", { percent: Math.round(percentLeft), label })}><i style={{ width: `${percentLeft}%` }} /></div>
             <div className="lv-tile-sub">
-              <span>{entitled > 0 ? `of ${entitled.toFixed(1)} days` : tr("No entitlement")}</span>
+              <span>{entitled > 0 ? tr("of {count} days", { count: entitled.toFixed(1) }) : tr("No entitlement")}</span>
               {pending > 0 && <span className="lv-pending">{pending.toFixed(1)} {tr("pending")}</span>}
             </div>
           </div>
@@ -145,7 +145,7 @@ export default function LeaveDashboard() {
       notifyLeaveChanged();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to cancel leave request.", "error");
+      showToast(msg || tr("Failed to cancel leave request."), "error");
     }
   }
 
@@ -182,7 +182,7 @@ export default function LeaveDashboard() {
                     <LopBadge request={r} />
                   </div>
                 </div>
-                <span className={STATUS_BADGE[r.status]}>{SHORT_STATUS_LABEL[r.status]}</span>
+                <span className={STATUS_BADGE[r.status]}>{tr(SHORT_STATUS_LABEL[r.status])}</span>
                 <i className="ti ti-chevron-right lv-chevron" />
               </div>
             );

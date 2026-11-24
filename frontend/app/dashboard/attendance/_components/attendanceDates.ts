@@ -2,6 +2,7 @@
 // version built dates at local midnight and read them back with toISOString(), which in India moved every result a day early, so
 // "previous day" went back TWO days and "next day" did not move at all.
 
+import { tr } from "@/lib/i18n/tr";
 import { localISODate } from "./monthView";
 
 function parts(iso: string): [number, number, number] {
@@ -25,10 +26,10 @@ export function daysBefore(iso: string, todayISO: string): number {
 /** "Today", "Yesterday", "4 days ago", "Tomorrow", "In 3 days". */
 export function relativeDayLabel(iso: string, todayISO: string): string {
   const before = daysBefore(iso, todayISO);
-  if (before === 0) return "Today";
-  if (before === 1) return "Yesterday";
-  if (before === -1) return "Tomorrow";
-  return before > 1 ? `${before} days ago` : `In ${-before} days`;
+  if (before === 0) return tr("Today");
+  if (before === 1) return tr("Yesterday");
+  if (before === -1) return tr("Tomorrow");
+  return before > 1 ? tr("{count} days ago", { count: before }) : tr("In {count} days", { count: -before });
 }
 
 /** "Friday". */

@@ -1,6 +1,7 @@
 "use client";
 
 import type { SalarySetupRow } from "@/types/salarySetup";
+import { useT } from "@/hooks/useI18n";
 
 const formatRupees = (amount: number | string) => `₹${Number(amount).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
@@ -10,19 +11,20 @@ interface Props {
 }
 
 export default function SalarySetupTable({ rows, onEdit }: Props) {
+  const t = useT();
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Employee</th>
-            <th>Org Unit</th>
-            <th>Company Code</th>
-            <th style={{ textAlign: "right" }}>Annual CTC</th>
-            <th style={{ textAlign: "right" }}>Monthly CTC</th>
-            <th>Effective From</th>
-            <th>Structure</th>
-            <th>Payroll</th>
+            <th>{t("Employee")}</th>
+            <th>{t("Org Unit")}</th>
+            <th>{t("Company Code")}</th>
+            <th style={{ textAlign: "right" }}>{t("Annual CTC")}</th>
+            <th style={{ textAlign: "right" }}>{t("Monthly CTC")}</th>
+            <th>{t("Effective From")}</th>
+            <th>{t("Structure")}</th>
+            <th>{t("Payroll")}</th>
             <th />
           </tr>
         </thead>
@@ -36,23 +38,23 @@ export default function SalarySetupTable({ rows, onEdit }: Props) {
               <td style={{ fontSize: 13 }}>{row.department || "—"}</td>
               <td style={{ fontSize: 13 }}>{row.branch || "—"}</td>
               <td style={{ textAlign: "right", fontWeight: 600 }}>
-                {row.salary ? formatRupees(row.salary.annual_ctc) : <span style={{ color: "var(--warn)", fontSize: 12 }}>Not set</span>}
+                {row.salary ? formatRupees(row.salary.annual_ctc) : <span style={{ color: "var(--warn)", fontSize: 12 }}>{t("Not set")}</span>}
               </td>
               <td style={{ textAlign: "right", fontSize: 13, color: "var(--on-variant)" }}>{row.salary ? formatRupees(row.salary.monthly_ctc) : "—"}</td>
               <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{row.salary?.effective_from ?? "—"}</td>
-              <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{row.salary?.structure_name ?? (row.salary ? "Default" : "—")}</td>
+              <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{row.salary?.structure_name ?? (row.salary ? t("Default") : "—")}</td>
               <td style={{ fontSize: 12 }}>
                 {row.payroll_ready ? (
-                  <span style={{ color: "var(--success)", fontWeight: 600 }}><i className="ti ti-circle-check" /> Ready</span>
+                  <span style={{ color: "var(--success)", fontWeight: 600 }}><i className="ti ti-circle-check" /> {t("Ready")}</span>
                 ) : (
                   <span style={{ color: "var(--warn)" }} title={row.blockers.join("; ")}>
-                    <i className="ti ti-alert-triangle" /> {row.blockers[0] ?? "Not ready"}{row.blockers.length > 1 ? ` +${row.blockers.length - 1}` : ""}
+                    <i className="ti ti-alert-triangle" /> {row.blockers[0] ?? t("Not ready")}{row.blockers.length > 1 ? ` +${row.blockers.length - 1}` : ""}
                   </span>
                 )}
               </td>
               <td>
                 <button className="btn btn-ghost btn-sm" type="button" onClick={() => onEdit(row)}>
-                  <i className={`ti ${row.salary ? "ti-edit" : "ti-plus"}`} />{row.salary ? " Edit" : " Assign"}
+                  <i className={`ti ${row.salary ? "ti-edit" : "ti-plus"}`} />{" "}{row.salary ? t("Edit") : t("Assign")}
                 </button>
               </td>
             </tr>

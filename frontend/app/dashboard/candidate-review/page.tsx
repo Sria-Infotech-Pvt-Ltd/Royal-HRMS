@@ -12,6 +12,7 @@ import ApprovalsHeader from "./ApprovalsHeader";
 import ApprovalStatCards from "./ApprovalStatCards";
 import ApprovalToolbar from "./ApprovalToolbar";
 import ApprovalsTable from "./ApprovalsTable";
+import { tr } from "@/lib/i18n/tr";
 
 export default function CandidateReviewPage() {
   const router       = useRouter();
@@ -55,7 +56,7 @@ export default function CandidateReviewPage() {
         queue.reload();
       }
     } catch (err: unknown) {
-      setActionErr((err as { message?: string })?.message ?? "Action failed.");
+      setActionErr((err as { message?: string })?.message ?? tr("Action failed."));
     } finally {
       setActing(false);
     }

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import ClockInButton from "@/components/ClockInButton";
 import { useEmployeeKPIs, useAttendanceStatus } from "@/hooks/useEmployeeDashboard";
+import { useT } from "@/hooks/useI18n";
 
 const ATTENDANCE_LABEL: Record<string, string> = {
   present:    "Present",
@@ -29,6 +30,7 @@ const ATTENDANCE_COLOR: Record<string, { color: string; bg: string }> = {
 interface Props { firstName: string }
 
 export default function EmpConsole({ firstName }: Props) {
+  const t = useT();
   const { data: kpis,   loading: kpiLoading,    status: kpiHttpStatus,    refetch: refetchKpis }   = useEmployeeKPIs();
   const { data: status, loading: statusLoading, status: statusHttpStatus, refetch: refetchStatus } = useAttendanceStatus();
 
@@ -62,26 +64,26 @@ export default function EmpConsole({ firstName }: Props) {
     {
       icon: "ti-fingerprint",
       val:  showDash ? "—" : `${kpis?.days_present ?? 0} / ${kpis?.working_days ?? 0}`,
-      lbl:  "Days Present",
-      sub:  "This month",
+      lbl:  t("Days Present"),
+      sub:  t("This month"),
     },
     {
       icon: "ti-calendar-x",
       val:  showDash ? "—" : String(kpis?.absent_days ?? 0),
-      lbl:  "Absent Days",
-      sub:  "This month",
+      lbl:  t("Absent Days"),
+      sub:  t("This month"),
     },
     {
       icon: "ti-clipboard-list",
       val:  showDash ? "—" : String(kpis?.pending_action_items ?? 0),
-      lbl:  "Action Items",
-      sub:  "Require attention",
+      lbl:  t("Action Items"),
+      sub:  t("Require attention"),
     },
     {
       icon: "ti-receipt",
       val:  showDash ? "—" : String(kpis?.pending_expense_claims ?? 0),
-      lbl:  "Expense Claims",
-      sub:  "Pending",
+      lbl:  t("Expense Claims"),
+      sub:  t("Pending"),
     },
   ];
 
@@ -100,15 +102,15 @@ export default function EmpConsole({ firstName }: Props) {
             <i className="ti ti-layout-dashboard" />
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>My Workspace</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>Welcome back, {firstName}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>{t("My Workspace")}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>{t("Welcome back, {name}", { name: firstName })}</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {!loading && kpis?.today_attendance && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: attendanceInfo.bg, color: attendanceInfo.color, border: `1px solid ${attendanceInfo.color}33` }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: attendanceInfo.color, flexShrink: 0 }} />
-              {ATTENDANCE_LABEL[attendanceKey] ?? attendanceKey}
+              {ATTENDANCE_LABEL[attendanceKey] ? t(ATTENDANCE_LABEL[attendanceKey]) : attendanceKey}
             </span>
           )}
           <ClockInButton onPunchSuccess={handlePunchSuccess} />
@@ -120,8 +122,8 @@ export default function EmpConsole({ firstName }: Props) {
       {!loading && isLocked && (
         <div style={{ padding: "8px 16px 0", fontSize: 11, color: "rgba(255,255,255,0.7)", display: "flex", alignItems: "center", gap: 6 }}>
           <i className="ti ti-lock" style={{ fontSize: 12 }} />
-          Complete your pending assessment to see your real stats —{" "}
-          <a href="/onboarding/assessments" style={{ color: "#fff", fontWeight: 600, textDecoration: "underline" }}>go to Assessments</a>
+          {t("Complete your pending assessment to see your real stats —")}{" "}
+          <a href="/onboarding/assessments" style={{ color: "#fff", fontWeight: 600, textDecoration: "underline" }}>{t("go to Assessments")}</a>
         </div>
       )}
 
@@ -143,9 +145,9 @@ export default function EmpConsole({ firstName }: Props) {
       {!loading && status && (
         <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "7px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexWrap: "wrap" }}>
           {[
-            { icon: "ti-login",  label: "Clock In",  val: status.clock_in_time  ?? "—" },
-            { icon: "ti-logout", label: "Clock Out", val: status.clock_out_time ?? "—" },
-            { icon: "ti-clock",  label: "Working",   val: status.working_hours   || "—" },
+            { icon: "ti-login",  label: t("Clock In"),  val: status.clock_in_time  ?? "—" },
+            { icon: "ti-logout", label: t("Clock Out"), val: status.clock_out_time ?? "—" },
+            { icon: "ti-clock",  label: t("Working"),   val: status.working_hours   || "—" },
           ].map(item => (
             <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
               <i className={`ti ${item.icon}`} style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }} />

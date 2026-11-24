@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { Position } from "@/types/orgStructure";
 import { initialsOf } from "@/lib/orgStructureStats";
 import { useChartBranches } from "@/hooks/useChartBranches";
+import { useT } from "@/hooks/useI18n";
 import OrgChartFrame from "./OrgChartFrame";
 
 interface Props {
@@ -16,6 +17,7 @@ const OPEN_DEPTH = 3;
 
 /** Who reports to whom: one box per active position, joined by each position's "reports to". Seats with no line sit at the top. */
 export default function OrgReportingChart({ positions, selectedPositionId, onSelectPosition }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const branches = useChartBranches(OPEN_DEPTH);
   const live = useMemo(() => positions.filter(position => position.is_active), [positions]);
@@ -78,16 +80,16 @@ export default function OrgReportingChart({ positions, selectedPositionId, onSel
           <div className={`oc-box ${position.holder_name ? "oc-filled" : "oc-vacant"}${selectedPositionId === position.id ? " oc-box-sel" : ""}${stateClass}`} role="button" tabIndex={0}
             onClick={() => onSelectPosition(position.id)}
             onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectPosition(position.id); } }}>
-            <div className="oc-name" title={position.title}>{position.title}{position.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", marginLeft: 5 }} title="Head of unit" />}</div>
+            <div className="oc-name" title={position.title}>{position.title}{position.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", marginLeft: 5 }} title={t("Head of unit")} />}</div>
             <div className="oc-head">
               <span className={`oc-avatar${position.holder_name ? "" : " oc-avatar-vacant"}`}>{position.holder_name ? initialsOf(position.holder_name) : "?"}</span>
-              {position.holder_name ?? <span className="oc-warn">Vacant</span>}
+              {position.holder_name ?? <span className="oc-warn">{t("Vacant")}</span>}
             </div>
             <div className="oc-sub" style={{ marginTop: 4 }} title={position.org_unit_name}>{position.org_unit_name}</div>
           </div>
           {kids.length > 0 && (
-            <button type="button" className="oc-toggle" onClick={() => branches.flip(position.id)} aria-label={isOpen ? "Hide reports" : "Show reports"}
-              title={isOpen ? "Collapse" : `Show ${kids.length} direct report${kids.length === 1 ? "" : "s"}`}>
+            <button type="button" className="oc-toggle" onClick={() => branches.flip(position.id)} aria-label={isOpen ? t("Hide reports") : t("Show reports")}
+              title={isOpen ? t("Collapse") : kids.length === 1 ? t("Show {count} direct report", { count: kids.length }) : t("Show {count} direct reports", { count: kids.length })}>
               {isOpen ? <i className="ti ti-minus" /> : kids.length}
             </button>
           )}
@@ -99,10 +101,10 @@ export default function OrgReportingChart({ positions, selectedPositionId, onSel
 
   return (
     <OrgChartFrame
-      query={query} onQueryChange={setQuery} searchPlaceholder="Find position, person or unit"
+      query={query} onQueryChange={setQuery} searchPlaceholder={t("Find position, person or unit")}
       onExpandAll={() => branches.setAll(true)} onCollapseAll={() => branches.setAll(false)}
-      isEmpty={live.length === 0} emptyText="No positions yet."
-      tools={unlinkedCount > 0 ? <span className="badge badge-warn" title="Positions with nobody reporting to them and no one they report to. Set 'Reports to' on a position to place it in the chain.">{unlinkedCount} without a reporting line</span> : null}
+      isEmpty={live.length === 0} emptyText={t("No positions yet.")}
+      tools={unlinkedCount > 0 ? <span className="badge badge-warn" title={t("Positions with nobody reporting to them and no one they report to. Set 'Reports to' on a position to place it in the chain.")}>{t("{count} without a reporting line", { count: unlinkedCount })}</span> : null}
     >
       <ul>{roots.map(root => renderBranch(root, 0))}</ul>
     </OrgChartFrame>

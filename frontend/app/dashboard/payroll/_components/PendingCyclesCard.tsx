@@ -3,6 +3,7 @@
 import type { PayrollCycle } from "@/types/payroll";
 import { STATUS_BADGE, STATUS_LABEL, UNCANCELLABLE, PENDING_CYCLES_SECTION_ID, cyclePeriodLabel } from "./payrollDashboardShared";
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 
 interface PendingCyclesCardProps {
   pending: PayrollCycle[];
@@ -12,20 +13,21 @@ interface PendingCyclesCardProps {
 }
 
 export default function PendingCyclesCard({ pending, canResume, onResumeCycle, onCancelCycle }: PendingCyclesCardProps) {
+  const t = useT();
   return (
     <div className="card" id={PENDING_CYCLES_SECTION_ID}>
       <div className="card-header">
         <div className="card-title">
           <i className="ti ti-alert-circle" style={{ color: "var(--warn)" }} />
-          {" "}Action Required — {pending.length} Pending Cycle{pending.length !== 1 ? "s" : ""}
+          {" "}{pending.length === 1 ? t("Action Required — {count} Pending Cycle", { count: pending.length }) : t("Action Required — {count} Pending Cycles", { count: pending.length })}
         </div>
       </div>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Period</th><th>Pay Date</th><th>Status</th>
-              <th>L1 Approver</th><th>Payslips</th><th />
+              <th>{t("Period")}</th><th>{t("Pay Date")}</th><th>{t("Status")}</th>
+              <th>{t("L1 Approver")}</th><th>{t("Payslips")}</th><th />
             </tr>
           </thead>
           <tbody>
@@ -35,13 +37,13 @@ export default function PendingCyclesCard({ pending, canResume, onResumeCycle, o
                   {cyclePeriodLabel(c)}
                 </td>
                 <td>{formatDate(c.pay_date)}</td>
-                <td><span className={STATUS_BADGE[c.status] ?? "badge badge-neutral"}>{STATUS_LABEL[c.status] ?? c.status}</span></td>
+                <td><span className={STATUS_BADGE[c.status] ?? "badge badge-neutral"}>{STATUS_LABEL[c.status] ? t(STATUS_LABEL[c.status]) : c.status}</span></td>
                 <td style={{ fontSize: 13, color: "var(--on-variant)" }}>{c.l1_approver_name ?? "—"}</td>
                 <td>{c.payslip_count}</td>
                 <td onClick={e => e.stopPropagation()}>
                   {!UNCANCELLABLE.includes(c.status) && (
-                    <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)", fontSize: 12 }} onClick={() => onCancelCycle(c)} title="Cancel this cycle">
-                      <i className="ti ti-ban" /> Cancel
+                    <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)", fontSize: 12 }} onClick={() => onCancelCycle(c)} title={t("Cancel this cycle")}>
+                      <i className="ti ti-ban" /> {t("Cancel")}
                     </button>
                   )}
                 </td>

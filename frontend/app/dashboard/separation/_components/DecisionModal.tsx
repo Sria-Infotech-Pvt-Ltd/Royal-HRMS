@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   action:       "approve" | "reject";
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function DecisionModal({ action, employeeName, onClose, onConfirm, saving }: Props) {
+  const t = useT();
   const isApprove = action === "approve";
   const [comment, setComment] = useState("");
   // A click's target is resolved at mouseup, not mousedown — selecting text
@@ -28,9 +30,9 @@ export default function DecisionModal({ action, employeeName, onClose, onConfirm
       <div className="modal" style={{ width: "min(480px, 95vw)" }}>
         <div className="modal-header">
           <div className="modal-title">
-            {isApprove ? "Approve" : "Reject"} — {employeeName}
+            {isApprove ? t("Approve") : t("Reject")} — {employeeName}
           </div>
-          <button className="modal-close" onClick={onClose} suppressHydrationWarning aria-label="Close">
+          <button className="modal-close" onClick={onClose} suppressHydrationWarning aria-label={t("Close")}>
             <i className="ti ti-x" />
           </button>
         </div>
@@ -39,16 +41,16 @@ export default function DecisionModal({ action, employeeName, onClose, onConfirm
           {!isApprove && (
             <div className="alert alert-warn mb-16">
               <i className="ti ti-alert-triangle" />
-              <div>This request will be rejected and the workflow will stop here.</div>
+              <div>{t("This request will be rejected and the workflow will stop here.")}</div>
             </div>
           )}
           <div className="field-group">
             <label className="field-label">
-              Comment {!isApprove && <span style={{ color: "var(--error)" }}>*</span>}
+              {t("Comment")} {!isApprove && <span style={{ color: "var(--error)" }}>*</span>}
             </label>
             <textarea
               className="field-input" rows={3} style={{ resize: "vertical" }}
-              placeholder={isApprove ? "Optional notes for the record…" : "Reason for rejection (required)"}
+              placeholder={isApprove ? t("Optional notes for the record…") : t("Reason for rejection (required)")}
               value={comment} onChange={e => setComment(e.target.value)}
             />
           </div>
@@ -56,7 +58,7 @@ export default function DecisionModal({ action, employeeName, onClose, onConfirm
 
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
@@ -65,8 +67,8 @@ export default function DecisionModal({ action, employeeName, onClose, onConfirm
             suppressHydrationWarning
           >
             {saving
-              ? <><i className="ti ti-loader-2 spin" /> Saving…</>
-              : isApprove ? <><i className="ti ti-check" /> Approve</> : <><i className="ti ti-x" /> Reject</>
+              ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</>
+              : isApprove ? <><i className="ti ti-check" /> {t("Approve")}</> : <><i className="ti ti-x" /> {t("Reject")}</>
             }
           </button>
         </div>

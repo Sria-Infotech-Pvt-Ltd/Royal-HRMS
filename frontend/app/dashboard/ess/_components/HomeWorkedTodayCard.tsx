@@ -74,8 +74,8 @@ export default function HomeWorkedTodayCard({ status }: Props) {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <PunchTime label="PUNCH IN" time={firstIn?.time ?? null} tone="var(--success)" />
-        <PunchTime label="PUNCH OUT" time={isClockedIn ? null : (lastOut?.time ?? null)} tone="var(--error)" />
+        <PunchTime label={tr("PUNCH IN")} time={firstIn?.time ?? null} tone="var(--success)" />
+        <PunchTime label={tr("PUNCH OUT")} time={isClockedIn ? null : (lastOut?.time ?? null)} tone="var(--error)" />
         <span
           style={{
             display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600,

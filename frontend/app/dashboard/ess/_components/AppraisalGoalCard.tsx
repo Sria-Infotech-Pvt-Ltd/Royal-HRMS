@@ -6,6 +6,8 @@
 // that file's length down, same composition pattern HomeTab.tsx's siblings
 // (HomeBanner.tsx etc.) use.
 
+import { useT } from "@/hooks/useI18n";
+
 const RATING_OPTIONS: { value: string; label: string }[] = [
   { value: "1", label: "1 · Below expectations" },
   { value: "2", label: "2 · Developing" },
@@ -36,6 +38,7 @@ interface Props {
 }
 
 export default function AppraisalGoalCard({ goal, value, disabled, onChange }: Props) {
+  const t = useT();
   return (
     <div className="card mb-16" style={{ background: "var(--bg-low)" }}>
       <div style={{ padding: "16px 20px 4px" }}>
@@ -43,7 +46,7 @@ export default function AppraisalGoalCard({ goal, value, disabled, onChange }: P
           <h4 style={{ fontSize: "0.95rem", margin: 0 }}>{goal.title}</h4>
           {goal.weight_percent !== null && (
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap" }}>
-              {goal.weight_percent}% weight
+              {t("{percent}% weight", { percent: goal.weight_percent })}
             </span>
           )}
         </div>
@@ -54,45 +57,45 @@ export default function AppraisalGoalCard({ goal, value, disabled, onChange }: P
 
       <div className="ess-pair" style={{ padding: "8px 20px 20px", gap: 16 }}>
         <div className="field-group">
-          <label className="field-label">Self rating</label>
+          <label className="field-label">{t("Self rating")}</label>
           <select
             className="field-input field-select"
             disabled={disabled}
             value={value.self_rating}
             onChange={e => onChange(goal.id, "self_rating", e.target.value)}
           >
-            <option value="">Choose rating</option>
-            {RATING_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            <option value="">{t("Choose rating")}</option>
+            {RATING_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{t(opt.label)}</option>)}
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">Outcome / measure</label>
+          <label className="field-label">{t("Outcome / measure")}</label>
           <input
             className="field-input"
             disabled={disabled}
-            placeholder="e.g. 22% fewer incidents"
+            placeholder={t("e.g. 22% fewer incidents")}
             value={value.outcome_measure}
             onChange={e => onChange(goal.id, "outcome_measure", e.target.value)}
           />
         </div>
         <div className="field-group">
-          <label className="field-label">Evidence or link reference</label>
+          <label className="field-label">{t("Evidence or link reference")}</label>
           <textarea
             className="field-input"
             rows={4}
             disabled={disabled}
-            placeholder="Metric, project or document reference"
+            placeholder={t("Metric, project or document reference")}
             value={value.evidence_reference}
             onChange={e => onChange(goal.id, "evidence_reference", e.target.value)}
           />
         </div>
         <div className="field-group">
-          <label className="field-label">My comments</label>
+          <label className="field-label">{t("My comments")}</label>
           <textarea
             className="field-input"
             rows={4}
             disabled={disabled}
-            placeholder="What changed and why?"
+            placeholder={t("What changed and why?")}
             value={value.self_comments}
             onChange={e => onChange(goal.id, "self_comments", e.target.value)}
           />

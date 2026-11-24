@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useActionItems } from "@/hooks/useEmployeeDashboard";
 import type { ActionItem } from "@/types/employeeDashboard";
 import AssessmentLockedNotice from "./AssessmentLockedNotice";
+import { useT } from "@/hooks/useI18n";
 
 const ACTION_ICON: Record<string, { icon: string; color: string; bg: string }> = {
   profile_incomplete:   { icon: "ti-user-exclamation", color: "var(--error)",   bg: "rgba(220,38,38,0.10)"   },
@@ -30,6 +31,7 @@ const isDone = (item: ActionItem) =>
   item.status === "approved" || item.action_type === "leave_approved";
 
 export default function EmpActionItems() {
+  const t = useT();
   const [page, setPage] = useState(1);
   const { data, loading, status } = useActionItems(page);
 
@@ -44,25 +46,25 @@ export default function EmpActionItems() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-clipboard-check" /> Action Items</div>
+        <div className="card-title"><i className="ti ti-clipboard-check" /> {t("Action Items")}</div>
         {!loading && totalPages <= 1 && pending > 0 && (
-          <span className="badge badge-warn">{pending} pending</span>
+          <span className="badge badge-warn">{t("{count} pending", { count: pending })}</span>
         )}
         {!loading && totalPages > 1 && (
-          <span className="badge badge-neutral">{data?.count} total</span>
+          <span className="badge badge-neutral">{t("{count} total", { count: data?.count ?? 0 })}</span>
         )}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : status === 403 ? (
         <AssessmentLockedNotice />
       ) : items.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center" }}>
           <i className="ti ti-circle-check" style={{ fontSize: 26, color: "var(--success)", display: "block", marginBottom: 8, opacity: 0.6 }} />
-          <div style={{ fontSize: 13, color: "var(--on-variant)" }}>All caught up!</div>
+          <div style={{ fontSize: 13, color: "var(--on-variant)" }}>{t("All caught up!")}</div>
         </div>
       ) : (
         <div style={{ padding: "4px 0 8px" }}>
@@ -83,7 +85,7 @@ export default function EmpActionItems() {
                   <div style={{ fontSize: 11, color: "var(--on-variant)", lineHeight: 1.4 }}>{item.description}</div>
                 </div>
                 <span className={STATUS_BADGE[item.status] ?? "badge badge-neutral"} style={{ fontSize: 10, whiteSpace: "nowrap", marginTop: 2, flexShrink: 0 }}>
-                  {STATUS_LABEL[item.status] ?? item.status}
+                  {STATUS_LABEL[item.status] ? t(STATUS_LABEL[item.status]) : item.status}
                 </span>
               </Link>
             );
@@ -100,10 +102,10 @@ export default function EmpActionItems() {
             onClick={() => setPage(p => p - 1)}
             suppressHydrationWarning
           >
-            <i className="ti ti-chevron-left" /> Previous
+            <i className="ti ti-chevron-left" /> {t("Previous")}
           </button>
           <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-            Page {page} of {totalPages}
+            {t("Page {page} of {total}", { page, total: totalPages })}
           </span>
           <button
             className="btn btn-ghost btn-sm"
@@ -111,7 +113,7 @@ export default function EmpActionItems() {
             onClick={() => setPage(p => p + 1)}
             suppressHydrationWarning
           >
-            Next <i className="ti ti-chevron-right" />
+            {t("Next")} <i className="ti ti-chevron-right" />
           </button>
         </div>
       )}

@@ -4,6 +4,7 @@
 // which weekday it is and how long ago, and one-click Today / Yesterday buttons. Dates move in the viewer's own calendar days.
 
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 import { relativeDayLabel, shiftISODate, weekdayName } from "./attendanceDates";
 
 interface Props {
@@ -15,16 +16,17 @@ interface Props {
 }
 
 export default function AttendanceDatePicker({ date, todayISO, onChange, allowFuture = false }: Props) {
+  const t = useT();
   const yesterday = shiftISODate(todayISO, -1);
-  const quick = [{ label: "Today", value: todayISO }, { label: "Yesterday", value: yesterday }];
+  const quick = [{ label: t("Today"), value: todayISO }, { label: t("Yesterday"), value: yesterday }];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4, padding: 4, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--outline-v)" }}>
-        <button className="btn btn-ghost btn-sm" style={{ padding: "0 8px", border: 0 }} onClick={() => onChange(shiftISODate(date, -1))} aria-label="Previous day" title="Previous day">
+        <button className="btn btn-ghost btn-sm" style={{ padding: "0 8px", border: 0 }} onClick={() => onChange(shiftISODate(date, -1))} aria-label={t("Previous day")} title={t("Previous day")}>
           <i className="ti ti-chevron-left" />
         </button>
         <DateInput className="field-input" style={{ width: 150, border: 0, fontWeight: 600 }} value={date} max={allowFuture ? undefined : todayISO} onChange={onChange} />
-        <button className="btn btn-ghost btn-sm" style={{ padding: "0 8px", border: 0 }} disabled={!allowFuture && date >= todayISO} onClick={() => onChange(shiftISODate(date, 1))} aria-label="Next day" title="Next day">
+        <button className="btn btn-ghost btn-sm" style={{ padding: "0 8px", border: 0 }} disabled={!allowFuture && date >= todayISO} onClick={() => onChange(shiftISODate(date, 1))} aria-label={t("Next day")} title={t("Next day")}>
           <i className="ti ti-chevron-right" />
         </button>
       </div>
@@ -35,7 +37,7 @@ export default function AttendanceDatePicker({ date, todayISO, onChange, allowFu
           {date !== todayISO && date !== yesterday && ` · ${relativeDayLabel(date, todayISO)}`}
         </span>
       )}
-      <div role="group" aria-label="Quick dates" style={{ display: "flex", gap: 6 }}>
+      <div role="group" aria-label={t("Quick dates")} style={{ display: "flex", gap: 6 }}>
         {quick.map(item => (
           <button
             key={item.label} type="button" aria-pressed={date === item.value} onClick={() => onChange(item.value)}

@@ -1,4 +1,5 @@
 import { tint } from "@/lib/colour";
+import { tr } from "@/lib/i18n/tr";
 // Types, rules, colours and totals for the Employee ID Ranges screen, kept apart so they can be tested alone.
 
 export interface SeriesRow {
@@ -22,12 +23,12 @@ export const MONO_FONT = "Menlo, Consolas, monospace";
 /** Checks one worker type's three numbers, in the same words as before. `text` is what was typed; `form` is its parsed numbers. */
 export function validateSeries(text: Record<NumericField, string>, form: NumberDraft): RowErrors {
   const errors: RowErrors = {};
-  if (!/^\d+$/.test(text.range_start)) errors.range_start = "Required — whole number.";
-  if (!/^\d+$/.test(text.range_end)) errors.range_end = "Required — whole number.";
-  if (!/^\d+$/.test(text.next_sequence)) errors.next_sequence = "Required — whole number.";
-  if (!errors.range_start && !errors.range_end && form.range_end <= form.range_start) errors.range_end = "Must be greater than range start.";
+  if (!/^\d+$/.test(text.range_start)) errors.range_start = tr("Required — whole number.");
+  if (!/^\d+$/.test(text.range_end)) errors.range_end = tr("Required — whole number.");
+  if (!/^\d+$/.test(text.next_sequence)) errors.next_sequence = tr("Required — whole number.");
+  if (!errors.range_start && !errors.range_end && form.range_end <= form.range_start) errors.range_end = tr("Must be greater than range start.");
   if (!errors.range_start && !errors.range_end && !errors.next_sequence && (form.next_sequence <= form.range_start || form.next_sequence > form.range_end + 1)) {
-    errors.next_sequence = `Must be between ${form.range_start + 1} and ${form.range_end} to issue a new ID (or ${form.range_end + 1}, which marks the range as fully used up).`;
+    errors.next_sequence = tr("Must be between {low} and {high} to issue a new ID (or {full}, which marks the range as fully used up).", { low: form.range_start + 1, high: form.range_end, full: form.range_end + 1 });
   }
   return errors;
 }

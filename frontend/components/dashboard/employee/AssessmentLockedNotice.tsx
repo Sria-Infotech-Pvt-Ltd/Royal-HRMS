@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useT } from "@/hooks/useI18n";
 
 /**
  * Shown in place of a dashboard widget's normal empty state when the
@@ -12,14 +13,15 @@ import Link from "next/link";
  * contacting HR.
  */
 export default function AssessmentLockedNotice() {
+  const t = useT();
   return (
     <div style={{ padding: "24px 20px", textAlign: "center" }}>
       <i className="ti ti-lock" style={{ fontSize: 24, color: "var(--warn)", display: "block", marginBottom: 8, opacity: 0.7 }} />
       <div style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 6 }}>
-        Complete your pending assessment to unlock this.
+        {t("Complete your pending assessment to unlock this.")}
       </div>
       <Link href="/onboarding/assessments" style={{ color: "var(--primary)", fontSize: 12, fontWeight: 600 }}>
-        Go to Assessments →
+        {t("Go to Assessments →")}
       </Link>
     </div>
   );

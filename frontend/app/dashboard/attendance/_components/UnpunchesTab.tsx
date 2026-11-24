@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useDepartmentOptions } from "@/hooks/useDepartmentOptions";
@@ -25,6 +26,7 @@ function toQuery(params: Record<string, string | number | undefined>): string {
 }
 
 export default function UnpunchesTab() {
+  const t = useT();
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
   const effectiveBranch = getEffectiveBranch(user);
@@ -53,23 +55,23 @@ export default function UnpunchesTab() {
       <DateInput className="field-input" style={{ width: 160 }} value={date} onChange={isoDate => { setDate(isoDate); setPage(1); }} />
       <BranchFilterSelect branches={branches} value={branchInput} onChange={value => { setBranchInput(value); setPage(1); }} locked={!unrestricted} lockedBranchName={effectiveBranch} />
       <select className="field-input field-select" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
-        <option value="">All Org Units</option>
+        <option value="">{t("All Org Units")}</option>
         {departments.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
     </>
   );
 
   return (
-    <SectionCard icon="ti-clock-off" colour={PALETTE.late} title="Un-punches" count={data?.count ?? null} filters={filters} subtitle="Employees who clocked in but never clocked out, for the selected date.">
-      <Notice tone="warn" icon="ti-alert-triangle">Shown once the shift end and grace period have passed without a clock-out.</Notice>
+    <SectionCard icon="ti-clock-off" colour={PALETTE.late} title={t("Un-punches")} count={data?.count ?? null} filters={filters} subtitle={t("Employees who clocked in but never clocked out, for the selected date.")}>
+      <Notice tone="warn" icon="ti-alert-triangle">{t("Shown once the shift end and grace period have passed without a clock-out.")}</Notice>
       {error && <Notice tone="error" icon="ti-alert-circle">{error}</Notice>}
       <div className="table-wrap" style={{ marginTop: 14 }}>
         <table>
           <thead>
-            <tr><th>Employee</th><th>Company Code</th><th>Date</th><th>Clock In</th><th>Expected Out</th><th>Correction Status</th></tr>
+            <tr><th>{t("Employee")}</th><th>{t("Company Code")}</th><th>{t("Date")}</th><th>{t("Clock In")}</th><th>{t("Expected Out")}</th><th>{t("Correction Status")}</th></tr>
           </thead>
           <tbody>
-            <TableStates columns={6} loading={loading} empty={rows.length === 0} icon="ti-circle-check" title="No un-punches found for this date." hint="Everyone who clocked in also clocked out." />
+            <TableStates columns={6} loading={loading} empty={rows.length === 0} icon="ti-circle-check" title={t("No un-punches found for this date.")} hint={t("Everyone who clocked in also clocked out.")} />
             {rows.map(r => (
               <tr key={`${r.employee_id}-${r.date}`}>
                 <td><PersonCell name={r.name} employeeId={r.employee_id} /></td>
@@ -77,7 +79,7 @@ export default function UnpunchesTab() {
                 <td>{r.date}</td>
                 <td style={{ ...MONO, fontWeight: 700 }}>{r.clock_in}</td>
                 <td style={{ ...MONO, color: "var(--on-variant)" }}>{r.expected_out}</td>
-                <td>{r.correction_pending ? <Pill colour={PALETTE.late}>Correction Submitted</Pill> : <Pill colour={PALETTE.not_marked}>No Correction Filed</Pill>}</td>
+                <td>{r.correction_pending ? <Pill colour={PALETTE.late}>{t("Correction Submitted")}</Pill> : <Pill colour={PALETTE.not_marked}>{t("No Correction Filed")}</Pill>}</td>
               </tr>
             ))}
           </tbody>

@@ -6,6 +6,7 @@ import { donutArcs, totalTeamPending, type TeamApprovalRow, type TeamBreakdown }
 import { KIND_LABELS } from "@/lib/approvalOverview";
 import type { ApprovalKind } from "@/app/dashboard/approvals/_data";
 import type { ManagerActivityEntry } from "@/types/managerDashboard";
+import { useT } from "@/hooks/useI18n";
 
 const RADIUS = 62;
 
@@ -17,17 +18,18 @@ interface OverviewProps {
 
 /** Today's team split, from each direct report's attendance status. WFH has no figure: the attendance status does not carry it. */
 export function TeamOverviewCard({ breakdown, isLoading, onOpenTeam }: OverviewProps) {
+  const t = useT();
   const arcs = donutArcs(breakdown, RADIUS);
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}><i className="ti ti-chart-donut" /> Team Overview</h2>
-        {onOpenTeam && <button type="button" className={styles.viewAll} onClick={onOpenTeam}>View Team →</button>}
+        <h2 className={styles.cardTitle}><i className="ti ti-chart-donut" /> {t("Team Overview")}</h2>
+        {onOpenTeam && <button type="button" className={styles.viewAll} onClick={onOpenTeam}>{t("View Team →")}</button>}
       </div>
-      {isLoading ? <div className={styles.emptyFill}>Loading…</div> : (
+      {isLoading ? <div className={styles.emptyFill}>{t("Loading…")}</div> : (
         <div className={styles.donutWrap}>
           <div className={styles.donut}>
-            <svg viewBox="0 0 160 160" width="168" height="168" role="img" aria-label="Team attendance today">
+            <svg viewBox="0 0 160 160" width="168" height="168" role="img" aria-label={t("Team attendance today")}>
               <circle cx="80" cy="80" r={RADIUS} fill="none" stroke="color-mix(in srgb, var(--brand) 8%, transparent)" strokeWidth="18" />
               {arcs.map(arc => (
                 <circle key={arc.key} cx="80" cy="80" r={RADIUS} fill="none" stroke={arc.color} strokeWidth="18"
@@ -36,13 +38,13 @@ export function TeamOverviewCard({ breakdown, isLoading, onOpenTeam }: OverviewP
             </svg>
             <div className={styles.donutCentre}>
               <div className={styles.donutTotal}>{breakdown.total}</div>
-              <div className={styles.donutCaption}>Team<br />Members</div>
+              <div className={styles.donutCaption}>{t("Team")}<br />{t("Members")}</div>
             </div>
           </div>
           <div className={styles.legend}>
             {arcs.map(arc => (
               <div key={arc.key} className={styles.legendRow}>
-                <span><span className={styles.legendDot} style={{ background: arc.color }} />{arc.label}</span>
+                <span><span className={styles.legendDot} style={{ background: arc.color }} />{t(arc.label)}</span>
                 <span className={styles.legendValue}>{countOrDash(arc.value)}</span>
               </div>
             ))}
@@ -65,21 +67,22 @@ interface ApprovalsProps {
 }
 
 export function PendingTeamApprovalsCard({ rows, isLoading, onOpen }: ApprovalsProps) {
+  const t = useT();
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}><i className="ti ti-inbox" /> Pending Team Approvals{rows.length > 0 && !isLoading ? ` (${totalTeamPending(rows)})` : ""}</h2>
-        {onOpen && <button type="button" className={styles.viewAll} onClick={onOpen}>View All →</button>}
+        <h2 className={styles.cardTitle}><i className="ti ti-inbox" /> {t("Pending Team Approvals")}{rows.length > 0 && !isLoading ? ` (${totalTeamPending(rows)})` : ""}</h2>
+        {onOpen && <button type="button" className={styles.viewAll} onClick={onOpen}>{t("View All →")}</button>}
       </div>
-      {isLoading && <div className={styles.emptyFill}>Loading…</div>}
-      {!isLoading && rows.length === 0 && <div className={styles.emptyFill}>No approval workflows are assigned to you.</div>}
+      {isLoading && <div className={styles.emptyFill}>{t("Loading…")}</div>}
+      {!isLoading && rows.length === 0 && <div className={styles.emptyFill}>{t("No approval workflows are assigned to you.")}</div>}
       {!isLoading && rows.map(row => (
         <button key={row.key} type="button" className={styles.row} onClick={onOpen ?? undefined} disabled={!onOpen}>
           <span className={styles.rowLeft}>
             <span className={styles.rowIcon}><i className={`ti ${ROW_ICONS[row.key] ?? "ti-file"}`} /></span>
             <span>
-              <div className={styles.rowLabel}>{row.label}</div>
-              <div className={styles.rowSub}>{row.sub}</div>
+              <div className={styles.rowLabel}>{t(row.label)}</div>
+              <div className={styles.rowSub}>{t(row.sub)}</div>
             </span>
           </span>
           <span className={`${styles.badge} ${row.count === 0 ? styles.badgeZero : styles.badgeWarn}`}>{row.count}</span>
@@ -97,13 +100,14 @@ interface ActivityProps {
 
 /** What the manager's direct reports have done recently, from the audit trail the manager endpoint already returns. */
 export function RecentTeamActivityCard({ activity, now, isLoading }: ActivityProps) {
+  const t = useT();
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}><i className="ti ti-history" /> Recent Team Activity</h2>
+        <h2 className={styles.cardTitle}><i className="ti ti-history" /> {t("Recent Team Activity")}</h2>
       </div>
-      {isLoading && <div className={styles.emptyFill}>Loading…</div>}
-      {!isLoading && activity.length === 0 && <div className={styles.emptyFill}>No recent team activity.</div>}
+      {isLoading && <div className={styles.emptyFill}>{t("Loading…")}</div>}
+      {!isLoading && activity.length === 0 && <div className={styles.emptyFill}>{t("No recent team activity.")}</div>}
       {!isLoading && activity.slice(0, 4).map((entry, index) => (
         <div key={`${entry.employee_id}-${entry.created_at}-${index}`} className={styles.activity}>
           <span className={styles.rowIcon}><i className="ti ti-user" /></span>
@@ -126,16 +130,17 @@ const TONES = [styles.stageViolet, styles.stageBlue, styles.stageAmber, styles.s
 
 /** Requests submitted this month that are still waiting on this manager (the lists only hold what is waiting for them). */
 export function TeamRequestsMonthCard({ counts, kinds }: MonthProps) {
+  const t = useT();
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}><i className="ti ti-calendar-stats" /> Team Requests (This Month)</h2>
+        <h2 className={styles.cardTitle}><i className="ti ti-calendar-stats" /> {t("Team Requests (This Month)")}</h2>
       </div>
-      <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--on-variant)" }}>Submitted this month and still waiting for your decision.</p>
-      {kinds.length === 0 && <div className={styles.emptyFill}>No approval workflows are assigned to you.</div>}
+      <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--on-variant)" }}>{t("Submitted this month and still waiting for your decision.")}</p>
+      {kinds.length === 0 && <div className={styles.emptyFill}>{t("No approval workflows are assigned to you.")}</div>}
       {kinds.map((kind, index) => (
         <div key={kind} className={`${styles.stage} ${TONES[index % TONES.length]}`}>
-          <span>{KIND_LABELS[kind]}</span>
+          <span>{t(KIND_LABELS[kind])}</span>
           <span className={styles.stageValue}>{counts[kind]}</span>
         </div>
       ))}

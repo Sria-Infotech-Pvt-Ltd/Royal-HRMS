@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { Candidate, CandidateStatus, RECRUITMENT_API, initials } from "./_data";
 
 export const STATUS_META: Record<CandidateStatus, { label: string; cls: string; icon: string }> = {
@@ -13,10 +14,11 @@ export const STATUS_META: Record<CandidateStatus, { label: string; cls: string; 
 };
 
 export function StatusBadge({ status }: { status: CandidateStatus }) {
+  const t = useT();
   const meta = STATUS_META[status] ?? STATUS_META.pending;
   return (
     <span className={`badge ${meta.cls}`}>
-      <i className={`ti ${meta.icon}`} /> {meta.label}
+      <i className={`ti ${meta.icon}`} /> {t(meta.label)}
     </span>
   );
 }
@@ -32,6 +34,7 @@ export function StatusDropdown({
   onChanged: (updated: Candidate) => void;
   onMarkRequest: (candidate: Candidate, targetStatus: "selected" | "rejected") => void;
 }) {
+  const t = useT();
   const [updating, setUpdating] = useState(false);
 
   if (choices.length === 0) return null;
@@ -72,7 +75,7 @@ export function StatusDropdown({
       suppressHydrationWarning
     >
       {options.map(o => (
-        <option key={o.value} value={o.value}>{o.label}</option>
+        <option key={o.value} value={o.value}>{t(o.label)}</option>
       ))}
     </select>
   );

@@ -3,6 +3,7 @@
 // The sign-off chain for one payroll attendance cycle, drawn as three steps:
 // each manager signs off their team, then L1 closes the manager stage, then HR gives the final L2 approval.
 import type { ManagerApproval } from "@/types/payroll";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   managers: ManagerApproval[];
@@ -21,23 +22,24 @@ function dateTime(iso: string): string {
 }
 
 export default function AttendanceCycleSteps({ managers, managersApproved, managersTotal, isL1Done, isL2Done, l2Name, isHrSelfApproved }: Props) {
+  const t = useT();
   const managersDone = managersTotal > 0 && managersApproved === managersTotal;
   const steps: { title: string; detail: string; state: StepState; icon: string }[] = [
     {
-      title: "Managers sign off",
-      detail: managersTotal > 0 ? `${managersApproved} of ${managersTotal} managers` : "No team leads set up",
+      title: t("Managers sign off"),
+      detail: managersTotal > 0 ? t("{approved} of {total} managers", { approved: managersApproved, total: managersTotal }) : t("No team leads set up"),
       state: managersTotal === 0 || managersDone || isL1Done ? "done" : "current",
       icon: "ti-users",
     },
     {
-      title: "L1 approval",
-      detail: isL1Done ? "Approved" : "Waiting",
+      title: t("L1 approval"),
+      detail: isL1Done ? t("Approved") : t("Waiting"),
       state: isL1Done ? "done" : managersTotal === 0 || managersDone ? "current" : "waiting",
       icon: "ti-user-check",
     },
     {
-      title: "L2 · HR final sign-off",
-      detail: isL2Done ? (l2Name ? `Approved by ${l2Name}` : "Approved") : "Waiting",
+      title: t("L2 · HR final sign-off"),
+      detail: isL2Done ? (l2Name ? t("Approved by {name}", { name: l2Name }) : t("Approved")) : t("Waiting"),
       state: isL2Done ? "done" : isL1Done ? "current" : "waiting",
       icon: "ti-shield-check",
     },
@@ -45,7 +47,7 @@ export default function AttendanceCycleSteps({ managers, managersApproved, manag
 
   return (
     <div className="aa-steps-wrap">
-      <ol className="aa-steps" aria-label="Approval progress">
+      <ol className="aa-steps" aria-label={t("Approval progress")}>
         {steps.map(step => (
           <li key={step.title} className={`aa-step is-${step.state}`} aria-current={step.state === "current" ? "step" : undefined}>
             <span className="aa-step-dot"><i className={`ti ${step.state === "done" ? "ti-check" : step.icon}`} /></span>
@@ -57,7 +59,7 @@ export default function AttendanceCycleSteps({ managers, managersApproved, manag
         ))}
       </ol>
 
-      {isHrSelfApproved && <span className="aa-tag">HR self-approved</span>}
+      {isHrSelfApproved && <span className="aa-tag">{t("HR self-approved")}</span>}
 
       {managers.length > 0 && (
         <div className="aa-managers">
@@ -66,7 +68,7 @@ export default function AttendanceCycleSteps({ managers, managersApproved, manag
               <i className={`ti ${row.approved_at ? "ti-circle-check" : "ti-clock"}`} />
               <b>{row.manager_name}</b>
               {row.approved_at && <small>{dateTime(row.approved_at)}</small>}
-              {row.self_approved_at && <em>Self-approved</em>}
+              {row.self_approved_at && <em>{t("Self-approved")}</em>}
             </span>
           ))}
         </div>

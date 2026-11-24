@@ -4,6 +4,7 @@ import styles from "./hrHome.module.css";
 import { countOrDash, relativeTime, totalPending, type PendingRequestRow } from "@/lib/hrHome";
 import type { PipelineCounts } from "@/hooks/useHrHomeData";
 import type { Notification } from "@/types/notifications";
+import { useT } from "@/hooks/useI18n";
 
 const ROW_ICONS: Record<string, string> = {
   face: "ti-face-id", leave: "ti-calendar-off", wfh: "ti-home-2", expense: "ti-receipt", other: "ti-file-description",
@@ -16,22 +17,23 @@ interface PendingProps {
 }
 
 export function HrPendingRequestsCard({ rows, isLoading, onOpen }: PendingProps) {
+  const t = useT();
   const total = totalPending(rows);
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}><i className="ti ti-inbox" /> My Pending Requests{rows.length > 0 && !isLoading ? ` (${total})` : ""}</h2>
-        <button type="button" className={styles.viewAll} onClick={onOpen}>View All →</button>
+        <h2 className={styles.cardTitle}><i className="ti ti-inbox" /> {t("My Pending Requests")}{rows.length > 0 && !isLoading ? ` (${total})` : ""}</h2>
+        <button type="button" className={styles.viewAll} onClick={onOpen}>{t("View All →")}</button>
       </div>
-      {isLoading && <div className={styles.emptyFill}>Loading…</div>}
-      {!isLoading && rows.length === 0 && <div className={styles.emptyFill}>No approval workflows are assigned to you.</div>}
+      {isLoading && <div className={styles.emptyFill}>{t("Loading…")}</div>}
+      {!isLoading && rows.length === 0 && <div className={styles.emptyFill}>{t("No approval workflows are assigned to you.")}</div>}
       {!isLoading && rows.map(row => (
         <button key={row.key} type="button" className={styles.row} onClick={onOpen}>
           <span className={styles.rowLeft}>
             <span className={styles.rowIcon}><i className={`ti ${ROW_ICONS[row.key] ?? "ti-file"}`} /></span>
             <span>
-              <div className={styles.rowLabel}>{row.label}</div>
-              <div className={styles.rowSub}>{row.sub}</div>
+              <div className={styles.rowLabel}>{t(row.label)}</div>
+              <div className={styles.rowSub}>{t(row.sub)}</div>
             </span>
           </span>
           <span className={`${styles.badge} ${row.count === 0 ? styles.badgeZero : ""}`}>{row.count}</span>
@@ -47,6 +49,7 @@ interface PipelineProps {
 }
 
 export function HrPipelineCard({ pipeline, onOpen }: PipelineProps) {
+  const t = useT();
   const stages = [
     { key: "positions", label: "Open Positions", icon: "ti-briefcase", value: null, tone: styles.stageViolet },
     { key: "applications", label: "Applications", icon: "ti-users", value: pipeline.applications, tone: styles.stageBlue },
@@ -57,12 +60,12 @@ export function HrPipelineCard({ pipeline, onOpen }: PipelineProps) {
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}><i className="ti ti-filter" /> Recruitment Pipeline</h2>
-        <button type="button" className={styles.viewAll} onClick={onOpen}>View All →</button>
+        <h2 className={styles.cardTitle}><i className="ti ti-filter" /> {t("Recruitment Pipeline")}</h2>
+        <button type="button" className={styles.viewAll} onClick={onOpen}>{t("View All →")}</button>
       </div>
       {stages.map(stage => (
-        <div key={stage.key} className={`${styles.stage} ${stage.tone}`} title={stage.value === null ? "No data source for this figure yet" : undefined}>
-          <span><i className={`ti ${stage.icon}`} />{stage.label}</span>
+        <div key={stage.key} className={`${styles.stage} ${stage.tone}`} title={stage.value === null ? t("No data source for this figure yet") : undefined}>
+          <span><i className={`ti ${stage.icon}`} />{t(stage.label)}</span>
           <span className={styles.stageValue}>{countOrDash(stage.value)}</span>
         </div>
       ))}
@@ -78,13 +81,14 @@ interface ActivityProps {
 
 /** The person's own latest notifications, which is where approvals and requests addressed to them are announced. */
 export function HrRecentActivitiesCard({ activities, now, isLoading }: ActivityProps) {
+  const t = useT();
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}><i className="ti ti-history" /> Recent Activities</h2>
+        <h2 className={styles.cardTitle}><i className="ti ti-history" /> {t("Recent Activities")}</h2>
       </div>
-      {isLoading && <div className={styles.emptyFill}>Loading…</div>}
-      {!isLoading && activities.length === 0 && <div className={styles.emptyFill}>No recent activity.</div>}
+      {isLoading && <div className={styles.emptyFill}>{t("Loading…")}</div>}
+      {!isLoading && activities.length === 0 && <div className={styles.emptyFill}>{t("No recent activity.")}</div>}
       {!isLoading && activities.map(activity => (
         <div key={activity.id} className={styles.activity}>
           <span className={styles.rowIcon}><i className="ti ti-user" /></span>
@@ -105,6 +109,7 @@ interface ComplianceProps {
 
 /** Document verifications and policy acknowledgements have no count source yet, so they show a dash. */
 export function HrTeamComplianceCard({ attendanceExceptions, onOpenAttendance }: ComplianceProps) {
+  const t = useT();
   const rows = [
     { key: "exceptions", label: "Attendance Exceptions", icon: "ti-alert-triangle", value: attendanceExceptions, onClick: onOpenAttendance },
     { key: "documents", label: "Document Verifications", icon: "ti-file-check", value: null, onClick: undefined },
@@ -113,14 +118,14 @@ export function HrTeamComplianceCard({ attendanceExceptions, onOpenAttendance }:
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}><i className="ti ti-shield-check" /> Team &amp; Compliance</h2>
+        <h2 className={styles.cardTitle}><i className="ti ti-shield-check" /> {t("Team & Compliance")}</h2>
       </div>
       {rows.map(row => (
         <button key={row.key} type="button" className={styles.row} onClick={row.onClick} disabled={!row.onClick}
-          title={row.value === null && !row.onClick ? "No data source for this figure yet" : undefined}>
+          title={row.value === null && !row.onClick ? t("No data source for this figure yet") : undefined}>
           <span className={styles.rowLeft}>
             <span className={styles.rowIcon}><i className={`ti ${row.icon}`} /></span>
-            <span className={styles.rowLabel}>{row.label}</span>
+            <span className={styles.rowLabel}>{t(row.label)}</span>
           </span>
           <span className={`${styles.badge} ${styles.badgeWarn}`}>{countOrDash(row.value)}</span>
         </button>

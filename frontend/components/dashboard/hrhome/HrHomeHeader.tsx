@@ -4,6 +4,7 @@ import styles from "./hrHome.module.css";
 import { countOrDash, greetingFor, initialsOf } from "@/lib/hrHome";
 import type { DashboardOverview } from "@/types/dashboard";
 import type { PipelineCounts } from "@/hooks/useHrHomeData";
+import { useT } from "@/hooks/useI18n";
 
 interface BannerProps {
   /** The screen's title; the HR dashboard's by default. The Manager dashboard shares this banner. */
@@ -16,21 +17,22 @@ interface BannerProps {
 }
 
 export function HrHomeBanner({ title = "HR Dashboard", name, designation, now, onOpenWorkspace }: BannerProps) {
+  const t = useT();
   const firstName = name.trim().split(/\s+/)[0] ?? "";
   return (
     <section className={styles.banner}>
       <div className={styles.bannerLeft}>
         <div className={styles.avatar} aria-hidden="true">{initialsOf(name)}</div>
         <div>
-          <h1 className={styles.bannerTitle}>{title}</h1>
+          <h1 className={styles.bannerTitle}>{t(title)}</h1>
           <p className={styles.bannerSub}>
-            {now ? `${greetingFor(now.getHours())}, ${firstName}` : firstName}
+            {now ? t("{greeting}, {name}", { greeting: t(greetingFor(now.getHours())), name: firstName }) : firstName}
             {designation && <><span>|</span>{designation}</>}
           </p>
         </div>
       </div>
       <button type="button" className={styles.bannerButton} onClick={onOpenWorkspace}>
-        <i className="ti ti-user" /> My Workspace <i className="ti ti-arrow-right" />
+        <i className="ti ti-user" /> {t("My Workspace")} <i className="ti ti-arrow-right" />
       </button>
     </section>
   );
@@ -54,15 +56,16 @@ export interface StatTile {
 
 /** A row of stat tiles. A tile whose value is null shows a dash: a figure with no data source is never invented. */
 export function StatTiles({ tiles, isLoading }: { tiles: StatTile[]; isLoading: boolean }) {
+  const t = useT();
   return (
     <div className={styles.tiles}>
       {tiles.map(tile => (
         <div key={tile.key} className={styles.tile}>
           <div className={styles.tileIcon}><i className={`ti ${tile.icon}`} /></div>
           <div style={{ minWidth: 0 }}>
-            <div className={styles.tileLabel}>{tile.label}</div>
+            <div className={styles.tileLabel}>{t(tile.label)}</div>
             <div className={styles.tileValue}>{isLoading && tile.value === null ? "…" : countOrDash(tile.value)}</div>
-            {tile.sub && <div className={`${styles.tileSub} ${tile.subGood ? styles.tileSubGood : ""}`}>{tile.sub}</div>}
+            {tile.sub && <div className={`${styles.tileSub} ${tile.subGood ? styles.tileSubGood : ""}`}>{t(tile.sub)}</div>}
           </div>
         </div>
       ))}
@@ -72,10 +75,11 @@ export function StatTiles({ tiles, isLoading }: { tiles: StatTile[]; isLoading: 
 
 /** The six stat tiles. A figure with no data source (open requisitions) is a dash, not a number. */
 export function HrHomeTiles({ overview, pendingApprovals, pipeline, isLoading }: TilesProps) {
+  const t = useT();
   const tiles: StatTile[] = [
     {
       key: "employees", label: "Total Employees", icon: "ti-users", value: overview?.total_headcount ?? null,
-      sub: overview && overview.new_this_month > 0 ? `↑ +${overview.new_this_month} this month` : undefined, subGood: true,
+      sub: overview && overview.new_this_month > 0 ? t("↑ +{count} this month", { count: overview.new_this_month }) : undefined, subGood: true,
     },
     { key: "requests", label: "Open Requests", icon: "ti-file-text", value: overview?.open_requests ?? null },
     { key: "approvals", label: "Pending Approvals", icon: "ti-calendar-check", value: pendingApprovals },

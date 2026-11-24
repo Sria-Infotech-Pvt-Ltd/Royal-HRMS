@@ -1,3 +1,4 @@
+import { useT } from "@/hooks/useI18n";
 import type { ApprovalStage, SeparationRequest } from "@/types/separation";
 import { fmtDateTime, statusBadgeClass } from "../../_workflow";
 
@@ -7,6 +8,7 @@ const STAGE_MANAGER = "manager";
 function StageRow({ stage, onDecide, showOrgChartNote }: {
   stage: ApprovalStage; onDecide: (action: "approve" | "reject") => void; showOrgChartNote: boolean;
 }) {
+  const t = useT();
   const dotClass = stage.status.toLowerCase().includes("reject") ? "tl-error"
     : stage.status.toLowerCase().includes("approve") ? "tl-success" : "tl-neutral";
   const icon = stage.status.toLowerCase().includes("reject") ? "ti-x"
@@ -25,17 +27,17 @@ function StageRow({ stage, onDecide, showOrgChartNote }: {
             {stage.can_action && (
               <div style={{ display: "flex", gap: 6 }}>
                 <button className="btn btn-danger btn-sm" onClick={() => onDecide("reject")} suppressHydrationWarning>
-                  <i className="ti ti-x" /> Reject
+                  <i className="ti ti-x" /> {t("Reject")}
                 </button>
                 <button className="btn btn-success btn-sm" onClick={() => onDecide("approve")} suppressHydrationWarning>
-                  <i className="ti ti-check" /> Approve
+                  <i className="ti ti-check" /> {t("Approve")}
                 </button>
               </div>
             )}
           </div>
         </div>
         <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-          {stage.approver_name || "Not yet assigned"}{stage.actioned_at ? ` · ${fmtDateTime(stage.actioned_at)}` : ""}
+          {stage.approver_name || t("Not yet assigned")}{stage.actioned_at ? ` · ${fmtDateTime(stage.actioned_at)}` : ""}
           {/* UAT-012: the Manager stage's approver is resolved from the org
               chart (apps/hrms/views/separation.py's _resolve_separation_chain),
               which — unlike hire-time auto-assign — has no same-branch
@@ -47,7 +49,7 @@ function StageRow({ stage, onDecide, showOrgChartNote }: {
               "who approves this" vs "who is officially this employee's
               manager". */}
           {showOrgChartNote && stage.approver_name && (
-            <span style={{ fontStyle: "italic" }}> (resolved via org chart — not this employee&apos;s recorded reporting manager)</span>
+            <span style={{ fontStyle: "italic" }}> {t("(resolved via org chart — not this employee's recorded reporting manager)")}</span>
           )}
         </div>
         {stage.remarks && (
@@ -66,16 +68,17 @@ interface Props {
 }
 
 export default function ApprovalSection({ r, onDecide }: Props) {
+  const t = useT();
   const stages = [...r.approval_stages].sort((a, b) => a.sequence - b.sequence);
 
   return (
     <div className="card mb-16">
       <div className="card-header">
-        <span className="card-title"><i className="ti ti-checks" /> Approval</span>
+        <span className="card-title"><i className="ti ti-checks" /> {t("Approval")}</span>
       </div>
       <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {stages.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>No approval stages configured.</p>
+          <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>{t("No approval stages configured.")}</p>
         ) : (
           stages.map(stage => (
             <StageRow

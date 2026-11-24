@@ -2,14 +2,16 @@
 
 import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
+import { useT } from "@/hooks/useI18n";
 import { MSME_CLASS_OPTIONS } from "../_data";
 
 export default function OtherRegistrationsCard({ form, errors, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
+  const t = useT();
   return (
-    <ProfileCard icon="ti-certificate" title="Other registrations" subtitle="Add only what applies. All optional." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
+    <ProfileCard icon="ti-certificate" title={t("Other registrations")} subtitle={t("Add only what applies. All optional.")} collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       <div className="form-row cols-2">
         <div className="field-group">
-          <label className="field-label">Udyam / MSME <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+          <label className="field-label">{t("Udyam / MSME")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
           <input
             className={`field-input${errors.udyam_msme ? " field-error" : ""}`}
             value={form.udyam_msme}
@@ -20,18 +22,18 @@ export default function OtherRegistrationsCard({ form, errors, canEdit, onFieldC
           {errors.udyam_msme && <div className="field-error-msg">{errors.udyam_msme}</div>}
         </div>
         <div className="field-group">
-          <label className="field-label">MSME Class <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+          <label className="field-label">{t("MSME Class")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
           <select
             className="field-input field-select"
             value={form.msme_class}
             disabled={!canEdit}
             onChange={e => onFieldChange("msme_class", e.target.value)}
           >
-            {MSME_CLASS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {MSME_CLASS_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">Import Export Code (IEC) <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+          <label className="field-label">{t("Import Export Code (IEC)")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
           <input
             className={`field-input${errors.iec ? " field-error" : ""}`}
             value={form.iec}
@@ -42,7 +44,7 @@ export default function OtherRegistrationsCard({ form, errors, canEdit, onFieldC
           {errors.iec && <div className="field-error-msg">{errors.iec}</div>}
         </div>
         <div className="field-group">
-          <label className="field-label">EPFO Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+          <label className="field-label">{t("EPFO Code")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
           <input
             className={`field-input${errors.epfo_code ? " field-error" : ""}`}
             value={form.epfo_code}
@@ -52,18 +54,18 @@ export default function OtherRegistrationsCard({ form, errors, canEdit, onFieldC
           {errors.epfo_code && <div className="field-error-msg">{errors.epfo_code}</div>}
         </div>
         <div className="field-group">
-          <label className="field-label">ESIC Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+          <label className="field-label">{t("ESIC Code")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
           <input
             className={`field-input${errors.esic_code ? " field-error" : ""}`}
             value={form.esic_code}
             disabled={!canEdit}
             onChange={e => onFieldChange("esic_code", e.target.value)}
-            placeholder="17 digits"
+            placeholder={t("17 digits")}
           />
           {errors.esic_code && <div className="field-error-msg">{errors.esic_code}</div>}
         </div>
         <div className="field-group">
-          <label className="field-label">Professional Tax Reg. <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(state-wise, optional)</span></label>
+          <label className="field-label">{t("Professional Tax Reg.")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(state-wise, optional)")}</span></label>
           <input
             className={`field-input${errors.professional_tax_reg ? " field-error" : ""}`}
             value={form.professional_tax_reg}

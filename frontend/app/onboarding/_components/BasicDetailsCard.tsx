@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import SearchableSelect from "@/components/SearchableSelect";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 // Shown at the top of the onboarding wizard's first step — the "basic
 // details" captured back at Add Employee time (name, contact, employment
@@ -54,9 +55,10 @@ const EMP_TYPES = ["Permanent", "Contract", "Freelancer", "Consultant", "Part-Ti
 // a border. overflow-wrap/minWidth guard against a long value (an email
 // address in particular) overflowing its grid column into the next one.
 function Row({ label, value }: { label: string; value: string }) {
+  const t = useT();
   return (
     <div className="field-group" style={{ minWidth: 0 }}>
-      <label className="field-label">{label}</label>
+      <label className="field-label">{t(label)}</label>
       <div className="field-static" style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
         {value || "—"}
       </div>
@@ -65,6 +67,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export default function BasicDetailsCard({ employeeId, details, editable, onSaved }: Props) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [form,    setForm]    = useState<BasicDetails>(details);
   const [saving,  setSaving]  = useState(false);
@@ -134,7 +137,7 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
       setPositionId("");
       setEditing(false);
     } catch (err: unknown) {
-      setError((err as { message?: string })?.message ?? "Failed to save basic details.");
+      setError((err as { message?: string })?.message ?? t("Failed to save basic details."));
     } finally {
       setSaving(false);
     }
@@ -157,10 +160,10 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
       boxShadow: "0 1px 3px rgba(20, 21, 31, 0.04)",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--on-bg)" }}>Basic Details</div>
+        <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--on-bg)" }}>{t("Basic Details")}</div>
         {editable && !editing && (
           <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)} type="button">
-            <i className="ti ti-edit" style={{ fontSize: 13 }} /> Edit
+            <i className="ti ti-edit" style={{ fontSize: 13 }} /> {t("Edit")}
           </button>
         )}
       </div>
@@ -182,35 +185,35 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
         <>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Full Name</label>
+              <label className="field-label">{t("Full Name")}</label>
               <input className="field-input" value={form.full_name} onChange={e => set("full_name", e.target.value)} />
             </div>
             <div className="field-group">
-              <label className="field-label">Email <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(locked — login identity)</span></label>
+              <label className="field-label">{t("Email")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(locked — login identity)")}</span></label>
               <input className="field-input" value={form.email} disabled style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} />
             </div>
             <div className="field-group">
-              <label className="field-label">Phone</label>
+              <label className="field-label">{t("Phone")}</label>
               <input className="field-input" value={form.phone} onChange={e => set("phone", e.target.value)} />
             </div>
             <div className="field-group">
-              <label className="field-label">Employee Type</label>
+              <label className="field-label">{t("Employee Type")}</label>
               <select className="field-input field-select" value={form.employee_type} onChange={e => set("employee_type", e.target.value)}>
-                {EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {EMP_TYPES.map(type => <option key={type} value={type}>{t(type)}</option>)}
               </select>
             </div>
             <div className="field-group">
-              <label className="field-label">Date of Joining</label>
+              <label className="field-label">{t("Date of Joining")}</label>
               <DateInput className="field-input" value={form.date_of_joining} onChange={isoDate => set("date_of_joining", isoDate)} />
             </div>
             <div className="field-group">
-              <label className="field-label">Company Code</label>
+              <label className="field-label">{t("Company Code")}</label>
               <SearchableSelect
                 inputClassName="field-input"
                 value={form.branch}
                 onChange={v => set("branch", v)}
                 options={[
-                  { value: form.branch, label: form.branch || "— current —" },
+                  { value: form.branch, label: form.branch || t("— current —") },
                   ...branches.filter(b => b.branch_name !== form.branch).map(b => ({ value: b.branch_name, label: b.branch_name })),
                 ]}
               />
@@ -219,23 +222,23 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
 
           <div className="form-row cols-2" style={{ marginTop: 4 }}>
             <div className="field-group">
-              <label className="field-label">Org Unit <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(only if reassigning)</span></label>
+              <label className="field-label">{t("Org Unit")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(only if reassigning)")}</span></label>
               <SearchableSelect
                 inputClassName="field-input"
                 value={orgUnitId}
                 onChange={v => { setOrgUnitId(v); setPositionId(""); }}
-                placeholder={`— Keep current: ${form.department || "none"} —`}
+                placeholder={t("— Keep current: {department} —", { department: form.department || t("none") })}
                 options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
               />
             </div>
             <div className="field-group">
-              <label className="field-label">Position</label>
+              <label className="field-label">{t("Position")}</label>
               <SearchableSelect
                 inputClassName="field-input"
                 value={positionId}
                 onChange={setPositionId}
                 disabled={!orgUnitId}
-                placeholder={orgUnitId ? "— Select position —" : "Pick an org unit first"}
+                placeholder={orgUnitId ? t("— Select position —") : t("Pick an org unit first")}
                 options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
               />
             </div>
@@ -243,9 +246,9 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
 
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
             <button className="btn btn-filled" onClick={save} disabled={saving} type="button">
-              {saving ? "Saving…" : "Save"}
+              {saving ? t("Saving…") : t("Save")}
             </button>
-            <button className="btn btn-ghost" onClick={cancel} disabled={saving} type="button">Cancel</button>
+            <button className="btn btn-ghost" onClick={cancel} disabled={saving} type="button">{t("Cancel")}</button>
           </div>
         </>
       )}

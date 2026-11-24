@@ -6,6 +6,8 @@ import { useSharedAnnouncement, useBirthdaysToday } from "@/hooks/useEmployeeDas
 import { formatDate } from "@/lib/formatDate";
 import { announcementLinkHref } from "@/lib/announcementLink";
 import { categoryLabel } from "@/lib/announcementCategories";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 function fmtDate(iso: string): string {
   return formatDate(iso);
@@ -13,14 +15,15 @@ function fmtDate(iso: string): string {
 
 function namesList(names: string[]): string {
   if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+  if (names.length === 2) return tr("{first} and {second}", { first: names[0], second: names[1] });
+  return tr("{list}, and {last}", { list: names.slice(0, -1).join(", "), last: names[names.length - 1] });
 }
 
 // Combines the announcement banner and today's-birthdays banner into one card
 // instead of two separately-boxed, differently-colored strips stacked on top
 // of each other — same information, one consistent container.
 export default function EmpUpdatesCard() {
+  const t = useT();
   const { data: announcement, loading: loadingAnnouncement } = useSharedAnnouncement();
   const { data: birthdayData, loading: loadingBirthdays }    = useBirthdaysToday();
 
@@ -57,7 +60,7 @@ export default function EmpUpdatesCard() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                {announcement.is_pinned ? "Pinned Announcement" : "Latest Announcement"}
+                {announcement.is_pinned ? t("Pinned Announcement") : t("Latest Announcement")}
               </span>
               {announcement.posted_by && (
                 <span style={{ fontSize: 10, color: "var(--on-variant)" }}>
@@ -78,12 +81,12 @@ export default function EmpUpdatesCard() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <Link href={announcementLinkHref(announcement.id)} style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none", whiteSpace: "nowrap" }}>
-              {announcement.more_count ? `+${announcement.more_count} more · ` : ""}View <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
+              {announcement.more_count ? t("+{count} more · View", { count: announcement.more_count }) : t("View")} <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
             </Link>
             <button
               onClick={() => setAnnouncementDismissed(true)}
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--on-variant)", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}
-              aria-label="Dismiss announcement"
+              aria-label={t("Dismiss announcement")}
             >
               <i className="ti ti-x" />
             </button>
@@ -99,18 +102,19 @@ export default function EmpUpdatesCard() {
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--info)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 2 }}>
-              {birthdaysToday.length === 1 ? "Birthday Today" : "Birthdays Today"}
+              {birthdaysToday.length === 1 ? t("Birthday Today") : t("Birthdays Today")}
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
-              Today is {namesList(birthdaysToday.map(e => e.full_name))}&apos;s
-              {birthdaysToday.length > 1 ? " birthdays" : " birthday"}. Wish them well.
+              {birthdaysToday.length > 1
+                ? t("Today is {names}'s birthdays. Wish them well.", { names: namesList(birthdaysToday.map(e => e.full_name)) })
+                : t("Today is {names}'s birthday. Wish them well.", { names: namesList(birthdaysToday.map(e => e.full_name)) })}
             </div>
           </div>
 
           <button
             onClick={() => setBirthdayDismissed(true)}
             style={{ background: "none", border: "none", cursor: "pointer", color: "var(--on-variant)", fontSize: 14, padding: "2px 4px", lineHeight: 1, flexShrink: 0 }}
-            aria-label="Dismiss birthday banner"
+            aria-label={t("Dismiss birthday banner")}
           >
             <i className="ti ti-x" />
           </button>

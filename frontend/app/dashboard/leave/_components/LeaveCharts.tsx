@@ -16,8 +16,16 @@ function niceMax(value: number): number {
   return Math.ceil(value / step) * step;
 }
 
-function plural(count: number, word: string): string {
-  return `${count} ${word}${count === 1 ? "" : "s"}`;
+function requestsText(count: number): string {
+  return count === 1 ? tr("{count} request", { count }) : tr("{count} requests", { count });
+}
+
+function approvedDaysText(count: number): string {
+  return count === 1 ? tr("{count} approved day", { count }) : tr("{count} approved days", { count });
+}
+
+function monthSummary(point: MonthPoint): string {
+  return tr("{month}: {requests}, {days}", { month: tr(MONTH_NAMES[point.month - 1]), requests: requestsText(point.requests), days: approvedDaysText(point.approved_days) });
 }
 
 export function MonthlyBars({ data }: { data: MonthPoint[] }) {
@@ -28,10 +36,10 @@ export function MonthlyBars({ data }: { data: MonthPoint[] }) {
   const barWidth = Math.min(14, slot / 2.6);
   const baseline = PAD.top + plotHeight;
   const y = (value: number) => baseline - (value / top) * plotHeight;
-  const summary = data.map(p => `${MONTH_NAMES[p.month - 1]}: ${plural(p.requests, "request")}, ${plural(p.approved_days, "approved day")}`).join("; ");
+  const summary = data.map(monthSummary).join("; ");
 
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label={`Leave requests and approved days for each month. ${summary}`}>
+    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label={tr("Leave requests and approved days for each month. {summary}", { summary })}>
       {[0, 0.25, 0.5, 0.75, 1].map(fraction => {
         const value = top * fraction;
         return (
@@ -45,10 +53,10 @@ export function MonthlyBars({ data }: { data: MonthPoint[] }) {
         const centre = PAD.left + slot * index + slot / 2;
         return (
           <g key={point.month}>
-            <title>{`${MONTH_NAMES[point.month - 1]}: ${plural(point.requests, "request")}, ${plural(point.approved_days, "approved day")}`}</title>
+            <title>{monthSummary(point)}</title>
             <rect x={centre - barWidth - 1} y={y(point.requests)} width={barWidth} height={baseline - y(point.requests)} rx={3} fill="var(--brand)" fillOpacity={0.35} />
             <rect x={centre + 1} y={y(point.approved_days)} width={barWidth} height={baseline - y(point.approved_days)} rx={3} fill="#16a34a" />
-            <text x={centre} y={HEIGHT - 8} textAnchor="middle" fontSize={10} fill="currentColor" fillOpacity={0.65}>{MONTH_NAMES[point.month - 1]}</text>
+            <text x={centre} y={HEIGHT - 8} textAnchor="middle" fontSize={10} fill="currentColor" fillOpacity={0.65}>{tr(MONTH_NAMES[point.month - 1])}</text>
           </g>
         );
       })}
@@ -61,7 +69,7 @@ export function StatusDonut({ slices, total }: { slices: DonutSlice[]; total: nu
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
   return (
-    <svg viewBox="0 0 140 140" style={{ width: 150, height: 150, flex: "none" }} role="img" aria-label={`Requests by status, ${total} in total. ${slices.map(s => `${s.label}: ${s.value}`).join(", ")}`}>
+    <svg viewBox="0 0 140 140" style={{ width: 150, height: 150, flex: "none" }} role="img" aria-label={tr("Requests by status, {total} in total. {list}", { total, list: slices.map(s => `${s.label}: ${s.value}`).join(", ") })}>
       <circle cx={70} cy={70} r={radius} fill="none" stroke="currentColor" strokeOpacity={0.1} strokeWidth={16} />
       {slices.filter(slice => slice.value > 0).map(slice => {
         const length = (slice.value / total) * circumference;

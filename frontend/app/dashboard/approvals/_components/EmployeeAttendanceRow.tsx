@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 
 export interface EmployeeRow {
@@ -79,6 +80,7 @@ export default function EmployeeAttendanceRow({ emp, cycleId, cycleStart }: {
   cycleId: string;
   cycleStart: string;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
 
   const { data: daily, loading } = useFetch<DailyData>(
@@ -108,7 +110,7 @@ export default function EmployeeAttendanceRow({ emp, cycleId, cycleStart }: {
             </div>
             {emp.lop_days > 0 && !expanded && (
               <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#b91c1c", background: "rgba(185,28,28,0.08)", padding: "1px 7px", borderRadius: 20 }}>
-                {emp.lop_days} LOP
+                {t("{count} LOP", { count: emp.lop_days })}
               </span>
             )}
           </div>
@@ -133,22 +135,22 @@ export default function EmployeeAttendanceRow({ emp, cycleId, cycleStart }: {
             {loading ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 48px", fontSize: 12, color: "var(--on-variant)" }}>
                 <i className="ti ti-loader-2 animate-spin" style={{ color: "var(--primary)" }} />
-                Loading daily records…
+                {t("Loading daily records…")}
               </div>
             ) : !daily || daily.days.length === 0 ? (
               <div style={{ padding: "16px 48px", fontSize: 12, color: "var(--on-variant)" }}>
-                No attendance records found for this period.
+                {t("No attendance records found for this period.")}
               </div>
             ) : (
               <div>
                 {/* Header strip */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 48px 6px", borderBottom: "1px solid var(--outline-v)" }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-bg)" }}>
-                    Daily Breakdown — {daily.full_name}
+                    {t("Daily Breakdown — {name}", { name: daily.full_name })}
                     {flaggedCount > 0 && (
                       <span style={{ marginLeft: 10, fontSize: 11, color: "#b91c1c", fontWeight: 700 }}>
                         <i className="ti ti-alert-triangle" style={{ marginRight: 4 }} />
-                        {flaggedCount} day{flaggedCount > 1 ? "s" : ""} flagged
+                        {flaggedCount > 1 ? t("{count} days flagged", { count: flaggedCount }) : t("{count} day flagged", { count: flaggedCount })}
                       </span>
                     )}
                   </div>
@@ -160,7 +162,7 @@ export default function EmployeeAttendanceRow({ emp, cycleId, cycleStart }: {
                     style={{ fontSize: 12, color: "var(--primary)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 500 }}
                   >
                     <i className="ti ti-external-link" style={{ fontSize: 12 }} />
-                    Open in Attendance Calendar
+                    {t("Open in Attendance Calendar")}
                   </a>
                 </div>
 
@@ -177,7 +179,7 @@ export default function EmployeeAttendanceRow({ emp, cycleId, cycleStart }: {
                             fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em",
                             borderBottom: "1px solid var(--outline-v)",
                           }}>
-                            {h}
+                            {t(h)}
                           </th>
                         ))}
                       </tr>

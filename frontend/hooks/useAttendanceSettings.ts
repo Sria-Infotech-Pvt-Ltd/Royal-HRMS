@@ -1,3 +1,4 @@
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
@@ -169,11 +170,11 @@ export function useAttendanceSettings() {
     try {
       const res = await clientApi.put(API.attendance.settings, buildPutPayload(form));
       initialForm.current = { ...form };
-      const msg = (res.data as { message?: string })?.message ?? "Settings saved.";
+      const msg = (res.data as { message?: string })?.message ?? tr("Settings saved.");
       showToast(msg, "success");
     } catch (err: unknown) {
       const e = err as NormalisedError;
-      showToast(e?.message ?? "Failed to save attendance settings.", "error");
+      showToast(e?.message ?? tr("Failed to save attendance settings."), "error");
       if (e?.data && typeof e.data === "object") setFieldErrors(e.data as FieldErrors);
     } finally {
       setSaving(false);
@@ -186,11 +187,11 @@ export function useAttendanceSettings() {
     try {
       const res = await clientApi.patch(API.attendance.settings, buildPatchPayload(section, form));
       initialForm.current = { ...form };
-      const msg = (res.data as { message?: string })?.message ?? "Settings saved.";
+      const msg = (res.data as { message?: string })?.message ?? tr("Settings saved.");
       showToast(msg, "success");
     } catch (err: unknown) {
       const e = err as NormalisedError;
-      showToast(e?.message ?? "Failed to save attendance settings.", "error");
+      showToast(e?.message ?? tr("Failed to save attendance settings."), "error");
       if (e?.data && typeof e.data === "object") setFieldErrors(e.data as FieldErrors);
     } finally {
       setSavingSection(null);

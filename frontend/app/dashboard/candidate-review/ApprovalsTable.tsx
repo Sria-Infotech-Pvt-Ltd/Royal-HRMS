@@ -4,6 +4,7 @@ import Link from "next/link";
 import { fmtDate, initials } from "../interview-list/_data";
 import type { ApprovalUser } from "./_components/OnboardingDrawer";
 import { isApprovedStatus, rangeLabel, statusMeta } from "./_filters";
+import { useT } from "@/hooks/useI18n";
 
 interface ApprovalsTableProps {
   rows:           ApprovalUser[]
@@ -24,8 +25,9 @@ interface ApprovalsTableProps {
 }
 
 function Skeleton() {
+  const t = useT();
   return (
-    <div className="cand-skeleton" role="status" aria-label="Loading submissions">
+    <div className="cand-skeleton" role="status" aria-label={t("Loading submissions")}>
       {[0, 1, 2, 3].map(row => (
         <div key={row} className="cand-skeleton-row">
           <span className="cand-skeleton-dot" /><span className="cand-skeleton-bar" /><span className="cand-skeleton-bar short" />
@@ -36,54 +38,57 @@ function Skeleton() {
 }
 
 function EmptyState({ hasFilters, onClearFilters }: Pick<ApprovalsTableProps, "hasFilters" | "onClearFilters">) {
+  const t = useT();
   return (
     <div className="empty-state cand-empty">
       <i className={`ti ${hasFilters ? "ti-search-off" : "ti-user-plus"}`} />
-      <h3>{hasFilters ? "No submissions match your filters" : "No onboarding submissions yet"}</h3>
+      <h3>{hasFilters ? t("No submissions match your filters") : t("No onboarding submissions yet")}</h3>
       <p>
         {hasFilters
-          ? "Try a different search or status, or clear the filters to see everything."
-          : "When a selected candidate completes the onboarding wizard, their submission will appear here for review."}
+          ? t("Try a different search or status, or clear the filters to see everything.")
+          : t("When a selected candidate completes the onboarding wizard, their submission will appear here for review.")}
       </p>
       {hasFilters && (
-        <button type="button" className="btn btn-ghost" onClick={onClearFilters}><i className="ti ti-filter-off" /> Clear filters</button>
+        <button type="button" className="btn btn-ghost" onClick={onClearFilters}><i className="ti ti-filter-off" /> {t("Clear filters")}</button>
       )}
     </div>
   );
 }
 
 function ActionCell({ row, canApprove, onReview }: { row: ApprovalUser; canApprove: boolean; onReview: (row: ApprovalUser) => void }) {
+  const t = useT();
   if (row.onboarding_status === "rejected") {
-    return <span className="badge badge-neutral" title="Waiting for the employee to correct and resubmit">Awaiting resubmission</span>;
+    return <span className="badge badge-neutral" title={t("Waiting for the employee to correct and resubmit")}>{t("Awaiting resubmission")}</span>;
   }
   if (isApprovedStatus(row.onboarding_status)) {
     // The review drawer is for deciding; an approved person has moved on to the employee list, so open their profile instead.
-    return <Link className="btn btn-sm btn-ghost" href={`/dashboard/employees/${row.id}`}><i className="ti ti-user" /> Open profile</Link>;
+    return <Link className="btn btn-sm btn-ghost" href={`/dashboard/employees/${row.id}`}><i className="ti ti-user" /> {t("Open profile")}</Link>;
   }
   if (!canApprove) return null;
   const isPending = row.onboarding_status === "submitted";
   return (
     <button type="button" className={`btn btn-sm ${isPending ? "btn-filled" : "btn-ghost"}`} onClick={() => onReview(row)}>
-      <i className={`ti ${isPending ? "ti-clipboard-check" : "ti-eye"}`} /> {isPending ? "Review" : "View"}
+      <i className={`ti ${isPending ? "ti-clipboard-check" : "ti-eye"}`} /> {isPending ? t("Review") : t("View")}
     </button>
   );
 }
 
 /** The submissions list, with its own loading, error and empty states. */
 export default function ApprovalsTable(props: ApprovalsTableProps) {
+  const t = useT();
   const { rows, isLoading, error, canApprove, showBranch } = props;
   return (
     <div className="card" style={{ overflow: "visible" }}>
       <div className="card-header">
         <span className="card-title">
-          <i className="ti ti-clipboard-list" /> Submissions ({props.matching})
+          <i className="ti ti-clipboard-list" /> {t("Submissions ({count})", { count: props.matching })}
         </span>
       </div>
 
       {error && (
         <div className="alert alert-error" style={{ margin: "0 20px 16px" }}>
           <i className="ti ti-alert-circle" /><div>{error}</div>
-          <button type="button" className="btn-link" style={{ marginLeft: "auto" }} onClick={props.onRetry}>Try again</button>
+          <button type="button" className="btn-link" style={{ marginLeft: "auto" }} onClick={props.onRetry}>{t("Try again")}</button>
         </div>
       )}
 
@@ -94,9 +99,9 @@ export default function ApprovalsTable(props: ApprovalsTableProps) {
           <table className="data-table" style={{ minWidth: 560 }}>
             <thead>
               <tr>
-                <th>Name</th><th className="col-hide-sm">Designation</th>
-                {showBranch && <th className="col-hide-md">Company Code</th>}
-                <th className="col-hide-md">Joined</th><th>Status</th><th>Actions</th>
+                <th>{t("Name")}</th><th className="col-hide-sm">{t("Designation")}</th>
+                {showBranch && <th className="col-hide-md">{t("Company Code")}</th>}
+                <th className="col-hide-md">{t("Joined")}</th><th>{t("Status")}</th><th>{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -116,7 +121,7 @@ export default function ApprovalsTable(props: ApprovalsTableProps) {
                     <td className="col-hide-sm">{row.designation || "—"}</td>
                     {showBranch && <td className="col-hide-md">{row.branch || "—"}</td>}
                     <td className="col-hide-md">{fmtDate(row.date_joined)}</td>
-                    <td><span className={`badge ${meta.badge}`} style={{ whiteSpace: "nowrap" }}><i className={`ti ${meta.icon}`} /> {meta.label}</span></td>
+                    <td><span className={`badge ${meta.badge}`} style={{ whiteSpace: "nowrap" }}><i className={`ti ${meta.icon}`} /> {t(meta.label)}</span></td>
                     <td><ActionCell row={row} canApprove={canApprove} onReview={props.onReview} /></td>
                   </tr>
                 );
@@ -131,11 +136,11 @@ export default function ApprovalsTable(props: ApprovalsTableProps) {
           <span>{rangeLabel(props.page, props.pageSize, rows.length, props.matching)}</span>
           <div className="cand-pager-buttons">
             <button type="button" className="btn btn-ghost btn-sm" disabled={props.page <= 1 || isLoading} onClick={() => props.onPageChange(props.page - 1)}>
-              <i className="ti ti-chevron-left" /> Prev
+              <i className="ti ti-chevron-left" /> {t("Prev")}
             </button>
-            <span className="cand-pager-page">Page {props.page} of {props.totalPages}</span>
+            <span className="cand-pager-page">{t("Page {page} of {total}", { page: props.page, total: props.totalPages })}</span>
             <button type="button" className="btn btn-ghost btn-sm" disabled={props.page >= props.totalPages || isLoading} onClick={() => props.onPageChange(props.page + 1)}>
-              Next <i className="ti ti-chevron-right" />
+              {t("Next")} <i className="ti ti-chevron-right" />
             </button>
           </div>
         </div>

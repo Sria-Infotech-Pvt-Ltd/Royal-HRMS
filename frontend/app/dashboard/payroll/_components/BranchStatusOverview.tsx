@@ -1,6 +1,7 @@
 "use client";
 
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 
@@ -59,6 +60,7 @@ function fmt(dateStr: string | null) {
 }
 
 export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Props) {
+  const t = useT();
   const { data, loading, error, refetch } =
     useFetch<BranchPayrollStatus[]>(API.payroll.branchStatus);
 
@@ -66,11 +68,11 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
     return (
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-building-bank" /> Company Code Payroll Status</div>
+          <div className="card-title"><i className="ti ti-building-bank" /> {t("Company Code Payroll Status")}</div>
         </div>
         <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 24 }} />
-          <div style={{ marginTop: 8, fontSize: 13 }}>Loading Company Code status…</div>
+          <div style={{ marginTop: 8, fontSize: 13 }}>{t("Loading Company Code status…")}</div>
         </div>
       </div>
     );
@@ -80,11 +82,11 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
     return (
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-building-bank" /> Company Code Payroll Status</div>
+          <div className="card-title"><i className="ti ti-building-bank" /> {t("Company Code Payroll Status")}</div>
         </div>
         <div className="alert alert-error" style={{ margin: 20 }}>
           <i className="ti ti-alert-circle" />
-          <span>Failed to load Company Code status. <button className="btn btn-ghost btn-sm" onClick={refetch}>Retry</button></span>
+          <span>{t("Failed to load Company Code status.")} <button className="btn btn-ghost btn-sm" onClick={refetch}>{t("Retry")}</button></span>
         </div>
       </div>
     );
@@ -99,14 +101,14 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
     <div className="card" style={{ marginBottom: 24 }}>
       <div className="card-header">
         <div className="card-title">
-          <i className="ti ti-building-bank" /> Company Code Payroll Status
+          <i className="ti ti-building-bank" /> {t("Company Code Payroll Status")}
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-            {branches.length} Company Code{branches.length !== 1 ? "s" : ""}
+            {branches.length === 1 ? t("{count} Company Code", { count: branches.length }) : t("{count} Company Codes", { count: branches.length })}
           </span>
           <button className="btn btn-ghost btn-sm" onClick={refetch}>
-            <i className="ti ti-refresh" /> Refresh
+            <i className="ti ti-refresh" /> {t("Refresh")}
           </button>
         </div>
       </div>
@@ -131,7 +133,7 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
               <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
                 {item.count}
               </div>
-              <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>{item.label}</div>
+              <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>{t(item.label)}</div>
             </div>
           </div>
         ))}
@@ -139,7 +141,7 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
 
       {branches.length === 0 ? (
         <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)", fontSize: 14 }}>
-          No active Company Codes found. Add Company Codes in Settings → Company Code Management.
+          {t("No active Company Codes found. Add Company Codes in Settings → Company Code Management.")}
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
@@ -152,7 +154,7 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
                     fontSize: 11, fontWeight: 700, color: "var(--on-variant)",
                     textTransform: "uppercase", letterSpacing: "0.04em",
                     borderBottom: "1px solid var(--outline-v)",
-                  }}>{h}</th>
+                  }}>{t(h)}</th>
                 ))}
               </tr>
             </thead>
@@ -178,10 +180,10 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
                     <td style={{ padding: "12px 16px", fontSize: 13 }}>
                       {branch.cycle_start ? (
                         <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                          Cycle #{branch.cycle_id?.slice(-6)}
+                          {t("Cycle #{id}", { id: branch.cycle_id?.slice(-6) ?? "" })}
                         </span>
                       ) : (
-                        <span style={{ color: "var(--on-variant)", fontSize: 12 }}>No active cycle</span>
+                        <span style={{ color: "var(--on-variant)", fontSize: 12 }}>{t("No active cycle")}</span>
                       )}
                     </td>
                     <td style={{ padding: "12px 16px", fontSize: 12, color: "var(--on-variant)", fontVariantNumeric: "tabular-nums" }}>
@@ -192,31 +194,31 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
                     <td style={{ padding: "12px 16px" }}>
                       {branch.status ? (
                         <span className={STATUS_BADGE[branch.status] ?? "badge badge-neutral"}>
-                          {STATUS_LABEL[branch.status] ?? branch.status}
+                          {STATUS_LABEL[branch.status] ? t(STATUS_LABEL[branch.status]) : branch.status}
                         </span>
                       ) : (
-                        <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Not started</span>
+                        <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("Not started")}</span>
                       )}
                     </td>
                     <td style={{ padding: "12px 16px" }}>
                       {isPaid ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--success)" }}>
                           <i className="ti ti-circle-check" />
-                          {branch.paid_at ? `Paid ${fmt(branch.paid_at)}` : "Paid"}
+                          {branch.paid_at ? t("Paid {date}", { date: fmt(branch.paid_at) }) : t("Paid")}
                         </div>
                       ) : isInProgress && branch.cycle_id && branch.status ? (
                         <button
                           className="btn btn-outline btn-sm"
                           onClick={() => onResumeBranch(branch.cycle_id!, branch.status!, branch.cycle_start ?? undefined)}
                         >
-                          <i className="ti ti-player-play" /> Resume
+                          <i className="ti ti-player-play" /> {t("Resume")}
                         </button>
                       ) : (
                         <button
                           className="btn btn-filled btn-sm"
                           onClick={() => onRunBranch(branch.branch_id, branch.branch_name)}
                         >
-                          <i className="ti ti-player-play" /> Run Payroll
+                          <i className="ti ti-player-play" /> {t("Run Payroll")}
                         </button>
                       )}
                     </td>

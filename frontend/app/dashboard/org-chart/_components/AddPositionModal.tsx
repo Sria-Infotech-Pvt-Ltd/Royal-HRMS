@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import SearchableSelect from "@/components/SearchableSelect";
 import type { JobTemplate, OrgUnit, Position, PositionPayload } from "@/types/orgStructure";
@@ -23,6 +24,7 @@ function Spin() {
 }
 
 export default function AddPositionModal({ unit, jobs, branches, hasChief, onClose, onCreated }: Props) {
+  const t = useT();
   const [title, setTitle]       = useState("");
   const [jobTemplate, setJobTemplate] = useState("");
   const [grade, setGrade]       = useState("");
@@ -34,7 +36,7 @@ export default function AddPositionModal({ unit, jobs, branches, hasChief, onClo
 
   async function submit() {
     if (!unit) return;
-    if (!title.trim()) { setTitleError("Position title is required."); return; }
+    if (!title.trim()) { setTitleError(t("Position title is required.")); return; }
     setIsSubmitting(true);
     setSubmitError(null);
     const payload: PositionPayload = {
@@ -46,7 +48,7 @@ export default function AddPositionModal({ unit, jobs, branches, hasChief, onClo
       const res = await clientApi.post(API.orgStructure.positions.list, payload);
       onCreated(res.data.data);
     } catch (err: unknown) {
-      setSubmitError((err as { message?: string })?.message ?? "Failed to create position.");
+      setSubmitError((err as { message?: string })?.message ?? t("Failed to create position."));
     } finally {
       setIsSubmitting(false);
     }
@@ -56,14 +58,14 @@ export default function AddPositionModal({ unit, jobs, branches, hasChief, onClo
 
   return (
     <Modal
-      title={<><i className="ti ti-id-badge-2" style={{ marginRight: 8 }} />Add position</>}
+      title={<><i className="ti ti-id-badge-2" style={{ marginRight: 8 }} />{t("Add position")}</>}
       onClose={onClose}
       maxWidth={460}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={submit} disabled={isSubmitting}>
-            {isSubmitting ? <><Spin />&nbsp;Creating…</> : "Create position"}
+            {isSubmitting ? <><Spin />&nbsp;{t("Creating…")}</> : t("Create position")}
           </button>
         </>
       }
@@ -73,37 +75,37 @@ export default function AddPositionModal({ unit, jobs, branches, hasChief, onClo
           {submitError}
         </div>
       )}
-      <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 14 }}>In {unit.name}</div>
+      <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 14 }}>{t("In {name}", { name: unit.name })}</div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Position Title <span style={{ color: "var(--error)" }}>*</span></label>
+        <label className="field-label">{t("Position Title")} <span style={{ color: "var(--error)" }}>*</span></label>
         <input
           className={`field-input${titleError ? " field-error" : ""}`}
           value={title}
           onChange={e => { setTitle(e.target.value); setTitleError(null); }}
-          placeholder="e.g. Senior ABAP Consultant"
+          placeholder={t("e.g. Senior ABAP Consultant")}
         />
         {titleError && <p className="field-error-msg">{titleError}</p>}
       </div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Job Template</label>
+        <label className="field-label">{t("Job Template")}</label>
         <SearchableSelect
-          value={jobTemplate} onChange={setJobTemplate} placeholder="None"
+          value={jobTemplate} onChange={setJobTemplate} placeholder={t("None")}
           options={jobs.filter(j => j.is_active).map(j => ({ value: String(j.id), label: `${j.name}${j.band ? ` · ${j.band}` : ""}` }))}
           inputClassName="field-input"
         />
       </div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Grade / Band <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+        <label className="field-label">{t("Grade / Band")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
         <input className="field-input" style={{ fontFamily: "monospace" }} value={grade} onChange={e => setGrade(e.target.value)} placeholder="L4" />
       </div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Company Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
+        <label className="field-label">{t("Company Code")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional — leave unset for a company-wide seat)")}</span></label>
         <SearchableSelect
-          value={branch} onChange={setBranch} placeholder="Company-wide"
+          value={branch} onChange={setBranch} placeholder={t("Company-wide")}
           options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
           inputClassName="field-input"
         />
@@ -113,15 +115,15 @@ export default function AddPositionModal({ unit, jobs, branches, hasChief, onClo
         <ToggleSwitch
           checked={isChief}
           onChange={checked => setIsChief(checked)}
-          label={<>Make this the <b>head</b> of the unit.</>}
+          label={<>{t("Make this the")} <b>{t("head")}</b> {t("of the unit.")}</>}
         />
       </div>
       <div style={{ fontSize: 11.5, color: "var(--outline)", marginBottom: 16 }}>
-        {hasChief ? "This unit already has a chief; turning this on will replace it." : "This unit has no head yet."}
+        {hasChief ? t("This unit already has a chief; turning this on will replace it.") : t("This unit has no head yet.")}
       </div>
 
       <div style={{ fontSize: 11.5, color: "var(--outline)" }}>
-        The position is created <b>vacant</b>. Assign a holder once someone is hired.
+        {t("The position is created")} <b>{t("vacant")}</b>{t(". Assign a holder once someone is hired.")}
       </div>
     </Modal>
   );

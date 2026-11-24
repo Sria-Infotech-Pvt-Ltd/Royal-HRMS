@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { Holiday, HolidayListData } from "@/types/holidays";
+import { useT } from "@/hooks/useI18n";
 
 const UPCOMING_COUNT = 3;
 
@@ -18,6 +19,7 @@ function daysUntil(iso: string): number {
 }
 
 export default function EmpUpcomingHolidays() {
+  const t = useT();
   const { data, loading } = useFetch<HolidayListData>(API.leave.holidays);
 
   const upcoming = useMemo(() => {
@@ -31,16 +33,16 @@ export default function EmpUpcomingHolidays() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-calendar-event" /> Upcoming Holidays</div>
+        <div className="card-title"><i className="ti ti-calendar-event" /> {t("Upcoming Holidays")}</div>
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : upcoming.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
-          No upcoming holidays scheduled.
+          {t("No upcoming holidays scheduled.")}
         </div>
       ) : (
         <div style={{ padding: "4px 0 8px" }}>
@@ -55,7 +57,7 @@ export default function EmpUpcomingHolidays() {
                 <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{h.day} · {h.holiday_type_display}</div>
               </div>
               <span className="badge badge-neutral" style={{ fontSize: 10, whiteSpace: "nowrap", flexShrink: 0 }}>
-                {daysUntil(h.date) === 0 ? "Today" : `In ${daysUntil(h.date)}d`}
+                {daysUntil(h.date) === 0 ? t("Today") : t("In {count}d", { count: daysUntil(h.date) })}
               </span>
             </div>
           ))}

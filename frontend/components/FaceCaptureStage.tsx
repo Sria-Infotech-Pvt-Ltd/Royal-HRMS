@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 import { GUIDE } from "@/lib/faceApi/guide";
 import { FACE_FLOW_V2 } from "@/lib/faceApi/flowConfig";
 import { flowParams } from "@/lib/faceApi/flowParams";
+import { tr } from "@/lib/i18n/tr";
 
 // Dotted oval + reminder line + "inside the dotted lines" prompt: flow V2 only.
 const GUIDE_OVAL = flowParams(FACE_FLOW_V2).guideOval;
@@ -35,13 +36,15 @@ const INSTRUCTION: Partial<Record<string, string>> = {
 function instructionFor(
   phase: string, hint?: string | null, progress?: { blink: boolean; turn: boolean } | null, turnOnly?: boolean,
 ): string | undefined {
-  if (phase === "liveness_checking" && turnOnly) return "Slowly turn your head slightly to one side, then back";
+  if (phase === "liveness_checking" && turnOnly) return tr("Slowly turn your head slightly to one side, then back");
   if (phase === "liveness_checking" && progress) {
-    if (progress.blink && !progress.turn) return "Blink ✓ — now turn your head slightly";
-    if (progress.turn && !progress.blink) return "Head turn ✓ — now blink naturally";
+    if (progress.blink && !progress.turn) return tr("Blink ✓ — now turn your head slightly");
+    if (progress.turn && !progress.blink) return tr("Head turn ✓ — now blink naturally");
   }
   if ((phase === "detecting" || phase === "capturing_multi") && hint) return hint;
-  return INSTRUCTION[phase];
+  // The constant keeps the English; it is translated here, where it is shown.
+  const text = INSTRUCTION[phase];
+  return text ? tr(text) : undefined;
 }
 
 // The <video>/<canvas> pair here is mounted for the whole lifetime of the
@@ -58,7 +61,7 @@ export default function FaceCaptureStage({ videoRef, canvasRef, phase, hint, pro
           className="text-center text-xs font-medium rounded-lg px-3 py-2 mb-2"
           style={{ background: "rgba(245,158,11,0.12)", color: "#92400e", border: "1px solid rgba(245,158,11,0.35)" }}
         >
-          Make sure you place your face inside the frame
+          {tr("Make sure you place your face inside the frame")}
         </p>
       )}
       <div

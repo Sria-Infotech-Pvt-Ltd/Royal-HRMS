@@ -9,15 +9,17 @@ import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { buildApprovalsLink } from "@/lib/approvalLink";
+import { useT } from "@/hooks/useI18n";
 
 interface HeadcountPoint { label: string; count: number }
 interface LeavePoint { label: string; month?: string; approved: number; rejected: number }
 interface PayrollCostPoint { label: string; amount: number }
 
 function LoadingRow() {
+  const t = useT();
   return (
     <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-      <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+      <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
     </div>
   );
 }
@@ -32,6 +34,7 @@ function EmptyRow({ icon, text }: { icon: string; text: string }) {
 }
 
 export function HeadcountTrendCard() {
+  const t = useT();
   const { data, loading } = useFetch<{ series: HeadcountPoint[] }>(API.dashboard.headcountTrend);
   const series = data?.series ?? [];
   const max = Math.max(1, ...series.map(s => s.count));
@@ -39,17 +42,17 @@ export function HeadcountTrendCard() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-trending-up" /> Headcount Growth (6 months)</div>
+        <div className="card-title"><i className="ti ti-trending-up" /> {t("Headcount Growth (6 months)")}</div>
       </div>
       {loading ? <LoadingRow /> : series.length === 0 ? (
-        <EmptyRow icon="ti-trending-up" text="No data available" />
+        <EmptyRow icon="ti-trending-up" text={t("No data available")} />
       ) : (
         <div style={{ padding: "16px 20px", display: "flex", alignItems: "flex-end", gap: 10, height: 140 }}>
           {series.map(point => (
             <div key={point.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--on-bg)" }}>{point.count}</span>
               <div
-                title={`${point.label}: ${point.count}`}
+                title={t("{label}: {count}", { label: point.label, count: point.count })}
                 style={{
                   width: "100%", maxWidth: 32,
                   height: `${Math.max(4, (point.count / max) * 100)}px`,
@@ -68,9 +71,10 @@ export function HeadcountTrendCard() {
 // A legend entry ("Rejected") is a button too: it opens every request of that status, all months. Like the bars, it must not also trigger the
 // link around the whole card.
 function LegendLink({ label, colour, onOpen }: { label: string; colour: string; onOpen: () => void }) {
+  const t = useT();
   return (
     <button
-      type="button" title={`Show all ${label.toLowerCase()} leave requests`}
+      type="button" title={t("Show all {status} leave requests", { status: label.toLowerCase() })}
       onClick={event => { event.stopPropagation(); onOpen(); }}
       onKeyDown={event => event.stopPropagation()}
       style={{ display: "inline-flex", alignItems: "center", background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}
@@ -83,11 +87,12 @@ function LegendLink({ label, colour, onOpen }: { label: string; colour: string; 
 // One bar. With something behind it, it is a button that opens those requests; clicking it must not also trigger the card around it
 // (the HR dashboard wraps the whole card in a link to the Leave page).
 function TrendBar({ title, height, colour, isLinked, onOpen }: { title: string; height: number; colour: string; isLinked: boolean; onOpen: () => void }) {
+  const t = useT();
   const bar = { width: 12, height: `${height}px`, background: colour, borderRadius: "3px 3px 0 0" } as const;
   if (!isLinked) return <div title={title} style={bar} />;
   return (
     <button
-      type="button" title={`${title}. Click to see them.`} aria-label={title}
+      type="button" title={t("{title}. Click to see them.", { title })} aria-label={title}
       onClick={event => { event.stopPropagation(); onOpen(); }}
       onKeyDown={event => event.stopPropagation()}
       style={{ ...bar, padding: 0, border: 0, cursor: "pointer" }}
@@ -96,6 +101,7 @@ function TrendBar({ title, height, colour, isLinked, onOpen }: { title: string; 
 }
 
 export function LeaveTrendCard() {
+  const t = useT();
   const router = useRouter();
   const { data, loading } = useFetch<{ series: LeavePoint[] }>(API.dashboard.leaveTrend);
   const series = data?.series ?? [];
@@ -105,25 +111,25 @@ export function LeaveTrendCard() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-calendar-stats" /> Leave Approvals vs Rejections (6 months)</div>
+        <div className="card-title"><i className="ti ti-calendar-stats" /> {t("Leave Approvals vs Rejections (6 months)")}</div>
         <div style={{ display: "flex", gap: 10, fontSize: 11, color: "var(--on-variant)" }}>
-          <LegendLink label="Approved" colour="var(--success)" onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "approved" }))} />
-          <LegendLink label="Rejected" colour="var(--error)" onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "rejected" }))} />
+          <LegendLink label={t("Approved")} colour="var(--success)" onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "approved" }))} />
+          <LegendLink label={t("Rejected")} colour="var(--error)" onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "rejected" }))} />
         </div>
       </div>
       {loading ? <LoadingRow /> : !hasAny ? (
-        <EmptyRow icon="ti-calendar-stats" text="No leave requests recorded in this period" />
+        <EmptyRow icon="ti-calendar-stats" text={t("No leave requests recorded in this period")} />
       ) : (
         <div style={{ padding: "16px 20px", display: "flex", alignItems: "flex-end", gap: 10, height: 140 }}>
           {series.map(point => (
             <div key={point.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
               <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: "100%" }}>
                 <TrendBar
-                  title={`${point.label}: ${point.approved} approved`} height={Math.max(4, (point.approved / max) * 100)} colour="var(--success)"
+                  title={t("{label}: {count} approved", { label: point.label, count: point.approved })} height={Math.max(4, (point.approved / max) * 100)} colour="var(--success)"
                   isLinked={point.approved > 0} onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "approved", month: point.month }))}
                 />
                 <TrendBar
-                  title={`${point.label}: ${point.rejected} rejected`} height={Math.max(4, (point.rejected / max) * 100)} colour="var(--error)"
+                  title={t("{label}: {count} rejected", { label: point.label, count: point.rejected })} height={Math.max(4, (point.rejected / max) * 100)} colour="var(--error)"
                   isLinked={point.rejected > 0} onOpen={() => router.push(buildApprovalsLink({ type: "leave", status: "rejected", month: point.month }))}
                 />
               </div>
@@ -143,6 +149,7 @@ function formatInr(amount: number): string {
 }
 
 export function PayrollCostTrendCard() {
+  const t = useT();
   const { data, loading } = useFetch<{ series: PayrollCostPoint[] }>(API.dashboard.payrollCostTrend);
   const series = data?.series ?? [];
   const max = Math.max(1, ...series.map(s => s.amount));
@@ -150,17 +157,17 @@ export function PayrollCostTrendCard() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-report-money" /> Payroll Cost (last {series.length || 6} cycles)</div>
+        <div className="card-title"><i className="ti ti-report-money" /> {t("Payroll Cost (last {count} cycles)", { count: series.length || 6 })}</div>
       </div>
       {loading ? <LoadingRow /> : series.length === 0 ? (
-        <EmptyRow icon="ti-report-money" text="No completed payroll cycles yet" />
+        <EmptyRow icon="ti-report-money" text={t("No completed payroll cycles yet")} />
       ) : (
         <div style={{ padding: "16px 20px", display: "flex", alignItems: "flex-end", gap: 10, height: 140 }}>
           {series.map(point => (
             <div key={point.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--on-bg)" }}>{formatInr(point.amount)}</span>
               <div
-                title={`${point.label}: ${formatInr(point.amount)}`}
+                title={t("{label}: {count}", { label: point.label, count: formatInr(point.amount) })}
                 style={{
                   width: "100%", maxWidth: 32,
                   height: `${Math.max(4, (point.amount / max) * 100)}px`,

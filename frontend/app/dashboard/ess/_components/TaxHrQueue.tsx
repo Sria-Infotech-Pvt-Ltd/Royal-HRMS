@@ -3,6 +3,7 @@
 // HR review queue of the Tax tab — every employee's current-FY declaration, with an
 // Approve action that locks the declaration (gated by tax_declarations.approve).
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
@@ -34,7 +35,7 @@ export default function TaxHrQueue() {
       await clientApi.post(API.payroll.approveTaxDeclaration(id));
       refetch();
     } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message || "Failed to approve this declaration. Please try again.";
+      const msg = (err as { message?: string })?.message || tr("Failed to approve this declaration. Please try again.");
       setApproveErr(msg);
     } finally {
       setBusyId(null);
@@ -46,7 +47,7 @@ export default function TaxHrQueue() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-list-details" /> HR review queue</div>
+        <div className="card-title"><i className="ti ti-list-details" /> {tr("HR review queue")}</div>
       </div>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {approveErr && (
@@ -57,23 +58,23 @@ export default function TaxHrQueue() {
       {loading ? (
         <div className="empty-state">
           <i className="ti ti-loader-2 spin" />
-          <h3>Loading…</h3>
+          <h3>{tr("Loading…")}</h3>
         </div>
       ) : list.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-file-invoice" />
-          <h3>No declarations yet</h3>
+          <h3>{tr("No declarations yet")}</h3>
         </div>
       ) : (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Employee</th>
-                <th>Regime</th>
-                <th>Status</th>
-                <th>Submitted</th>
-                <th>Action</th>
+                <th>{tr("Employee")}</th>
+                <th>{tr("Regime")}</th>
+                <th>{tr("Status")}</th>
+                <th>{tr("Submitted")}</th>
+                <th>{tr("Action")}</th>
               </tr>
             </thead>
             <tbody>
@@ -86,7 +87,7 @@ export default function TaxHrQueue() {
                   <td>
                     {d.status === "submitted" && (
                       <button className="btn btn-filled btn-sm" onClick={() => setConfirmTarget(d)} disabled={busyId === d.id}>
-                        {busyId === d.id ? "Approving…" : "Approve"}
+                        {busyId === d.id ? tr("Approving…") : tr("Approve")}
                       </button>
                     )}
                   </td>
@@ -99,9 +100,9 @@ export default function TaxHrQueue() {
 
       {confirmTarget && (
         <ConfirmModal
-          title="Approve this tax declaration?"
-          body={`This locks ${confirmTarget.employee_name}'s FY ${confirmTarget.financial_year} declaration (${confirmTarget.tax_regime_display}, ${formatInr(totalDeduction(confirmTarget))} deductions after limits) — they will no longer be able to change their regime or declared investments for this financial year.`}
-          confirmLabel="Approve"
+          title={tr("Approve this tax declaration?")}
+          body={tr("This locks {name}'s FY {year} declaration ({regime}, {deductions} deductions after limits) — they will no longer be able to change their regime or declared investments for this financial year.", { name: confirmTarget.employee_name, year: confirmTarget.financial_year, regime: confirmTarget.tax_regime_display, deductions: formatInr(totalDeduction(confirmTarget)) })}
+          confirmLabel={tr("Approve")}
           saving={busyId === confirmTarget.id}
           onConfirm={() => approve(confirmTarget.id)}
           onCancel={() => setConfirmTarget(null)}

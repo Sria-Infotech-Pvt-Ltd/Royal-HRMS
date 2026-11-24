@@ -5,6 +5,7 @@
 // file-length guideline; each one is a plain controlled form fragment with
 // no fetching or submit logic of its own.
 
+import { useT } from "@/hooks/useI18n";
 import type { FieldOption } from "../../_data";
 import type { ReasonOption } from "./types";
 import SearchableSelect from "@/components/SearchableSelect";
@@ -20,9 +21,10 @@ interface SelectFieldProps {
 }
 
 function SelectField({ label, value, onChange, options, placeholder, disabled }: SelectFieldProps) {
+  const t = useT();
   return (
     <div className="f">
-      <label>{label} <span className="req">*</span></label>
+      <label>{t(label)} <span className="req">*</span></label>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -30,7 +32,7 @@ function SelectField({ label, value, onChange, options, placeholder, disabled }:
         className="finput"
         style={{ cursor: disabled ? "not-allowed" : "pointer" }}
       >
-        <option value="">{placeholder}</option>
+        <option value="">{t(placeholder)}</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
@@ -40,12 +42,13 @@ function SelectField({ label, value, onChange, options, placeholder, disabled }:
 export function ReasonSelect({ reason, setReason, options, actionChosen }: {
   reason: string; setReason: (v: string) => void; options: ReasonOption[]; actionChosen: boolean;
 }) {
+  const t = useT();
   return (
     <SelectField
       label="Reason"
       value={reason}
       onChange={setReason}
-      options={options}
+      options={options.map(option => ({ value: option.value, label: t(option.label) }))}
       placeholder={actionChosen ? "Select a reason" : "Select an action first"}
       disabled={!actionChosen}
     />
@@ -56,12 +59,13 @@ export function PromotionFields({ positionId, setPositionId, positionOptions, an
   positionId: string; setPositionId: (v: string) => void; positionOptions: FieldOption[];
   annualCtc: string; setAnnualCtc: (v: string) => void;
 }) {
+  const t = useT();
   return (
     <div className="g2">
       <SelectField label="Position" value={positionId} onChange={setPositionId} options={positionOptions} placeholder="Select a position" />
       <div className="f">
-        <label>Annual CTC (₹) <span className="text-muted" style={{ fontWeight: 400 }}>(optional)</span></label>
-        <input type="number" min={0} step={1000} value={annualCtc} onChange={e => setAnnualCtc(e.target.value)} className="finput" placeholder="e.g. 900000" />
+        <label>{t("Annual CTC (₹)")} <span className="text-muted" style={{ fontWeight: 400 }}>{t("(optional)")}</span></label>
+        <input type="number" min={0} step={1000} value={annualCtc} onChange={e => setAnnualCtc(e.target.value)} className="finput" placeholder={t("e.g. 900000")} />
       </div>
     </div>
   );
@@ -71,37 +75,40 @@ export function OrgAssignmentFields({ managerId, setManagerId, managerOptions, w
   managerId: string; setManagerId: (v: string) => void; managerOptions: FieldOption[];
   workLocation: string; setWorkLocation: (v: string) => void;
 }) {
+  const t = useT();
   return (
     <div className="g2">
       <div className="f">
-        <label>Reporting manager <span className="text-muted" style={{ fontWeight: 400 }}>(optional)</span></label>
-        <SearchableSelect value={managerId} onChange={setManagerId} inputClassName="finput" placeholder="Keep current" options={managerOptions} />
+        <label>{t("Reporting manager")} <span className="text-muted" style={{ fontWeight: 400 }}>{t("(optional)")}</span></label>
+        <SearchableSelect value={managerId} onChange={setManagerId} inputClassName="finput" placeholder={t("Keep current")} options={managerOptions} />
       </div>
       <div className="f">
-        <label>Work location <span className="text-muted" style={{ fontWeight: 400 }}>(optional)</span></label>
-        <input type="text" value={workLocation} onChange={e => setWorkLocation(e.target.value)} className="finput" placeholder="e.g. Hyderabad HQ" />
+        <label>{t("Work location")} <span className="text-muted" style={{ fontWeight: 400 }}>{t("(optional)")}</span></label>
+        <input type="text" value={workLocation} onChange={e => setWorkLocation(e.target.value)} className="finput" placeholder={t("e.g. Hyderabad HQ")} />
       </div>
     </div>
   );
 }
 
 export function PayChangeFields({ annualCtc, setAnnualCtc }: { annualCtc: string; setAnnualCtc: (v: string) => void }) {
+  const t = useT();
   return (
     <div className="g2">
       <div className="f">
-        <label>Annual CTC (₹) <span className="req">*</span></label>
-        <input type="number" min={0} step={1000} value={annualCtc} onChange={e => setAnnualCtc(e.target.value)} className="finput" placeholder="e.g. 900000" />
+        <label>{t("Annual CTC (₹)")} <span className="req">*</span></label>
+        <input type="number" min={0} step={1000} value={annualCtc} onChange={e => setAnnualCtc(e.target.value)} className="finput" placeholder={t("e.g. 900000")} />
       </div>
     </div>
   );
 }
 
 export function ConfirmationFields({ currentStatusLabel }: { currentStatusLabel: string }) {
+  const t = useT();
   return (
     <div className="g2">
       <div className="f">
-        <label>Employee status</label>
-        <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>{currentStatusLabel} → Confirmed</div>
+        <label>{t("Employee status")}</label>
+        <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>{t("{status} → Confirmed", { status: t(currentStatusLabel) })}</div>
       </div>
     </div>
   );
@@ -114,15 +121,16 @@ export function SeparationFields({
   separationType: string; setSeparationType: (v: string) => void; typeOptions: FieldOption[];
   lastWorkingDay: string; setLastWorkingDay: (v: string) => void; resultingStatusLabel: string;
 }) {
+  const t = useT();
   return (
     <div className="g3">
       <SelectField label="Separation type" value={separationType} onChange={setSeparationType} options={typeOptions} placeholder="Select a type" />
       <div className="f">
-        <label>Last working day <span className="req">*</span></label>
+        <label>{t("Last working day")} <span className="req">*</span></label>
         <DateInput value={lastWorkingDay} onChange={isoDate => setLastWorkingDay(isoDate)} className="finput" />
       </div>
       <div className="f">
-        <label>Employee status</label>
+        <label>{t("Employee status")}</label>
         <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>{resultingStatusLabel}</div>
       </div>
     </div>

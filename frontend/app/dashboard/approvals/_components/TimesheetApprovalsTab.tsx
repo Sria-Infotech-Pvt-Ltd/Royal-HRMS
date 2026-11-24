@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import TimesheetStatusBadge from "@/components/timesheet/TimesheetStatusBadge";
+import { useT } from "@/hooks/useI18n";
 import { useTimesheetQueue, type QueueFilter } from "@/hooks/useTimesheetQueue";
 import { weekRangeLabel } from "@/lib/timesheet";
 import TimesheetDetailDrawer from "./TimesheetDetailDrawer";
@@ -29,6 +30,7 @@ function submittedOn(iso: string | null): string {
 }
 
 export default function TimesheetApprovalsTab() {
+  const t = useT();
   const [filter, setFilter] = useState<QueueFilter>("submitted");
   const [pageNumber, setPageNumber] = useState(1);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -45,37 +47,37 @@ export default function TimesheetApprovalsTab() {
     <div className="card" style={{ overflow: "hidden" }}>
       <ApprovalTabStyles />
       <TabHeader
-        icon="ti-clock-check" accent="#9333ea" title="Timesheets" subtitle="Weekly timesheets from your team, ready to review."
+        icon="ti-clock-check" accent="#9333ea" title={t("Timesheets")} subtitle={t("Weekly timesheets from your team, ready to review.")}
         stats={[
           { label: "Waiting for you", value: page?.pending_count ?? 0, icon: "ti-hourglass", accent: "#d97706", isUrgent: (page?.pending_count ?? 0) > 0 },
           { label: "Shown", value: rows.length, icon: "ti-list", accent: "#2563eb" },
           { label: "Sent in late", value: lateCount, icon: "ti-alarm", accent: "#dc2626" },
         ]}
         actions={(
-          <div role="group" aria-label="Filter timesheets" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div role="group" aria-label={t("Filter timesheets")} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {FILTERS.map(option => (
               <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => chooseFilter(option.value)}
                 className={`btn btn-sm ${filter === option.value ? "btn-filled" : "btn-outline"}`}>
-                {option.label}{option.value === "submitted" && page ? ` (${page.pending_count})` : ""}
+                {option.value === "submitted" && page ? t("{label} ({count})", { label: t(option.label), count: page.pending_count }) : t(option.label)}
               </button>
             ))}
           </div>
         )}
       />
       <div className="table-wrap">
-        <table aria-label="Timesheets" className="tb-table">
+        <table aria-label={t("Timesheets")} className="tb-table">
           <thead>
-            <tr><th>Employee</th><th>Week</th><th>Project hours</th><th>Billable</th><th>Attendance</th><th>Submitted</th><th>Status</th><th /></tr>
+            <tr><th>{t("Employee")}</th><th>{t("Week")}</th><th>{t("Project hours")}</th><th>{t("Billable")}</th><th>{t("Attendance")}</th><th>{t("Submitted")}</th><th>{t("Status")}</th><th /></tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={8} style={{ textAlign: "center", padding: 24 }}>Loading…</td></tr>}
+            {loading && <tr><td colSpan={8} style={{ textAlign: "center", padding: 24 }}>{t("Loading…")}</td></tr>}
             {!loading && error && <tr><td colSpan={8} role="alert" style={{ textAlign: "center", padding: 24 }}>{error}</td></tr>}
             {!loading && !error && rows.length === 0 && (
               <tr><td colSpan={8}>
                 <TabEmpty
                   icon="ti-checks"
-                  title={filter === "submitted" ? "No timesheets are waiting for you." : "No timesheets to show."}
-                  hint={filter === "submitted" ? "When your team submits a week, it appears here for review." : "Try another filter above."}
+                  title={filter === "submitted" ? t("No timesheets are waiting for you.") : t("No timesheets to show.")}
+                  hint={filter === "submitted" ? t("When your team submits a week, it appears here for review.") : t("Try another filter above.")}
                 />
               </td></tr>
             )}
@@ -96,7 +98,7 @@ export default function TimesheetApprovalsTab() {
                 <td>{row.attendance_hours}</td>
                 <td>{submittedOn(row.submitted_at)}</td>
                 <td><TimesheetStatusBadge status={row.status} isLate={row.is_late} /></td>
-                <td><button className="btn btn-outline btn-sm" onClick={() => setOpenId(row.id)}>Review</button></td>
+                <td><button className="btn btn-outline btn-sm" onClick={() => setOpenId(row.id)}>{t("Review")}</button></td>
               </tr>
             ))}
           </tbody>
@@ -104,9 +106,9 @@ export default function TimesheetApprovalsTab() {
       </div>
       {page && page.total_pages > 1 && (
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", padding: "10px 16px" }}>
-          <button className="btn btn-outline btn-sm" disabled={pageNumber <= 1} onClick={() => setPageNumber(pageNumber - 1)}>Previous</button>
-          <span style={{ fontSize: 12 }}>Page {page.page} of {page.total_pages}</span>
-          <button className="btn btn-outline btn-sm" disabled={pageNumber >= page.total_pages} onClick={() => setPageNumber(pageNumber + 1)}>Next</button>
+          <button className="btn btn-outline btn-sm" disabled={pageNumber <= 1} onClick={() => setPageNumber(pageNumber - 1)}>{t("Previous")}</button>
+          <span style={{ fontSize: 12 }}>{t("Page {page} of {total}", { page: page.page, total: page.total_pages })}</span>
+          <button className="btn btn-outline btn-sm" disabled={pageNumber >= page.total_pages} onClick={() => setPageNumber(pageNumber + 1)}>{t("Next")}</button>
         </div>
       )}
       <TimesheetDetailDrawer timesheetId={openId} onClose={() => setOpenId(null)} onChanged={refetch} />

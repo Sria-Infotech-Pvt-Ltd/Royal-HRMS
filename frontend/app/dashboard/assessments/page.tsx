@@ -26,12 +26,14 @@ import {
   type EmailTemplateOption, type AssessmentForm,
 } from "./_types";
 import { confirmDialog } from "@/components/DialogProvider";
+import { useT } from "@/hooks/useI18n";
 
 export type { AssessmentSection, AssessmentItem, AssessmentCandidate, Assessment } from "./_types";
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AssessmentsPage() {
+  const t = useT();
   // Users with assessments permissions see the HR management view;
   // everyone else (e.g. employees) sees their own assignments.
   // (The backend gates every assessments/* endpoint on assessments.*, not
@@ -142,7 +144,7 @@ export default function AssessmentsPage() {
   }
 
   async function deleteAssessment(id: string) {
-    if (!(await confirmDialog("Delete this assessment? This cannot be undone."))) return;
+    if (!(await confirmDialog(t("Delete this assessment? This cannot be undone.")))) return;
     setDeleteErr("");
     try { await clientApi.delete(API.assessments.detail(id)); refetch(); }
     catch (e) { setDeleteErr(apiErr(e)); }
@@ -165,7 +167,7 @@ export default function AssessmentsPage() {
   }
 
   async function doAssign() {
-    if (assignCids.length === 0) { setAssignErr("Select at least one employee."); return; }
+    if (assignCids.length === 0) { setAssignErr(t("Select at least one employee.")); return; }
     setAssigning(true); setAssignErr(""); setAssignOk("");
     let ok = 0;
     const errors: string[] = [];
@@ -177,11 +179,11 @@ export default function AssessmentsPage() {
     }
     setSaving(false);
     if (errors.length === 0) {
-      setAssignOk(`Assigned to ${ok} employee${ok !== 1 ? "s" : ""} successfully!`);
+      setAssignOk(ok === 1 ? t("Assigned to {count} employee successfully!", { count: ok }) : t("Assigned to {count} employees successfully!", { count: ok }));
       setAssignCids([]);
       refetch();
     } else {
-      setAssignErr(`${ok} succeeded, ${errors.length} failed: ${errors[0]}`);
+      setAssignErr(t("{ok} succeeded, {failed} failed: {error}", { ok, failed: errors.length, error: errors[0] }));
     }
     setAssigning(false);
   }
@@ -206,21 +208,21 @@ export default function AssessmentsPage() {
 
       {error && (
         <div className="alert alert-error"><i className="ti ti-alert-circle" /><div>{error}</div>
-          <button type="button" className="btn-link" style={{ marginLeft: "auto" }} onClick={refetch}>Try again</button>
+          <button type="button" className="btn-link" style={{ marginLeft: "auto" }} onClick={refetch}>{t("Try again")}</button>
         </div>
       )}
       {deleteErr && (
         <div className="alert alert-error" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <i className="ti ti-alert-circle" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1 }}>{deleteErr}</div>
-          <button onClick={() => setDeleteErr("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "inherit" }} aria-label="Close">
+          <button onClick={() => setDeleteErr("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "inherit" }} aria-label={t("Close")}>
             <i className="ti ti-x" style={{ fontSize: 14 }} />
           </button>
         </div>
       )}
 
       {loading ? (
-        <div className="asm-list" role="status" aria-label="Loading assessments">
+        <div className="asm-list" role="status" aria-label={t("Loading assessments")}>
           {[0, 1, 2].map(row => <div key={row} className="asm-skeleton" />)}
         </div>
       ) : visible.length === 0 ? (

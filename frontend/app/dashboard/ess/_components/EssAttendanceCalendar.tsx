@@ -86,11 +86,11 @@ interface EssAttendanceCalendarProps {
 function dayTitle(day: number, monthName: string, year: number, record: DayRecord | undefined): string {
   const parts = [`${day} ${monthName} ${year}`];
   if (record?.status) parts.push(record.holiday_name ? `${record.status}: ${record.holiday_name}` : record.status);
-  if (isWorkFromHome(record)) parts.push("Work from home");
+  if (isWorkFromHome(record)) parts.push(tr("Work from home"));
   const short = shortHoursText(record);
-  if (short) parts.push(`Hours not completed (short by ${short})`);
+  if (short) parts.push(tr("Hours not completed (short by {time})", { time: short }));
   if (isLateLogin(record)) parts.push(tr(LATE_LOGIN_LABEL));
-  if (record?.clockIn) parts.push(`In ${record.clockIn}${record.clockOut ? ` · Out ${record.clockOut}` : ""}`);
+  if (record?.clockIn) parts.push(record.clockOut ? tr("In {clockIn} · Out {clockOut}", { clockIn: record.clockIn, clockOut: record.clockOut }) : tr("In {clockIn}", { clockIn: record.clockIn }));
   return parts.join(" — ");
 }
 
@@ -136,7 +136,7 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
   const record = isOutsideEmployment ? undefined : rawRecord;
   const statusClass = dayClass(record?.status);
   const label = record?.holiday_name || record?.status || "";
-  const title = dayTitle(day, MONTH_LONG[month - 1], year, record);
+  const title = dayTitle(day, tr(MONTH_LONG[month - 1]), year, record);
 
   function showTip(event: SyntheticEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -172,7 +172,7 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
             </span>
           )}
           {shortHoursText(record) && (
-            <span className="ess-cal-short" title={`Hours not completed: short by ${shortHoursText(record)}`}>
+            <span className="ess-cal-short" title={tr("Hours not completed: short by {time}", { time: shortHoursText(record) ?? "" })}>
               <i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("Short")} {shortHoursText(record)}</span>
             </span>
           )}
@@ -183,7 +183,7 @@ function DayCell({ day, year, month, record: rawRecord, isToday }: {
           )}
         </div>
       )}
-      {tipPosition && <DayTip heading={`${day} ${MONTH_LONG[month - 1]} ${year}`} record={record} position={tipPosition} />}
+      {tipPosition && <DayTip heading={`${day} ${tr(MONTH_LONG[month - 1])} ${year}`} record={record} position={tipPosition} />}
     </div>
   );
 }
@@ -200,7 +200,7 @@ export default function EssAttendanceCalendar({
     <div className="ess-cal">
       <div className="ess-cal-head">
         <div>
-          <h2>{MONTH_LONG[month - 1]} {year}</h2>
+          <h2>{tr(MONTH_LONG[month - 1])} {year}</h2>
           <p>{tr("Daily attendance and approved leave.")}</p>
         </div>
         <div className="ess-cal-nav">
@@ -218,10 +218,10 @@ export default function EssAttendanceCalendar({
 
       <div className="ess-calendar-legend" aria-label={tr("Attendance status colors")}>
         {LEGEND.filter(entry => used.classes.has(entry.className)).map(entry => (
-          <span key={entry.className} title={entry.meaning}><i className={`ess-status-dot ${entry.className}`} />{entry.label}</span>
+          <span key={entry.className} title={tr(entry.meaning)}><i className={`ess-status-dot ${entry.className}`} />{entry.label}</span>
         ))}
         {used.hasWfh && (
-          <span title={WFH_MEANING}>
+          <span title={tr(WFH_MEANING)}>
             <span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("WFH")}</span></span>{tr("Work from home")}
           </span>
         )}
@@ -231,7 +231,7 @@ export default function EssAttendanceCalendar({
           </span>
         )}
         {used.hasShort && (
-          <span title={SHORT_MEANING}>
+          <span title={tr(SHORT_MEANING)}>
             <span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("Short")}</span></span>{tr("Hours not completed")}
           </span>
         )}
@@ -242,12 +242,12 @@ export default function EssAttendanceCalendar({
           {LEGEND.map(entry => (
             <div key={entry.className} className="ess-cal-key-row">
               <dt><i className={`ess-status-dot ${entry.className}`} />{entry.label}</dt>
-              <dd>{entry.meaning}</dd>
+              <dd>{tr(entry.meaning)}</dd>
             </div>
           ))}
           <div className="ess-cal-key-row">
             <dt><span className="ess-cal-wfh"><i className="ti ti-home" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("WFH")}</span></span>{tr("Work from home")}</dt>
-            <dd>{WFH_MEANING}</dd>
+            <dd>{tr(WFH_MEANING)}</dd>
           </div>
           <div className="ess-cal-key-row">
             <dt><span className="ess-cal-late"><i className="ti ti-clock-exclamation" aria-hidden="true" /><span className="ess-cal-tag-text">{tr(LATE_LOGIN_LABEL)}</span></span>{tr("Arrived late")}</dt>
@@ -255,7 +255,7 @@ export default function EssAttendanceCalendar({
           </div>
           <div className="ess-cal-key-row">
             <dt><span className="ess-cal-short"><i className="ti ti-alert-triangle" aria-hidden="true" /><span className="ess-cal-tag-text">{tr("Short")}</span></span>{tr("Hours not completed")}</dt>
-            <dd>{SHORT_MEANING}</dd>
+            <dd>{tr(SHORT_MEANING)}</dd>
           </div>
         </dl>
       </details>
@@ -263,11 +263,11 @@ export default function EssAttendanceCalendar({
       <div
         className="ess-cal-grid"
         role="table"
-        aria-label={`Attendance for ${MONTH_LONG[month - 1]} ${year}`}
+        aria-label={tr("Attendance for {month} {year}", { month: tr(MONTH_LONG[month - 1]), year })}
         aria-busy={isLoading}
       >
         <div className="ess-cal-row ess-cal-weekdays" role="row">
-          {WEEKDAY_SHORT.map(name => <span key={name} role="columnheader">{name}</span>)}
+          {WEEKDAY_SHORT.map(name => <span key={name} role="columnheader">{tr(name)}</span>)}
         </div>
         {weeks.map((week, row) => (
           <div className="ess-cal-row" role="row" key={row}>

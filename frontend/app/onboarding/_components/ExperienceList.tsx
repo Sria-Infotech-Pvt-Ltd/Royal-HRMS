@@ -3,6 +3,7 @@
 import type { EducationExperienceFieldConfig } from "@/types/onboardingFieldConfig";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 // ── Step: Experience ──────────────────────────────────────────────────────────
 // A genuinely repeatable, unbounded list of previous employers (unlike
@@ -76,6 +77,7 @@ export default function ExperienceList({
   totalExperienceYears: _totalExperienceYears, entries, fieldConfig, onAdd, onFieldChange, onRemove, error,
   documents, uploading, onUploadDoc, onDeleteDoc,
 }: Props) {
+  const t = useT();
   function isVisible(key: string): boolean {
     return fieldConfig.find(c => c.field_key === key)?.visible ?? true;
   }
@@ -87,14 +89,14 @@ export default function ExperienceList({
     <div>
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-      <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Work Experience</div>
+      <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>{t("Work Experience")}</div>
       <p style={{ color: "var(--on-variant)", fontSize: ".85rem", marginBottom: 20 }}>
-        Leave empty for a fresher — total experience reads zero. Experience is counted up to the joining date.
+        {t("Leave empty for a fresher — total experience reads zero. Experience is counted up to the joining date.")}
       </p>
 
       {entries.length === 0 && (
         <p style={{ color: "var(--on-variant)", fontSize: ".9rem", marginBottom: 16 }}>
-          No previous employers added yet — optional, but add any you have.
+          {t("No previous employers added yet — optional, but add any you have.")}
         </p>
       )}
 
@@ -103,44 +105,44 @@ export default function ExperienceList({
         return (
           <div key={key} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>Experience</span>
+              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>{t("Experience")}</span>
               <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)} style={{ color: "var(--error)" }}>
-                Remove
+                {t("Remove")}
               </button>
             </div>
             <div className="form-row cols-2">
               <div className="field-group">
-                <label className="field-label">Employer</label>
+                <label className="field-label">{t("Employer")}</label>
                 <input className="field-input" value={entry.employer_name} onChange={e => onFieldChange(entry.id, "employer_name", e.target.value)} />
               </div>
               <div className="field-group">
-                <label className="field-label">Designation</label>
+                <label className="field-label">{t("Designation")}</label>
                 <input className="field-input" value={entry.designation} onChange={e => onFieldChange(entry.id, "designation", e.target.value)} />
               </div>
               {isVisible("employment_type") && (
                 <div className="field-group">
-                  <label className="field-label">Employment Type{isRequired("employment_type") && <Req />}</label>
+                  <label className="field-label">{t("Employment Type")}{isRequired("employment_type") && <Req />}</label>
                   <select
                     className="field-input field-select"
                     value={entry.employment_type}
                     onChange={e => onFieldChange(entry.id, "employment_type", e.target.value)}
                   >
-                    <option value="">— Select —</option>
-                    {EMPLOYMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    <option value="">{t("— Select —")}</option>
+                    {EMPLOYMENT_TYPES.map(type => <option key={type.value} value={type.value}>{t(type.label)}</option>)}
                   </select>
                 </div>
               )}
               {isVisible("start_date") && (
                 <div className="field-group">
-                  <label className="field-label">Start Date{isRequired("start_date") && <Req />}</label>
+                  <label className="field-label">{t("Start Date")}{isRequired("start_date") && <Req />}</label>
                   <DateInput className="field-input" value={entry.start_date} onChange={isoDate => onFieldChange(entry.id, "start_date", isoDate)} />
                 </div>
               )}
               {isVisible("end_date") && (
                 <div className="field-group">
-                  <label className="field-label">Last working day{isRequired("end_date") && !entry.is_current && <Req />}</label>
+                  <label className="field-label">{t("Last working day")}{isRequired("end_date") && !entry.is_current && <Req />}</label>
                   <DateInput className="field-input" value={entry.end_date} disabled={entry.is_current} onChange={isoDate => onFieldChange(entry.id, "end_date", isoDate)} style={entry.is_current ? { background: "var(--bg-low)", color: "var(--on-variant)" } : undefined} />
-                  <div className="hint">Actual, or expected if serving notice.</div>
+                  <div className="hint">{t("Actual, or expected if serving notice.")}</div>
                 </div>
               )}
             </div>
@@ -151,18 +153,18 @@ export default function ExperienceList({
                 checked={entry.is_current}
                 onChange={e => onFieldChange(entry.id, "is_current", e.target.checked)}
               />
-              <span>I currently work here</span>
+              <span>{t("I currently work here")}</span>
             </label>
 
             {isVisible("responsibilities") && (
               <div className="field-group" style={{ marginBottom: 12 }}>
-                <label className="field-label">Key Responsibilities{isRequired("responsibilities") && <Req />}</label>
+                <label className="field-label">{t("Key Responsibilities")}{isRequired("responsibilities") && <Req />}</label>
                 <textarea className="field-input" rows={2} value={entry.responsibilities} onChange={e => onFieldChange(entry.id, "responsibilities", e.target.value)} />
               </div>
             )}
             {isVisible("reason_for_leaving") && (
               <div className="field-group" style={{ marginBottom: 12 }}>
-                <label className="field-label">Reason for Leaving{isRequired("reason_for_leaving") && <Req />}</label>
+                <label className="field-label">{t("Reason for Leaving")}{isRequired("reason_for_leaving") && <Req />}</label>
                 <textarea className="field-input" rows={2} value={entry.reason_for_leaving} onChange={e => onFieldChange(entry.id, "reason_for_leaving", e.target.value)} />
               </div>
             )}
@@ -171,7 +173,7 @@ export default function ExperienceList({
               <div>
                 <DocUploadButton
                   documentType="experience_letter"
-                  label="experience letter"
+                  label={t("experience letter")}
                   entryRef={entry.id}
                   existing={documents?.find(d => d.document_type === "experience_letter" && d.entry_ref === entry.id)}
                   uploading={uploading === `experience_letter:${entry.id}`}
@@ -185,7 +187,7 @@ export default function ExperienceList({
       })}
 
       <button className="btn btn-ghost" type="button" onClick={onAdd}>
-        <i className="ti ti-plus" /> Add Previous Employer
+        <i className="ti ti-plus" /> {t("Add Previous Employer")}
       </button>
     </div>
   );

@@ -7,6 +7,8 @@
 // existing call sites each defined their own copy of that same keyframe
 // inline — this needs none).
 
+import { useT } from "@/hooks/useI18n";
+
 interface Props {
   label?: string;
   /** Fills the available height of its container (e.g. a full-page/full-tab
@@ -15,7 +17,8 @@ interface Props {
   fullHeight?: boolean;
 }
 
-export default function LoadingState({ label = "Loading…", fullHeight = false }: Props) {
+export default function LoadingState({ label, fullHeight = false }: Props) {
+  const t = useT();
   return (
     <div
       style={{
@@ -26,7 +29,7 @@ export default function LoadingState({ label = "Loading…", fullHeight = false 
       }}
     >
       <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 20 }} />
-      {label}
+      {label ?? t("Loading…")}
     </div>
   );
 }

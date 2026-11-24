@@ -18,7 +18,7 @@ export default function AttendanceStatusTabs({ status, onStatusChange, chips, se
   const t = useT();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "0 16px", borderBottom: "1px solid var(--outline-v)" }}>
-      <div role="group" aria-label="Filter by status" style={{ display: "flex", gap: 2, flexWrap: "wrap", flex: 1 }}>
+      <div role="group" aria-label={t("Filter by status")} style={{ display: "flex", gap: 2, flexWrap: "wrap", flex: 1 }}>
         {STATUS_TABS.map(tab => {
           const selected = status === tab.key;
           const count = tabCount(tab.key, chips);
@@ -45,7 +45,7 @@ export default function AttendanceStatusTabs({ status, onStatusChange, chips, se
       <div style={{ position: "relative", margin: "8px 0" }}>
         <i className="ti ti-search" aria-hidden="true" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--outline)", fontSize: 14 }} />
         <input
-          type="search" aria-label="Search employees" className="field-input" placeholder="Search name or ID" value={search}
+          type="search" aria-label={t("Search employees")} className="field-input" placeholder={t("Search name or ID")} value={search}
           onChange={event => onSearchChange(event.target.value)} style={{ width: 220, paddingLeft: 30 }}
         />
       </div>

@@ -5,11 +5,13 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import { formatDateTime } from "@/lib/formatDate";
+import { tr } from "@/lib/i18n/tr";
 import DateInput from "@/components/shared/DateInput";
 import { shiftISODate } from "@/app/dashboard/attendance/_components/attendanceDates";
 import { localISODate } from "@/app/dashboard/attendance/_components/monthView";
 import EmailLogRow, { type EmailLogEntry } from "./_components/EmailLogRow";
 import { EmailLogStyles } from "./_components/emailLogStyles";
+import { useT } from "@/hooks/useI18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,7 @@ function fmtDateTime(iso: string): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function EmailLogsPage() {
+  const t = useT();
   const canResend = usePermission("email_logs.resend");
 
   const [pageData, setPageData] = useState<PageData | null>(null);
@@ -96,7 +99,7 @@ export default function EmailLogsPage() {
       setPageData(res.data?.data ?? null);
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setApiError(e.message ?? "Failed to load email logs.");
+      setApiError(e.message ?? tr("Failed to load email logs."));
     } finally {
       setLoading(false);
     }
@@ -125,11 +128,11 @@ export default function EmailLogsPage() {
       const res = await clientApi.post(API.settings.emailLogResend(row.id));
       const data = res.data?.data;
       const warning = data?.warning ? ` ${data.warning}` : "";
-      setResendMsg((res.data?.message ?? `Resent to ${row.recipient_email}.`) + warning);
+      setResendMsg((res.data?.message ?? t("Resent to {email}.", { email: row.recipient_email })) + warning);
       fetchLogs(page);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Failed to resend email.";
+        ?.response?.data?.message ?? t("Failed to resend email.");
       setResendErr(msg);
     } finally {
       setResendingId(null);
@@ -155,8 +158,8 @@ export default function EmailLogsPage() {
       <EmailLogStyles />
       <div className="page-header">
         <div>
-          <div className="page-title">Email Logs</div>
-          <div className="page-sub">System-wide email delivery history and status</div>
+          <div className="page-title">{t("Email Logs")}</div>
+          <div className="page-sub">{t("System-wide email delivery history and status")}</div>
         </div>
       </div>
 
@@ -164,33 +167,33 @@ export default function EmailLogsPage() {
       <form onSubmit={handleSearchSubmit} className="el-filters card">
         <div className="el-filter-row">
           <label className="el-f el-f-grow">
-            <span>Recipient or subject</span>
+            <span>{t("Recipient or subject")}</span>
             <div className="el-search">
               <i className="ti ti-search" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by recipient or subject…" suppressHydrationWarning />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("Search by recipient or subject…")} suppressHydrationWarning />
             </div>
           </label>
           <label className="el-f">
-            <span>Module</span>
+            <span>{t("Module")}</span>
             <select className="field-input field-select" value={module} onChange={e => setModule(e.target.value)} suppressHydrationWarning>
-              <option value="">All modules</option>
-              {MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              <option value="">{t("All modules")}</option>
+              {MODULES.map(m => <option key={m.value} value={m.value}>{t(m.label)}</option>)}
             </select>
           </label>
           <div className="el-dates">
-            <div className="el-f"><span>From</span><DateInput className="field-input" value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} title="From" /></div>
-            <b>to</b>
-            <div className="el-f"><span>To</span><DateInput className="field-input" value={dateTo} onChange={isoDate => setDateTo(isoDate)} title="To" /></div>
+            <div className="el-f"><span>{t("From")}</span><DateInput className="field-input" value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} title={t("From")} /></div>
+            <b>{t("to")}</b>
+            <div className="el-f"><span>{t("To")}</span><DateInput className="field-input" value={dateTo} onChange={isoDate => setDateTo(isoDate)} title={t("To")} /></div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="submit" className="btn btn-filled" style={{ height: 42 }}><i className="ti ti-search" /> Search</button>
+            <button type="submit" className="btn btn-filled" style={{ height: 42 }}><i className="ti ti-search" /> {t("Search")}</button>
             {hasActiveFilters && (
-              <button type="button" className="btn btn-ghost" style={{ height: 42 }} onClick={clearFilters}><i className="ti ti-x" /> Clear</button>
+              <button type="button" className="btn btn-ghost" style={{ height: 42 }} onClick={clearFilters}><i className="ti ti-x" /> {t("Clear")}</button>
             )}
           </div>
         </div>
 
-        <div className="el-chips" role="group" aria-label="Delivery status">
+        <div className="el-chips" role="group" aria-label={t("Delivery status")}>
           {([
             { key: "", label: "All emails", icon: "ti-mail", accent: "var(--brand)" },
             { key: "sent", label: "Sent", icon: "ti-mail-check", accent: "#16a34a" },
@@ -201,13 +204,13 @@ export default function EmailLogsPage() {
               className={`el-chip${status === chip.key ? " is-on" : ""}`} style={{ "--el-accent": chip.accent } as React.CSSProperties}
               onClick={() => setStatus(chip.key)}
             >
-              <i className={`ti ${chip.icon}`} /> {chip.label}
+              <i className={`ti ${chip.icon}`} /> {t(chip.label)}
             </button>
           ))}
           {pageData && (
             <div className="el-strip">
-              <span className="el-stat" style={{ "--el-stat": "var(--brand)" } as React.CSSProperties}><i className="ti ti-mails" /> Total <b>{pageData.count}</b></span>
-              <span className={`el-stat${failedOnPage > 0 ? " is-urgent" : ""}`} style={{ "--el-stat": "#dc2626" } as React.CSSProperties}><i className="ti ti-alert-triangle" /> Failed on this page <b>{failedOnPage}</b></span>
+              <span className="el-stat" style={{ "--el-stat": "var(--brand)" } as React.CSSProperties}><i className="ti ti-mails" /> {t("Total")} <b>{pageData.count}</b></span>
+              <span className={`el-stat${failedOnPage > 0 ? " is-urgent" : ""}`} style={{ "--el-stat": "#dc2626" } as React.CSSProperties}><i className="ti ti-alert-triangle" /> {t("Failed on this page")} <b>{failedOnPage}</b></span>
             </div>
           )}
         </div>
@@ -237,7 +240,7 @@ export default function EmailLogsPage() {
       <div className="card">
         <div className="card-header">
           <span className="card-title">
-            <i className="ti ti-mail" /> {pageData?.count ?? 0} Email{pageData?.count !== 1 ? "s" : ""}
+            <i className="ti ti-mail" /> {pageData?.count === 1 ? t("{count} Email", { count: 1 }) : t("{count} Emails", { count: pageData?.count ?? 0 })}
           </span>
         </div>
 
@@ -245,22 +248,22 @@ export default function EmailLogsPage() {
           <table>
             <thead>
               <tr>
-                <th>To</th>
-                <th>Subject</th>
-                <th className="el-hide-md">Module</th>
-                <th className="el-hide-md">Template</th>
-                <th>Status</th>
-                <th className="el-hide-md">Sent By</th>
-                <th>Sent At</th>
-                <th>Actions</th>
+                <th>{t("To")}</th>
+                <th>{t("Subject")}</th>
+                <th className="el-hide-md">{t("Module")}</th>
+                <th className="el-hide-md">{t("Template")}</th>
+                <th>{t("Status")}</th>
+                <th className="el-hide-md">{t("Sent By")}</th>
+                <th>{t("Sent At")}</th>
+                <th>{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Loading…</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>{t("Loading…")}</td></tr>
               )}
               {!loading && rows.length === 0 && (
-                <tr><td colSpan={8}><div className="el-empty"><i className="ti ti-mail-off" />No emails found for these filters.</div></td></tr>
+                <tr><td colSpan={8}><div className="el-empty"><i className="ti ti-mail-off" />{t("No emails found for these filters.")}</div></td></tr>
               )}
               {rows.map(row => (
                 <EmailLogRow
@@ -274,13 +277,13 @@ export default function EmailLogsPage() {
 
         {pageData && pageData.total_pages > 1 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
-            <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {pageData.page} of {pageData.total_pages}</span>
+            <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("Page {page} of {total}", { page: pageData.page, total: pageData.total_pages })}</span>
             <div style={{ display: "flex", gap: 6 }}>
               <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(p - 1, 1))}>
-                <i className="ti ti-chevron-left" /> Prev
+                <i className="ti ti-chevron-left" /> {t("Prev")}
               </button>
               <button className="btn btn-ghost btn-sm" disabled={page >= pageData.total_pages} onClick={() => setPage(p => Math.min(p + 1, pageData.total_pages))}>
-                Next <i className="ti ti-chevron-right" />
+                {t("Next")} <i className="ti ti-chevron-right" />
               </button>
             </div>
           </div>

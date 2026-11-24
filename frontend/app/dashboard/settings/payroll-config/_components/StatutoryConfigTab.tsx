@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -13,6 +14,7 @@ import NewStatutoryConfigModal from "./NewStatutoryConfigModal";
 interface StateOption { id: number; name: string; code: string; is_active: boolean; }
 
 export default function StatutoryConfigTab() {
+  const t = useT();
   const { data: configs, loading, refetch } = useFetch<StatutoryConfig[]>(API.payroll.statutory);
   const { data: states } = useFetch<StateOption[]>(API.branches.states);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -64,32 +66,32 @@ export default function StatutoryConfigTab() {
   function validateDraft(): string | null {
     if (current.esi_applicable) {
       const ceiling = Number(current.esi_wage_ceiling ?? 0);
-      if (Number.isNaN(ceiling) || ceiling < 0) return "ESI wage ceiling must be a non-negative number.";
+      if (Number.isNaN(ceiling) || ceiling < 0) return t("ESI wage ceiling must be a non-negative number.");
       for (const [label, val] of [
-        ["ESI employee rate", current.esi_employee_rate], ["ESI employer rate", current.esi_employer_rate],
+        [t("ESI employee rate"), current.esi_employee_rate], [t("ESI employer rate"), current.esi_employer_rate],
       ] as const) {
         const n = Number(val ?? 0);
-        if (Number.isNaN(n) || n < 0 || n > 100) return `${label} must be between 0 and 100.`;
+        if (Number.isNaN(n) || n < 0 || n > 100) return t("{label} must be between 0 and 100.", { label });
       }
       const dailyLimit = Number(current.esi_daily_wage_exemption_threshold ?? 0);
-      if (Number.isNaN(dailyLimit) || dailyLimit < 0) return "Employee-exempt daily wage must be a non-negative number.";
+      if (Number.isNaN(dailyLimit) || dailyLimit < 0) return t("Employee-exempt daily wage must be a non-negative number.");
     }
     if (current.lwf_applicable) {
       for (const [label, val] of [
-        ["LWF employee amount", current.lwf_employee_amount], ["LWF employer amount", current.lwf_employer_amount],
+        [t("LWF employee amount"), current.lwf_employee_amount], [t("LWF employer amount"), current.lwf_employer_amount],
       ] as const) {
         const n = Number(val ?? 0);
-        if (Number.isNaN(n) || n < 0) return `${label} cannot be negative.`;
+        if (Number.isNaN(n) || n < 0) return t("{label} cannot be negative.", { label });
       }
     }
     if (current.pt_applicable) {
       let prevMin: number | null = null;
       for (let i = 0; i < currentSlabs.length; i++) {
         const slab = currentSlabs[i];
-        if (slab.min < 0) return `Slab ${i + 1}: min cannot be negative.`;
-        if (slab.max !== null && slab.max <= slab.min) return `Slab ${i + 1}: max must be greater than min.`;
-        if (slab.amount < 0) return `Slab ${i + 1}: PT amount cannot be negative.`;
-        if (prevMin !== null && slab.min < prevMin) return "PT slabs must be ordered by ascending min.";
+        if (slab.min < 0) return t("Slab {number}: min cannot be negative.", { number: i + 1 });
+        if (slab.max !== null && slab.max <= slab.min) return t("Slab {number}: max must be greater than min.", { number: i + 1 });
+        if (slab.amount < 0) return t("Slab {number}: PT amount cannot be negative.", { number: i + 1 });
+        if (prevMin !== null && slab.min < prevMin) return t("PT slabs must be ordered by ascending min.");
         prevMin = slab.min;
       }
     }
@@ -105,9 +107,9 @@ export default function StatutoryConfigTab() {
       await clientApi.put(API.payroll.statutoryDetail(selectedId), draft);
       setDraft({});
       refetch();
-      flash("Statutory config saved.");
+      flash(t("Statutory config saved."));
     } catch {
-      flash("Failed to save.", true);
+      flash(t("Failed to save."), true);
     } finally {
       setSaving(false);
     }
@@ -122,9 +124,9 @@ export default function StatutoryConfigTab() {
       setNewStateId("");
       refetch();
       setSelectedId(res.data.data.id);
-      flash("Config created.");
+      flash(t("Config created."));
     } catch {
-      flash("A config for this state may already exist.", true);
+      flash(t("A config for this state may already exist."), true);
     } finally {
       setSaving(false);
     }
@@ -141,7 +143,7 @@ export default function StatutoryConfigTab() {
       <div className="w-56 shrink-0">
         <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--outline-v)]">
-            <span className="font-semibold text-[13px] text-[var(--on-bg)]">States</span>
+            <span className="font-semibold text-[13px] text-[var(--on-bg)]">{t("States")}</span>
             {availableStates.length > 0 && (
               <button onClick={() => setShowNew(true)} className="p-1 rounded-lg text-[var(--info)] hover:bg-[var(--info-c)]"><i className="ti ti-plus text-sm" /></button>
             )}
@@ -161,7 +163,7 @@ export default function StatutoryConfigTab() {
                 </button>
               ))}
               {(configs ?? []).length === 0 && (
-                <div className="px-4 py-6 text-center text-[var(--outline)] text-xs">No states configured</div>
+                <div className="px-4 py-6 text-center text-[var(--outline)] text-xs">{t("No states configured")}</div>
               )}
             </div>
           )}
@@ -179,12 +181,12 @@ export default function StatutoryConfigTab() {
         {!selected ? (
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] px-6 py-12 text-center text-[var(--outline)]">
             <i className="ti ti-building-bank text-3xl mb-2 block" />
-            Select a state to configure statutory deductions (PT, ESI, LWF)
+            {t("Select a state to configure statutory deductions (PT, ESI, LWF)")}
           </div>
         ) : (
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--outline-v)]">
-              <span className="font-semibold text-[var(--on-bg)]">{selected.state_name} — Statutory Config</span>
+              <span className="font-semibold text-[var(--on-bg)]">{selected.state_name} — {t("Statutory Config")}</span>
               {hasChanges && (
                 <button
                   onClick={saveConfig}
@@ -192,17 +194,17 @@ export default function StatutoryConfigTab() {
                   className="btn btn-filled disabled:opacity-50"
                 >
                   {saving
-                    ? <><i className="ti ti-loader-2 animate-spin text-sm" /> Saving…</>
-                    : <><i className="ti ti-device-floppy text-sm" /> Save Changes</>}
+                    ? <><i className="ti ti-loader-2 animate-spin text-sm" /> {t("Saving…")}</>
+                    : <><i className="ti ti-device-floppy text-sm" /> {t("Save Changes")}</>}
                 </button>
               )}
             </div>
 
             <div className="divide-y divide-[var(--outline-v)]">
               {/* Professional Tax */}
-              <Section title="Professional Tax (PT)">
+              <Section title={t("Professional Tax (PT)")}>
                 <ToggleRow
-                  label="PT Applicable"
+                  label={t("PT Applicable")}
                   value={current.pt_applicable ?? false}
                   onChange={v => setField("pt_applicable", v)}
                 />
@@ -213,47 +215,47 @@ export default function StatutoryConfigTab() {
               </Section>
 
               {/* ESI */}
-              <Section title="Employee State Insurance (ESI)">
+              <Section title={t("Employee State Insurance (ESI)")}>
                 <ToggleRow
-                  label="ESI Applicable"
+                  label={t("ESI Applicable")}
                   value={current.esi_applicable ?? false}
                   onChange={v => setField("esi_applicable", v)}
                 />
                 {current.esi_applicable && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                     <NumField
-                      label="Wage Ceiling (₹)"
+                      label={t("Wage Ceiling (₹)")}
                       value={String(current.esi_wage_ceiling ?? "")}
                       onChange={v => setField("esi_wage_ceiling", v)}
                     />
                     <NumField
-                      label="Employee Rate (%)"
+                      label={t("Employee Rate (%)")}
                       value={String(current.esi_employee_rate ?? "")}
                       onChange={v => setField("esi_employee_rate", v)}
                       step="0.01"
                     />
                     <NumField
-                      label="Employer Rate (%)"
+                      label={t("Employer Rate (%)")}
                       value={String(current.esi_employer_rate ?? "")}
                       onChange={v => setField("esi_employer_rate", v)}
                       step="0.01"
                     />
                     <NumField
-                      label="Employee-Exempt Daily Wage (₹)"
+                      label={t("Employee-Exempt Daily Wage (₹)")}
                       value={String(current.esi_daily_wage_exemption_threshold ?? "")}
                       onChange={v => setField("esi_daily_wage_exemption_threshold", v)}
                     />
                   </div>
                 )}
                 <p className="text-[11px] text-gray-500 mt-2">
-                  An employee averaging at or below the daily wage above is exempt from their own ESI share. The employer share is still due.
+                  {t("An employee averaging at or below the daily wage above is exempt from their own ESI share. The employer share is still due.")}
                 </p>
               </Section>
 
               {/* LWF */}
-              <Section title="Labour Welfare Fund (LWF)">
+              <Section title={t("Labour Welfare Fund (LWF)")}>
                 <ToggleRow
-                  label="LWF Applicable"
+                  label={t("LWF Applicable")}
                   value={current.lwf_applicable ?? false}
                   onChange={v => setField("lwf_applicable", v)}
                 />
@@ -261,35 +263,35 @@ export default function StatutoryConfigTab() {
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                       <NumField
-                        label="Employee Amount (₹)"
+                        label={t("Employee Amount (₹)")}
                         value={String(current.lwf_employee_amount ?? "")}
                         onChange={v => setField("lwf_employee_amount", v)}
                       />
                       <NumField
-                        label="Employer Amount (₹)"
+                        label={t("Employer Amount (₹)")}
                         value={String(current.lwf_employer_amount ?? "")}
                         onChange={v => setField("lwf_employer_amount", v)}
                       />
                       <div>
-                        <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">Frequency</label>
+                        <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">{t("Frequency")}</label>
                         <select
                           value={current.lwf_frequency ?? "monthly"}
                           onChange={e => setField("lwf_frequency", e.target.value as StatutoryConfig["lwf_frequency"])}
                           className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
                         >
-                          <option value="monthly">Monthly</option>
-                          <option value="halfyearly">Half-yearly</option>
-                          <option value="annual">Annual</option>
+                          <option value="monthly">{t("Monthly")}</option>
+                          <option value="halfyearly">{t("Half-yearly")}</option>
+                          <option value="annual">{t("Annual")}</option>
                         </select>
                       </div>
                     </div>
                     <p className="text-[11px] text-[var(--on-variant)] mt-2">
-                      The amount above is charged in full only in the due month(s) below — it is never divided across the year.
+                      {t("The amount above is charged in full only in the due month(s) below — it is never divided across the year.")}
                     </p>
                     {current.lwf_frequency === "annual" && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                         <MonthSelect
-                          label="Due Month"
+                          label={t("Due Month")}
                           value={current.lwf_due_months?.[0]}
                           onChange={m => setField("lwf_due_months", m ? [m] : [])}
                         />
@@ -298,7 +300,7 @@ export default function StatutoryConfigTab() {
                     {current.lwf_frequency === "halfyearly" && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                         <MonthSelect
-                          label="Due Month 1"
+                          label={t("Due Month 1")}
                           value={current.lwf_due_months?.[0]}
                           onChange={m => {
                             const second = current.lwf_due_months?.[1];
@@ -306,7 +308,7 @@ export default function StatutoryConfigTab() {
                           }}
                         />
                         <MonthSelect
-                          label="Due Month 2"
+                          label={t("Due Month 2")}
                           value={current.lwf_due_months?.[1]}
                           onChange={m => {
                             const first = current.lwf_due_months?.[0];

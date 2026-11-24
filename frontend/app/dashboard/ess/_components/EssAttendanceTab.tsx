@@ -31,7 +31,9 @@ const RECENT_PUNCHES = 3;
 const RECENT_REQUESTS = 5;
 
 function punchDetail(row: RecentPunchRow): string {
-  return row.clockOut ? `In ${row.clockIn} · Out ${row.clockOut}` : `In ${row.clockIn} · ${row.source}`;
+  return row.clockOut
+    ? tr("In {clockIn} · Out {clockOut}", { clockIn: row.clockIn ?? "", clockOut: row.clockOut ?? "" })
+    : tr("In {clockIn} · {source}", { clockIn: row.clockIn ?? "", source: row.source ?? "" });
 }
 
 function TimesheetCard({ isReadOnly, onOpen }: { isReadOnly: boolean; onOpen?: (weekStart: string) => void }) {
@@ -51,7 +53,7 @@ function TimesheetCard({ isReadOnly, onOpen }: { isReadOnly: boolean; onOpen?: (
       <div className="ess-list">
         <div className="ess-row">
           <div>
-            <b>{tr("Week ending")} {weekEnding.getDate()} {MONTH_LONG[weekEnding.getMonth()]}</b>
+            <b>{tr("Week ending {day} {month}", { day: weekEnding.getDate(), month: tr(MONTH_LONG[weekEnding.getMonth()]) })}</b>
             <small>{card.subtitle}</small>
           </div>
           <span className={`state${card.isDone ? " ok" : ""}`}>{card.badge}</span>

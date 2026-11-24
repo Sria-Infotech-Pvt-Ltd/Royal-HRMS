@@ -3,6 +3,7 @@
 // The OT records: a header with the total and the branch filter, then a table with coloured type and status pills, a shimmering
 // placeholder while loading, a friendly empty state, and paging.
 
+import { useT } from "@/hooks/useI18n";
 import type { ReactNode } from "react";
 import type { OvertimeRow, PaginatedOvertime } from "@/types/attendance";
 import { PALETTE, tint } from "./attendancePalette";
@@ -27,11 +28,12 @@ function Pill({ colour, children }: { colour: string; children: ReactNode }) {
 }
 
 export default function OtRecordsCard({ rows, data, loading, error, page, onPage, filter }: Props) {
+  const t = useT();
   return (
-    <section aria-label="OT records" className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <section aria-label={t("OT records")} className="card" style={{ padding: 0, overflow: "hidden" }}>
       <header style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, borderBottom: "1px solid var(--outline-v)" }}>
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "var(--on-bg)", display: "flex", alignItems: "center", gap: 8 }}>
-          <i className="ti ti-list-details" aria-hidden="true" style={{ color: PALETTE.brand }} /> OT Records
+          <i className="ti ti-list-details" aria-hidden="true" style={{ color: PALETTE.brand }} /> {t("OT Records")}
           {data && <span style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: tint(PALETTE.brand, 0.12), color: PALETTE.brand }}>{data.count}</span>}
         </h3>
         {filter}
@@ -40,17 +42,17 @@ export default function OtRecordsCard({ rows, data, loading, error, page, onPage
       <div className="table-wrap">
         <table>
           <thead>
-            <tr><th>Employee</th><th>Date</th><th>OT Hours</th><th>Type</th><th>OT Amount</th><th>Approved By</th><th>Status</th></tr>
+            <tr><th>{t("Employee")}</th><th>{t("Date")}</th><th>{t("OT Hours")}</th><th>{t("Type")}</th><th>{t("OT Amount")}</th><th>{t("Approved By")}</th><th>{t("Status")}</th></tr>
           </thead>
           <tbody>
             {loading && Array.from({ length: 3 }, (_, index) => (
-              <tr key={`loading-${index}`} aria-label="Loading">{Array.from({ length: 7 }, (__, cell) => <td key={cell}><div aria-hidden="true" style={{ ...SHIMMER, height: 14, borderRadius: 6 }} /></td>)}</tr>
+              <tr key={`loading-${index}`} aria-label={t("Loading")}>{Array.from({ length: 7 }, (__, cell) => <td key={cell}><div aria-hidden="true" style={{ ...SHIMMER, height: 14, borderRadius: 6 }} /></td>)}</tr>
             ))}
             {!loading && rows.length === 0 && (
               <tr><td colSpan={7} style={{ padding: "34px 12px", textAlign: "center", color: "var(--on-variant)" }}>
                 <i className="ti ti-clock-off" aria-hidden="true" style={{ fontSize: 32, color: "var(--outline)" }} />
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 6 }}>No overtime entries found.</div>
-                <div style={{ fontSize: 12.5, marginTop: 2 }}>Entries you add above will appear here.</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 6 }}>{t("No overtime entries found.")}</div>
+                <div style={{ fontSize: 12.5, marginTop: 2 }}>{t("Entries you add above will appear here.")}</div>
               </td></tr>
             )}
             {rows.map(row => (
@@ -77,10 +79,10 @@ export default function OtRecordsCard({ rows, data, loading, error, page, onPage
       </div>
       {data && data.total_pages > 1 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
-          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {data.page} of {data.total_pages}</span>
+          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("Page {page} of {total}", { page: data.page, total: data.total_pages })}</span>
           <div style={{ display: "flex", gap: 6 }}>
-            <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => onPage(Math.max(page - 1, 1))}><i className="ti ti-chevron-left" /> Prev</button>
-            <button className="btn btn-ghost btn-sm" disabled={page >= data.total_pages} onClick={() => onPage(Math.min(page + 1, data.total_pages))}>Next <i className="ti ti-chevron-right" /></button>
+            <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => onPage(Math.max(page - 1, 1))}><i className="ti ti-chevron-left" /> {t("Prev")}</button>
+            <button className="btn btn-ghost btn-sm" disabled={page >= data.total_pages} onClick={() => onPage(Math.min(page + 1, data.total_pages))}>{t("Next")} <i className="ti ti-chevron-right" /></button>
           </div>
         </div>
       )}

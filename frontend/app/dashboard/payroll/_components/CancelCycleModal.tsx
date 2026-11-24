@@ -3,6 +3,7 @@
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 import type { PayrollCycle } from "@/types/payroll";
 import { cyclePeriodLabel } from "./payrollDashboardShared";
 
@@ -15,12 +16,13 @@ interface Props {
 const PERIOD_LABEL = (c: PayrollCycle) => cyclePeriodLabel(c);
 
 export default function CancelCycleModal({ cycle, onCancelled, onClose }: Props) {
+  const t = useT();
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState("");
 
   async function handleConfirm() {
-    if (!reason.trim()) { setApiError("Please enter a reason for cancellation."); return; }
+    if (!reason.trim()) { setApiError(t("Please enter a reason for cancellation.")); return; }
     setSaving(true);
     setApiError("");
     try {
@@ -28,7 +30,7 @@ export default function CancelCycleModal({ cycle, onCancelled, onClose }: Props)
       onCancelled();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setApiError(msg ?? "Failed to cancel cycle. Please try again.");
+      setApiError(msg ?? t("Failed to cancel cycle. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -56,31 +58,31 @@ export default function CancelCycleModal({ cycle, onCancelled, onClose }: Props)
               <i className="ti ti-alert-triangle" style={{ color: "var(--error)", fontSize: 18 }} />
             </div>
             <div>
-              <div className="modal-title">Cancel Payroll Cycle</div>
+              <div className="modal-title">{t("Cancel Payroll Cycle")}</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                {PERIOD_LABEL(cycle)} · {cycle.payslip_count} payslips
+                {PERIOD_LABEL(cycle)} · {t("{count} payslips", { count: cycle.payslip_count })}
               </div>
             </div>
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label={t("Close")}><i className="ti ti-x" /></button>
         </div>
 
         <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div className="alert alert-error" style={{ fontSize: 13 }}>
             <i className="ti ti-info-circle" />
             <span>
-              This cycle will be voided and <strong>cannot be restarted</strong>.
-              Any approved expenses already included in this cycle will be <strong>unlinked</strong> and available for the next payroll run.
+              {t("This cycle will be voided and")} <strong>{t("cannot be restarted")}</strong>.{" "}
+              {t("Any approved expenses already included in this cycle will be")} <strong>{t("unlinked")}</strong> {t("and available for the next payroll run.")}
             </span>
           </div>
 
           <div className="field-group">
-            <label className="field-label" htmlFor="cancel-cycle-reason">Reason for cancellation <span style={{ color: "var(--error)" }}>*</span></label>
+            <label className="field-label" htmlFor="cancel-cycle-reason">{t("Reason for cancellation")} <span style={{ color: "var(--error)" }}>*</span></label>
             <textarea
               id="cancel-cycle-reason"
               className="field-input"
               rows={3}
-              placeholder="e.g. Wrong cycle dates entered, payroll period needs to be restarted…"
+              placeholder={t("e.g. Wrong cycle dates entered, payroll period needs to be restarted…")}
               value={reason}
               onChange={e => { setReason(e.target.value); setApiError(""); }}
               style={{ resize: "vertical" }}
@@ -96,10 +98,10 @@ export default function CancelCycleModal({ cycle, onCancelled, onClose }: Props)
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Keep Cycle</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>{t("Keep Cycle")}</button>
           <button className="btn btn-danger" onClick={handleConfirm} disabled={saving || !reason.trim()}>
             {saving ? <i className="ti ti-loader-2 animate-spin" /> : <i className="ti ti-trash" />}
-            {saving ? "Cancelling…" : "Cancel This Cycle"}
+            {saving ? t("Cancelling…") : t("Cancel This Cycle")}
           </button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 
 interface MyAssignment {
   id: string;
@@ -32,6 +33,7 @@ function fmt(iso: string | null) {
 }
 
 export default function EmployeeMyAssessments() {
+  const t = useT();
   const router = useRouter();
   const { data, loading, error } = useFetch<MyAssessmentData>(API.assessments.my);
   const assignments = data?.assignments ?? [];
@@ -42,8 +44,8 @@ export default function EmployeeMyAssessments() {
     <>
       <div className="page-header">
         <div>
-          <h2 className="page-title">My Assessments</h2>
-          <p className="page-sub">Your assigned assessments and their completion status.</p>
+          <h2 className="page-title">{t("My Assessments")}</h2>
+          <p className="page-sub">{t("Your assigned assessments and their completion status.")}</p>
         </div>
       </div>
 
@@ -61,8 +63,8 @@ export default function EmployeeMyAssessments() {
       ) : assignments.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-clipboard-check" style={{ fontSize: 40 }} />
-          <h3>No assessments assigned</h3>
-          <p>You have no assessments assigned at the moment. Check back later.</p>
+          <h3>{t("No assessments assigned")}</h3>
+          <p>{t("You have no assessments assigned at the moment. Check back later.")}</p>
         </div>
       ) : (
         <>
@@ -80,7 +82,7 @@ export default function EmployeeMyAssessments() {
                   </div>
                   <div>
                     <div style={{ fontSize: 24, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>{s.label}</div>
+                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>{t(s.label)}</div>
                   </div>
                 </div>
               </div>
@@ -92,7 +94,7 @@ export default function EmployeeMyAssessments() {
             <div className="mb-24">
               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-variant)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 <i className="ti ti-clock" style={{ color: "#d97706", marginRight: 6 }} />
-                Pending ({pending.length})
+                {t("Pending ({count})", { count: pending.length })}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {pending.map(a => {
@@ -105,13 +107,13 @@ export default function EmployeeMyAssessments() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, color: "var(--on-bg)", marginBottom: 6 }}>{a.assessment_title}</div>
                           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "var(--on-variant)" }}>
-                            <span><i className="ti ti-list" style={{ marginRight: 4 }} />{a.completed_items}/{a.total_items} items done</span>
-                            <span><i className="ti ti-percentage" style={{ marginRight: 4 }} />{a.pass_percentage}% to pass</span>
+                            <span><i className="ti ti-list" style={{ marginRight: 4 }} />{t("{done}/{total} items done", { done: a.completed_items, total: a.total_items })}</span>
+                            <span><i className="ti ti-percentage" style={{ marginRight: 4 }} />{t("{percent}% to pass", { percent: a.pass_percentage })}</span>
                             {a.deadline && (
-                              <span><i className="ti ti-calendar-event" style={{ marginRight: 4 }} />Due: {fmt(a.deadline)}</span>
+                              <span><i className="ti ti-calendar-event" style={{ marginRight: 4 }} />{t("Due: {date}", { date: fmt(a.deadline) })}</span>
                             )}
                             {a.attempt_count > 0 && (
-                              <span><i className="ti ti-refresh" style={{ marginRight: 4 }} />Attempt {a.attempt_count}</span>
+                              <span><i className="ti ti-refresh" style={{ marginRight: 4 }} />{t("Attempt {count}", { count: a.attempt_count })}</span>
                             )}
                           </div>
                           {a.total_items > 0 && (
@@ -119,19 +121,19 @@ export default function EmployeeMyAssessments() {
                               <div style={{ height: 4, background: "var(--outline-v)", borderRadius: 4, overflow: "hidden" }}>
                                 <div style={{ width: `${progress}%`, height: "100%", background: "#0284c7", borderRadius: 4, transition: "width 0.3s" }} />
                               </div>
-                              <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>{progress}% complete</div>
+                              <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>{t("{percent}% complete", { percent: progress })}</div>
                             </div>
                           )}
                         </div>
                         <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                           {a.status === "in_progress"
-                            ? <span className="badge badge-info">In Progress</span>
-                            : <span className="badge" style={{ background: "var(--bg-mid)", color: "var(--on-variant)" }}>Pending</span>}
+                            ? <span className="badge badge-info">{t("In Progress")}</span>
+                            : <span className="badge" style={{ background: "var(--bg-mid)", color: "var(--on-variant)" }}>{t("Pending")}</span>}
                           <button
                             className="btn btn-filled btn-sm"
                             onClick={() => router.push("/onboarding/assessments")}
                           >
-                            <i className="ti ti-pencil" /> {a.status === "in_progress" ? "Continue" : "Start"}
+                            <i className="ti ti-pencil" /> {a.status === "in_progress" ? t("Continue") : t("Start")}
                           </button>
                         </div>
                       </div>
@@ -147,7 +149,7 @@ export default function EmployeeMyAssessments() {
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-variant)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 <i className="ti ti-circle-check" style={{ color: "#16a34a", marginRight: 6 }} />
-                Completed ({completed.length})
+                {t("Completed ({count})", { count: completed.length })}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {completed.map(a => {
@@ -159,11 +161,11 @@ export default function EmployeeMyAssessments() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, color: "var(--on-bg)", marginBottom: 6 }}>{a.assessment_title}</div>
                           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "var(--on-variant)" }}>
-                            <span><i className="ti ti-calendar-check" style={{ marginRight: 4 }} />Completed: {fmt(a.completed_at)}</span>
-                            <span><i className="ti ti-refresh" style={{ marginRight: 4 }} />{a.attempt_count} attempt{a.attempt_count !== 1 ? "s" : ""}</span>
+                            <span><i className="ti ti-calendar-check" style={{ marginRight: 4 }} />{t("Completed: {date}", { date: fmt(a.completed_at) })}</span>
+                            <span><i className="ti ti-refresh" style={{ marginRight: 4 }} />{a.attempt_count === 1 ? t("{count} attempt", { count: a.attempt_count }) : t("{count} attempts", { count: a.attempt_count })}</span>
                             {a.max_score > 0 && (
                               <span style={{ fontWeight: 600, color: passed ? "#16a34a" : "#dc2626" }}>
-                                Score: {pct}% (pass: {a.pass_percentage}%)
+                                {t("Score: {score}% (pass: {pass}%)", { score: pct, pass: a.pass_percentage })}
                               </span>
                             )}
                           </div>
@@ -171,11 +173,11 @@ export default function EmployeeMyAssessments() {
                         <div style={{ flexShrink: 0 }}>
                           {passed ? (
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "#15803d", background: "#dcfce7", padding: "4px 12px", borderRadius: 20, fontSize: 12 }}>
-                              <i className="ti ti-circle-check" style={{ fontSize: 13 }} />Passed
+                              <i className="ti ti-circle-check" style={{ fontSize: 13 }} />{t("Passed")}
                             </span>
                           ) : (
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "#dc2626", background: "#fee2e2", padding: "4px 12px", borderRadius: 20, fontSize: 12 }}>
-                              <i className="ti ti-circle-x" style={{ fontSize: 13 }} />Failed
+                              <i className="ti ti-circle-x" style={{ fontSize: 13 }} />{t("Failed")}
                             </span>
                           )}
                         </div>

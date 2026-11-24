@@ -11,6 +11,7 @@ import { useToast } from "@/components/ToastProvider";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import { useT } from "@/hooks/useI18n";
 
 const OPEN_STATUSES = new Set<WorkFromHomeRequest["status"]>(["pending", "l2_pending", "approved"]);
 
@@ -19,6 +20,7 @@ interface WfhLocationPolicyProps {
 }
 
 export default function WfhLocationPolicy({ request }: WfhLocationPolicyProps) {
+  const t = useT();
   const { showToast } = useToast();
   const [isEnforced, setIsEnforced] = useState(request.enforce_location ?? true);
   const [unlockedBy, setUnlockedBy] = useState(request.location_unlocked_by_name ?? "");
@@ -30,8 +32,7 @@ export default function WfhLocationPolicy({ request }: WfhLocationPolicyProps) {
   async function change(allowAny: boolean) {
     if (allowAny) {
       const isConfirmed = await confirmDialog(
-        `Let ${request.employee_name || "this employee"} punch in and out from any location on these days? `
-        + "Face verification still applies and the location of every punch is still recorded.",
+        t("Let {name} punch in and out from any location on these days? Face verification still applies and the location of every punch is still recorded.", { name: request.employee_name || t("this employee") }),
       );
       if (!isConfirmed) return;
     }
@@ -42,10 +43,10 @@ export default function WfhLocationPolicy({ request }: WfhLocationPolicyProps) {
       );
       setIsEnforced(data.data.enforce_location ?? !allowAny);
       setUnlockedBy(data.data.location_unlocked_by_name ?? "");
-      showToast(data.message || "Location check updated.", "success");
+      showToast(data.message || t("Location check updated."), "success");
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(message || "Could not change the location check.", "error");
+      showToast(message || t("Could not change the location check."), "error");
     } finally {
       setIsSaving(false);
     }
@@ -53,17 +54,19 @@ export default function WfhLocationPolicy({ request }: WfhLocationPolicyProps) {
 
   return (
     <div className="ta-drawer-section">
-      <div className="ta-drawer-label">Location check</div>
+      <div className="ta-drawer-label">{t("Location check")}</div>
       <p style={{ fontSize: 13, color: "var(--ta-text)", lineHeight: 1.6, marginBottom: canChange ? 10 : 0 }}>
         {isEnforced
-          ? `Punches must be near ${request.location_label || "the declared location"}.`
-          : `Punching is allowed from any location on these days${unlockedBy ? ` (allowed by ${unlockedBy})` : ""}.`}
+          ? t("Punches must be near {place}.", { place: request.location_label || t("the declared location") })
+          : (unlockedBy
+            ? t("Punching is allowed from any location on these days (allowed by {name}).", { name: unlockedBy })
+            : t("Punching is allowed from any location on these days."))}
       </p>
       {canChange && (
         <>
-          <ToggleSwitch checked={!isEnforced} onChange={change} disabled={isSaving} label="Allow punching from any location" />
+          <ToggleSwitch checked={!isEnforced} onChange={change} disabled={isSaving} label={t("Allow punching from any location")} />
           <p style={{ fontSize: 11.5, color: "var(--ta-text-muted)", marginTop: 6 }}>
-            For someone who moves around during these days. Face verification still applies.
+            {t("For someone who moves around during these days. Face verification still applies.")}
           </p>
         </>
       )}

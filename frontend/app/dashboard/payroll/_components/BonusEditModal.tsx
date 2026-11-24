@@ -4,6 +4,7 @@ import { useState } from "react";
 import Modal from "@/components/Modal";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import type { BonusEntry, EmployeePayslip, EmployeeReferralSummary } from "@/types/payroll";
 
@@ -24,6 +25,7 @@ function emptyEntry(): BonusEntry {
 }
 
 export default function BonusEditModal({ payslip, referralSummary, onSaved, onClose }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const referrals = referralSummary?.referral_bonuses ?? [];
 
@@ -63,8 +65,8 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
     for (const e of entries) {
       if (e.amount.trim() === "") continue;
       const amt = Number(e.amount);
-      if (Number.isNaN(amt)) { setErr(`Enter a valid amount for the ${e.type} bonus.`); return; }
-      if (amt < 0) { setErr(`${e.type} bonus amount cannot be negative.`); return; }
+      if (Number.isNaN(amt)) { setErr(t("Enter a valid amount for the {type} bonus.", { type: t(e.type) })); return; }
+      if (amt < 0) { setErr(t("{type} bonus amount cannot be negative.", { type: t(e.type) })); return; }
     }
     const valid = entries.filter(e => Number(e.amount) > 0);
     setSaving(true);
@@ -72,11 +74,11 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
       await clientApi.patch(API.payroll.payslipReimbBonus(payslip.id), {
         bonus_breakdown: valid,
       });
-      showToast("Bonuses updated.", "success");
+      showToast(t("Bonuses updated."), "success");
       onSaved();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? "Failed to save.";
+        ?? t("Failed to save.");
       showToast(msg, "error");
     } finally {
       setSaving(false);
@@ -88,18 +90,18 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
       title={
         <>
           <i className="ti ti-gift" style={{ marginRight: 6 }} />
-          Bonuses — {payslip.employee_name}
+          {t("Bonuses — {name}", { name: payslip.employee_name })}
         </>
       }
       onClose={onClose}
       maxWidth={560}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
             {saving
-              ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</>
-              : <><i className="ti ti-check" /> Save</>
+              ? <><i className="ti ti-loader-2 animate-spin" /> {t("Saving…")}</>
+              : <><i className="ti ti-check" /> {t("Save")}</>
             }
           </button>
         </>
@@ -116,16 +118,16 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
         {referrals.length > 0 && (
           <div style={{ background: "var(--bg-low)", borderRadius: 8, padding: "10px 14px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8 }}>
-              <i className="ti ti-user-plus" style={{ marginRight: 4 }} /> Pending Referral Bonuses
+              <i className="ti ti-user-plus" style={{ marginRight: 4 }} /> {t("Pending Referral Bonuses")}
             </div>
             {referrals.map(r => (
               <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <div style={{ fontSize: 13 }}>
                   <span style={{ fontWeight: 600 }}>{fmt(r.bonus_amount)}</span>
-                  <span style={{ color: "var(--on-variant)", marginLeft: 8, fontSize: 12 }}>for {r.candidate_name}</span>
+                  <span style={{ color: "var(--on-variant)", marginLeft: 8, fontSize: 12 }}>{t("for {name}", { name: r.candidate_name })}</span>
                 </div>
                 <button className="btn btn-ghost btn-sm" onClick={() => importReferral(r)}>
-                  <i className="ti ti-plus" /> Add
+                  <i className="ti ti-plus" /> {t("Add")}
                 </button>
               </div>
             ))}
@@ -135,7 +137,7 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
         {/* Bonus entries */}
         {entries.length === 0 ? (
           <div style={{ textAlign: "center", padding: "20px 0", color: "var(--on-variant)", fontSize: 13 }}>
-            No bonus entries yet. Click &quot;Add Bonus&quot; below.
+            {t("No bonus entries yet. Click \"Add Bonus\" below.")}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -146,12 +148,12 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
                   value={entry.type}
                   onChange={e => updateEntry(idx, "type", e.target.value)}
                 >
-                  {BONUS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  {BONUS_TYPES.map(bonusType => <option key={bonusType} value={bonusType}>{t(bonusType)}</option>)}
                 </select>
                 <input
                   type="number"
                   className="field-input"
-                  placeholder="Amount"
+                  placeholder={t("Amount")}
                   min={0}
                   step={500}
                   value={entry.amount}
@@ -160,12 +162,12 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
                 <input
                   type="text"
                   className="field-input"
-                  placeholder="Note (optional)"
+                  placeholder={t("Note (optional)")}
                   maxLength={200}
                   value={entry.note}
                   onChange={e => updateEntry(idx, "note", e.target.value)}
                 />
-                <button className="btn btn-ghost btn-sm" onClick={() => removeEntry(idx)} style={{ color: "var(--error)" }} aria-label="Delete">
+                <button className="btn btn-ghost btn-sm" onClick={() => removeEntry(idx)} style={{ color: "var(--error)" }} aria-label={t("Delete")}>
                   <i className="ti ti-trash" />
                 </button>
               </div>
@@ -174,12 +176,12 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
         )}
 
         <button className="btn btn-ghost btn-sm" onClick={addEntry} style={{ alignSelf: "flex-start" }}>
-          <i className="ti ti-plus" /> Add Bonus
+          <i className="ti ti-plus" /> {t("Add Bonus")}
         </button>
 
         {entries.length > 0 && (
           <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--outline-v)", fontWeight: 700 }}>
-            <span>Total bonus</span>
+            <span>{t("Total bonus")}</span>
             <span style={{ color: "var(--warn)" }}>{fmt(total)}</span>
           </div>
         )}

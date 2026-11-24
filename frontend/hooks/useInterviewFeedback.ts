@@ -1,5 +1,6 @@
 "use client";
 
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -15,10 +16,10 @@ interface FeedbackDraft {
 
 /** Client-side mirror of the server's rules; the server stays the authority. Returns a message, or "" when valid. */
 export function feedbackProblem(input: FeedbackDraft): string {
-  if (!(input.rating >= 1 && input.rating <= 5)) return "Choose a rating from 1 to 5.";
-  if (!input.recommendation) return "Choose Recommend, Undecided or Do not recommend.";
+  if (!(input.rating >= 1 && input.rating <= 5)) return tr("Choose a rating from 1 to 5.");
+  if (!input.recommendation) return tr("Choose Recommend, Undecided or Do not recommend.");
   if (input.comments.trim().length < FEEDBACK_MIN_COMMENT_LENGTH) {
-    return `Write at least ${FEEDBACK_MIN_COMMENT_LENGTH} characters of comments.`;
+    return tr("Write at least {count} characters of comments.", { count: FEEDBACK_MIN_COMMENT_LENGTH });
   }
   return "";
 }
@@ -35,7 +36,7 @@ export function useSubmitFeedback() {
       const response = await clientApi.put<{ data: MyInterview }>(API.recruitment.myInterviewFeedback(interviewId), input);
       return response.data.data;
     } catch (err: unknown) {
-      setError((err as { message?: string })?.message || "Could not save your feedback.");
+      setError((err as { message?: string })?.message || tr("Could not save your feedback."));
       return null;
     } finally {
       setIsSaving(false);

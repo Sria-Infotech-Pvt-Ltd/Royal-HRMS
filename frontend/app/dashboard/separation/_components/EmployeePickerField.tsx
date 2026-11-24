@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 export interface PickedEmployee {
   code:        string; // employee code (e.g. RSS000198) — sent as employee_id on separation requests
@@ -34,6 +35,7 @@ function joinParts(parts: (string | null | undefined)[], leading = ""): string {
 }
 
 export default function EmployeePickerField({ value, onChange, disabled }: Props) {
+  const t = useT();
   const [query,   setQuery]   = useState("");
   const [open,    setOpen]    = useState(false);
   const [results, setResults] = useState<ApiEmployeeRow[]>([]);
@@ -83,7 +85,7 @@ export default function EmployeePickerField({ value, onChange, disabled }: Props
           <span style={{ color: "var(--on-variant)" }}>{joinParts([value.code, value.department], " · ")}</span>
         </span>
         {!disabled && (
-          <button type="button" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={() => onChange(null)} aria-label="Close">
+          <button type="button" className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={() => onChange(null)} aria-label={t("Close")}>
             <i className="ti ti-x" />
           </button>
         )}
@@ -95,7 +97,7 @@ export default function EmployeePickerField({ value, onChange, disabled }: Props
     <div ref={boxRef} style={{ position: "relative" }}>
       <input
         className="field-input"
-        placeholder="Leave blank to file for yourself, or search an employee…"
+        placeholder={t("Leave blank to file for yourself, or search an employee…")}
         value={query}
         disabled={disabled}
         onChange={e => { search(e.target.value); setOpen(true); }}
@@ -110,10 +112,10 @@ export default function EmployeePickerField({ value, onChange, disabled }: Props
         }}>
           {loading ? (
             <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>
-              <i className="ti ti-loader-2 spin" /> Searching…
+              <i className="ti ti-loader-2 spin" /> {t("Searching…")}
             </div>
           ) : results.length === 0 ? (
-            <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>No employees found.</div>
+            <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>{t("No employees found.")}</div>
           ) : (
             results.map(r => (
               <button

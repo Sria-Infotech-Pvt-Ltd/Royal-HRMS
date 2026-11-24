@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 import PermissionMatrix from "@/components/PermissionMatrix";
 import PersonAccessPanel from "@/components/PersonAccessPanel";
@@ -27,6 +28,7 @@ const LOCKED_CODENAMES = ["settings.edit"] as const;
 
 export default function AccessSettingsPage() {
   const router = useRouter();
+  const t = useT();
   const canEdit = usePermission("settings.edit");
   const catalogue = useFetch<Catalogue>(`${API.permissions.list}?page_size=500`);
   const baseline = useFetch<Baseline>(API.access.baselinePermissions);
@@ -61,10 +63,10 @@ export default function AccessSettingsPage() {
     setMessage(null);
     try {
       await clientApi.put(API.access.baselinePermissions, { codenames: [...granted] });
-      setMessage({ text: "Saved. Takes effect the next time each person signs in.", isError: false });
+      setMessage({ text: t("Saved. Takes effect the next time each person signs in."), isError: false });
       baseline.refetch();
     } catch (err: unknown) {
-      setMessage({ text: (err as { message?: string })?.message ?? "Could not save.", isError: true });
+      setMessage({ text: (err as { message?: string })?.message ?? t("Could not save."), isError: true });
     } finally {
       setIsSaving(false);
     }
@@ -103,40 +105,39 @@ export default function AccessSettingsPage() {
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <button className="btn btn-ghost" type="button" onClick={() => router.push("/dashboard/settings")}>
-          <i className="ti ti-arrow-left" /> Back to Settings
+          <i className="ti ti-arrow-left" /> {t("Back to Settings")}
         </button>
         {canEdit && tab === "everyone" && (
           <button className="btn btn-filled" type="button" onClick={save} disabled={isSaving || isLoading}>
             <i className={`ti ${isSaving ? "ti-loader-2 animate-spin" : "ti-device-floppy"}`} />
-            {isSaving ? "Saving…" : "Save baseline"}
+            {isSaving ? t("Saving…") : t("Save baseline")}
           </button>
         )}
       </div>
 
       <header>
-        <h1 className="text-2xl font-bold text-[var(--on-bg)]">Permissions</h1>
+        <h1 className="text-2xl font-bold text-[var(--on-bg)]">{t("Permissions")}</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--on-variant)]">
-          Everyone gets the baseline. On top of that, each person gets the access of the position they hold
-          (set in <Link className="font-semibold text-[var(--primary)] hover:underline" href="/dashboard/org-chart">Organization</Link>),
-          plus any extra access you give them personally.
+          {t("Everyone gets the baseline. On top of that, each person gets the access of the position they hold (set in")}{" "}
+          <Link className="font-semibold text-[var(--primary)] hover:underline" href="/dashboard/org-chart">{t("Organization")}</Link>{t("), plus any extra access you give them personally.")}
         </p>
       </header>
 
       <div className="grid gap-2 rounded-xl border border-[var(--outline-v)] bg-[var(--bg-low)] p-3 text-xs leading-5 text-[var(--on-variant)] sm:grid-cols-3">
-        <p><strong className="text-[var(--on-bg)]">Everyone</strong> — what every employee can do, no matter their position.</p>
-        <p><strong className="text-[var(--on-bg)]">One person</strong> — extra access for just one specific employee, on top of their position.</p>
-        <p><strong className="text-[var(--on-bg)]">Bulk apply (Templates)</strong> — give the same permissions to many positions at once, e.g. every manager.</p>
+        <p><strong className="text-[var(--on-bg)]">{t("Everyone")}</strong> — {t("what every employee can do, no matter their position.")}</p>
+        <p><strong className="text-[var(--on-bg)]">{t("One person")}</strong> — {t("extra access for just one specific employee, on top of their position.")}</p>
+        <p><strong className="text-[var(--on-bg)]">{t("Bulk apply (Templates)")}</strong> — {t("give the same permissions to many positions at once, e.g. every manager.")}</p>
       </div>
 
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === "everyone"} className={`tab${tab === "everyone" ? " active" : ""}`} onClick={() => setTab("everyone")}>
-          <i className="ti ti-users-group mr-1.5" />Everyone
+          <i className="ti ti-users-group mr-1.5" />{t("Everyone")}
         </button>
         <button role="tab" aria-selected={tab === "person"} className={`tab${tab === "person" ? " active" : ""}`} onClick={() => setTab("person")}>
-          <i className="ti ti-user-check mr-1.5" />One person
+          <i className="ti ti-user-check mr-1.5" />{t("One person")}
         </button>
         <button role="tab" aria-selected={tab === "templates"} className={`tab${tab === "templates" ? " active" : ""}`} onClick={() => setTab("templates")}>
-          <i className="ti ti-stack-2 mr-1.5" />Bulk apply (Templates)
+          <i className="ti ti-stack-2 mr-1.5" />{t("Bulk apply (Templates)")}
         </button>
       </div>
 
@@ -145,18 +146,18 @@ export default function AccessSettingsPage() {
 
       {isLoading ? (
         <p className="py-10 text-center text-sm text-[var(--on-variant)]">
-          <i className="ti ti-loader-2 mr-2 animate-spin text-[var(--primary)]" />Loading permissions…
+          <i className="ti ti-loader-2 mr-2 animate-spin text-[var(--primary)]" />{t("Loading permissions…")}
         </p>
       ) : loadError ? null : tab === "person" ? (
         <PersonAccessPanel catalogue={catalogueByModule} canEdit={canEdit} />
       ) : tab === "templates" ? (
         <PermissionTemplatesPanel catalogue={catalogueByModule} canEdit={canEdit} />
       ) : modules.length === 0 ? (
-        <p className="py-10 text-center text-sm text-[var(--on-variant)]">No permissions are available.</p>
+        <p className="py-10 text-center text-sm text-[var(--on-variant)]">{t("No permissions are available.")}</p>
       ) : (
         <>
           <p className="text-sm text-[var(--on-variant)]">
-            What every employee can do, whatever their position. Changes take effect the next time each person signs in.
+            {t("What every employee can do, whatever their position. Changes take effect the next time each person signs in.")}
           </p>
           <PermissionStatCards
             granted={grantedCount} total={permissionCount} sensitive={sensitiveOn(modules, granted)}
@@ -172,24 +173,24 @@ export default function AccessSettingsPage() {
             lockedCodenames={LOCKED_CODENAMES}
             isReadOnly={!canEdit}
           />
-          {!canEdit && <p className="text-center text-xs text-[var(--on-variant)]">You have read-only access to baseline permissions.</p>}
+          {!canEdit && <p className="text-center text-xs text-[var(--on-variant)]">{t("You have read-only access to baseline permissions.")}</p>}
           {canEdit && hasUnsavedChanges && (
             <div className="sticky bottom-4 z-30 space-y-2 rounded-2xl border px-4 py-3 shadow-lg" role="status"
               style={{ background: "var(--surface)", borderColor: "var(--primary)" }}>
               {isReviewing && <PermissionChangeReview modules={modules} granted={granted} saved={savedCodenames} />}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm font-semibold text-[var(--on-bg)]">
-                  <i className="ti ti-pencil mr-2 text-[var(--primary)]" />{changedCount} unsaved {changedCount === 1 ? "change" : "changes"}
+                  <i className="ti ti-pencil mr-2 text-[var(--primary)]" />{changedCount === 1 ? t("{count} unsaved change", { count: changedCount }) : t("{count} unsaved changes", { count: changedCount })}
                 </span>
                 <span className="flex flex-wrap gap-2">
                   <button className="btn btn-ghost" type="button" onClick={() => setIsReviewing(open => !open)} aria-expanded={isReviewing}>
-                    <i className={`ti ${isReviewing ? "ti-chevron-down" : "ti-list-details"}`} /> {isReviewing ? "Hide changes" : "Review changes"}
+                    <i className={`ti ${isReviewing ? "ti-chevron-down" : "ti-list-details"}`} /> {isReviewing ? t("Hide changes") : t("Review changes")}
                   </button>
                   <button className="btn btn-ghost" type="button" onClick={() => { setGranted(new Set(savedCodenames)); setIsReviewing(false); }} disabled={isSaving}>
-                    <i className="ti ti-arrow-back-up" /> Discard
+                    <i className="ti ti-arrow-back-up" /> {t("Discard")}
                   </button>
                   <button className="btn btn-filled" type="button" onClick={save} disabled={isSaving}>
-                    <i className={`ti ${isSaving ? "ti-loader-2 animate-spin" : "ti-device-floppy"}`} /> {isSaving ? "Saving…" : "Save baseline"}
+                    <i className={`ti ${isSaving ? "ti-loader-2 animate-spin" : "ti-device-floppy"}`} /> {isSaving ? t("Saving…") : t("Save baseline")}
                   </button>
                 </span>
               </div>

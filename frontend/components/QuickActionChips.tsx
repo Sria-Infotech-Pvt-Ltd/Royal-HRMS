@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+
 // One tap submits the phrase exactly like a typed command (onSubmitText),
 // so it goes through the real /voice/parse/ pipeline — not a shortcut, not
 // a different code path. Every phrase here is copied verbatim from
@@ -44,6 +46,7 @@ interface QuickActionChipsProps {
 }
 
 export default function QuickActionChips({ onPick }: QuickActionChipsProps) {
+  const t = useT();
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
       {QUICK_ACTIONS.map(action => (
@@ -67,7 +70,7 @@ export default function QuickActionChips({ onPick }: QuickActionChipsProps) {
               do. Two short lines keeps each language at a legible size and
               the chip's footprint close to its original single-line width. */}
           <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.3 }}>
-            <span style={{ fontSize: 11.5 }}>{action.label}</span>
+            <span style={{ fontSize: 11.5 }}>{t(action.label)}</span>
             <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{action.labelHi}</span>
           </span>
         </button>

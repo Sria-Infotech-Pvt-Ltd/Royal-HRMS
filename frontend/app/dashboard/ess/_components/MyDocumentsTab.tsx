@@ -8,6 +8,7 @@
 // personal, per-employee record of "I submitted document X for HR to verify"
 // — the employee can open the file again and delete it until HR verifies it.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { useMyDocuments, type ApiDocumentSubmission, type DocumentStatus } from "@/hooks/useMyDocuments";
 import { formatDate } from "@/lib/formatDate";
@@ -39,9 +40,9 @@ export default function MyDocumentsTab() {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20 }}>Documents</h2>
+        <h2 style={{ margin: 0, fontSize: 20 }}>{tr("Documents")}</h2>
         <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--on-variant)" }}>
-          Upload and manage verified employee documents.
+          {tr("Upload and manage verified employee documents.")}
         </p>
       </div>
 
@@ -56,9 +57,9 @@ export default function MyDocumentsTab() {
 
       {pendingDelete && (
         <ConfirmModal
-          title="Delete this document?"
-          body={`This will permanently delete "${pendingDelete.file_name}" and the file stored with it. This cannot be undone.`}
-          confirmLabel="Delete"
+          title={tr("Delete this document?")}
+          body={tr("This will permanently delete \"{file_name}\" and the file stored with it. This cannot be undone.", { file_name: pendingDelete.file_name })}
+          confirmLabel={tr("Delete")}
           danger
           saving={deletingId === pendingDelete.id}
           onConfirm={handleConfirmDelete}
@@ -78,22 +79,22 @@ function MyDocumentsList({ submissions, loading, error, onDelete }: {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-files" /> My documents</div>
+        <div className="card-title"><i className="ti ti-files" /> {tr("My documents")}</div>
         <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--on-variant)" }}>
-          Verification state and expiry information.
+          {tr("Verification state and expiry information.")}
         </p>
       </div>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
           <i className="ti ti-loader-2 spin" />
-          <h3>Loading documents…</h3>
+          <h3>{tr("Loading documents…")}</h3>
         </div>
       ) : submissions.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-files" />
-          <h3>No documents submitted yet</h3>
-          <p>Documents you submit for verification will appear here.</p>
+          <h3>{tr("No documents submitted yet")}</h3>
+          <p>{tr("Documents you submit for verification will appear here.")}</p>
         </div>
       ) : (
         <div style={{ padding: "4px 24px 16px" }}>
@@ -113,23 +114,23 @@ function DocumentRow({ doc, onDelete }: { doc: ApiDocumentSubmission; onDelete: 
       <div style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</div>
         <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-          {doc.category_display} · {doc.expiry_date ? formatDate(doc.expiry_date) : "No expiry"}
+          {doc.category_display} · {doc.expiry_date ? formatDate(doc.expiry_date) : tr("No expiry")}
           {doc.title !== doc.file_name && ` · ${doc.file_name}`}
-          {!doc.file_url && " · File not stored (submitted before uploads were kept)"}
+          {!doc.file_url && tr(" · File not stored (submitted before uploads were kept)")}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
         <span className={`badge ${STATUS_BADGE[doc.status]}`}>{doc.status_display.toUpperCase()}</span>
         {doc.file_url && (
-          <a href={doc.file_url} target="_blank" rel="noopener noreferrer" title="View document" aria-label={`View ${doc.file_name}`} style={ICON_BUTTON_STYLE}>
+          <a href={doc.file_url} target="_blank" rel="noopener noreferrer" title={tr("View document")} aria-label={tr("View {file_name}", { file_name: doc.file_name })} style={ICON_BUTTON_STYLE}>
             <i className="ti ti-eye" style={{ fontSize: 16 }} />
           </a>
         )}
         {canDelete && (
           <button
             type="button"
-            title="Delete document"
-            aria-label={`Delete ${doc.file_name}`}
+            title={tr("Delete document")}
+            aria-label={tr("Delete {file_name}", { file_name: doc.file_name })}
             onClick={() => onDelete(doc)}
             style={{ ...ICON_BUTTON_STYLE, color: "var(--error)" }}
           >

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
@@ -19,6 +20,7 @@ function Spin() {
 }
 
 export default function AddSectionModal({ section, onClose, onSaved }: Props) {
+  const t = useT();
   const isEdit = Boolean(section);
   const [label, setLabel] = useState(section?.label ?? "");
   const [icon, setIcon] = useState(section?.icon ?? "ti-folder");
@@ -28,7 +30,7 @@ export default function AddSectionModal({ section, onClose, onSaved }: Props) {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!label.trim()) e.label = "Label is required.";
+    if (!label.trim()) e.label = t("Label is required.");
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -47,7 +49,7 @@ export default function AddSectionModal({ section, onClose, onSaved }: Props) {
       }
       onSaved();
     } catch (err: unknown) {
-      setSubmitError((err as { message?: string })?.message ?? "Failed to save section.");
+      setSubmitError((err as { message?: string })?.message ?? t("Failed to save section."));
     } finally {
       setIsSubmitting(false);
     }
@@ -55,14 +57,14 @@ export default function AddSectionModal({ section, onClose, onSaved }: Props) {
 
   return (
     <Modal
-      title={<><i className={`ti ${isEdit ? "ti-pencil" : "ti-plus"}`} style={{ marginRight: 8 }} />{isEdit ? "Rename Section" : "Add Section"}</>}
+      title={<><i className={`ti ${isEdit ? "ti-pencil" : "ti-plus"}`} style={{ marginRight: 8 }} />{isEdit ? t("Rename Section") : t("Add Section")}</>}
       onClose={onClose}
       maxWidth={420}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={submit} disabled={isSubmitting}>
-            {isSubmitting ? <><Spin />&nbsp;Saving…</> : isEdit ? "Save" : "Create Section"}
+            {isSubmitting ? <><Spin />&nbsp;{t("Saving…")}</> : isEdit ? t("Save") : t("Create Section")}
           </button>
         </>
       }
@@ -74,11 +76,11 @@ export default function AddSectionModal({ section, onClose, onSaved }: Props) {
       )}
 
       <div className="field-group mb-16">
-        <label className="field-label">Section Label *</label>
+        <label className="field-label">{t("Section Label *")}</label>
         <input
           className={`field-input${errors.label ? " field-error" : ""}`}
           type="text"
-          placeholder="e.g. Company Assets"
+          placeholder={t("e.g. Company Assets")}
           value={label}
           onChange={e => { setLabel(e.target.value); setErrors(prev => ({ ...prev, label: "" })); }}
         />
@@ -86,7 +88,7 @@ export default function AddSectionModal({ section, onClose, onSaved }: Props) {
       </div>
 
       <div className="field-group">
-        <label className="field-label">Tab Icon</label>
+        <label className="field-label">{t("Tab Icon")}</label>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 8, background: "var(--bg-low)",
@@ -103,7 +105,7 @@ export default function AddSectionModal({ section, onClose, onSaved }: Props) {
           />
         </div>
         <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-          A Tabler icon class, e.g. ti-folder, ti-briefcase, ti-star.
+          {t("A Tabler icon class, e.g. ti-folder, ti-briefcase, ti-star.")}
         </p>
       </div>
     </Modal>

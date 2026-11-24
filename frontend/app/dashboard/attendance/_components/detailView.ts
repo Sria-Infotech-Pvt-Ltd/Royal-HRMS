@@ -1,5 +1,6 @@
 // Pure helpers for the Attendance Detail panel: the plain-words banners, labels and colours. No React.
 
+import { tr } from "@/lib/i18n/tr";
 import type { CorrectionStatus, PunchType } from "@/types/attendance";
 import { PALETTE, statusColour } from "./attendancePalette";
 import { relativeDayLabel, weekdayName } from "./attendanceDates";
@@ -56,21 +57,21 @@ const NO_ATTENDANCE_EXPECTED: Record<string, { title: string; icon: string }> = 
 /** The short coloured messages shown above the times: what is unusual about this day, in plain words. */
 export function detailBanners(day: BannerInput): Banner[] {
   const off = NO_ATTENDANCE_EXPECTED[day.status_key];
-  if (off) return [{ key: day.status_key, colour: statusColour(day.status_key), icon: off.icon, title: off.title, hint: "No attendance is expected on this day." }];
+  if (off) return [{ key: day.status_key, colour: statusColour(day.status_key), icon: off.icon, title: tr(off.title), hint: tr("No attendance is expected on this day.") }];
 
   const banners: Banner[] = [];
   const noPunches = day.punches.length === 0 && BLANK.has(day.clock_in) && BLANK.has(day.clock_out);
   if (noPunches) {
     const absent = day.status_key === "absent";
     banners.push({
-      key: "no-punch", colour: absent ? PALETTE.absent : PALETTE.not_marked, icon: "ti-fingerprint-off", title: "No punch recorded",
-      hint: absent ? "No clock-in or clock-out was captured. If they did work, use Edit to record it." : "Nothing is recorded for this day yet.",
+      key: "no-punch", colour: absent ? PALETTE.absent : PALETTE.not_marked, icon: "ti-fingerprint-off", title: tr("No punch recorded"),
+      hint: absent ? tr("No clock-in or clock-out was captured. If they did work, use Edit to record it.") : tr("Nothing is recorded for this day yet."),
     });
   }
   if (day.status_key === "incomplete") {
-    banners.push({ key: "incomplete", colour: PALETTE.incomplete, icon: "ti-clock-question", title: "Clocked in but never clocked out", hint: "Add the missing clock-out with Edit, or approve a correction request." });
+    banners.push({ key: "incomplete", colour: PALETTE.incomplete, icon: "ti-clock-question", title: tr("Clocked in but never clocked out"), hint: tr("Add the missing clock-out with Edit, or approve a correction request.") });
   }
-  if (day.is_late) banners.push({ key: "late", colour: PALETTE.late, icon: "ti-clock-exclamation", title: "Arrived late", hint: "The clock-in was after the grace time." });
-  if (day.is_early_exit) banners.push({ key: "early", colour: PALETTE.late, icon: "ti-door-exit", title: "Left early", hint: "The clock-out was before the end of the shift." });
+  if (day.is_late) banners.push({ key: "late", colour: PALETTE.late, icon: "ti-clock-exclamation", title: tr("Arrived late"), hint: tr("The clock-in was after the grace time.") });
+  if (day.is_early_exit) banners.push({ key: "early", colour: PALETTE.late, icon: "ti-door-exit", title: tr("Left early"), hint: tr("The clock-out was before the end of the shift.") });
   return banners;
 }

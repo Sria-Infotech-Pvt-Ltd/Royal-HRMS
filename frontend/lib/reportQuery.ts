@@ -1,4 +1,5 @@
 // Small pure helpers for the Reports screen: the filter values a report starts with, and how they become a query string.
+import { tr } from "@/lib/i18n/tr"
 import type { ReportDefinition, ReportFilterValues } from "@/types/reports";
 
 /** Each filter's own default (the server's allowed value), so a report can be run straight away. */
@@ -24,6 +25,6 @@ export function withQuery(path: string, filters: ReportFilterValues): string {
 /** The "Contact details are left out of the email" notice, or "" when the report has no such columns. */
 export function emailOmitsNotice(report: ReportDefinition): string {
   return report.email_omits.length > 0
-    ? `The emailed copy leaves out: ${report.email_omits.join(", ")}.`
+    ? tr("The emailed copy leaves out: {columns}.", { columns: report.email_omits.join(", ") })
     : "";
 }

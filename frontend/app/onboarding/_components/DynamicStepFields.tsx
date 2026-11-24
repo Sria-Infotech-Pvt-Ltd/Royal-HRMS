@@ -7,6 +7,7 @@ import { usePincodeLookup } from "@/hooks/usePincodeLookup";
 import { useIfscLookup } from "@/hooks/useIfscLookup";
 import type { CustomFieldFileValue, OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
 import type { ProfileForm } from "../_types";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   configs: OnboardingFieldConfig[]; // already filtered to one step, sorted by order
@@ -129,6 +130,7 @@ export default function DynamicStepFields({
   configs, form, customValues, onBuiltinChange, onCustomChange,
   customFileValues, uploadingFileKey, fileUploadError, onCustomFileUpload, onCustomFileDelete,
 }: Props) {
+  const t = useT();
   function valueFor(config: OnboardingFieldConfig): string {
     if (config.is_custom) return customValues[config.field_key] ?? "";
     return (form as unknown as Record<string, string>)[config.field_key] ?? "";
@@ -293,7 +295,7 @@ export default function DynamicStepFields({
           <div key={`group-${gi}`} className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-5 mb-4">
             {group.heading && (
               <div className="text-[11px] font-bold uppercase tracking-wide mb-3" style={{ color: "var(--on-variant)" }}>
-                {group.heading}
+                {t(group.heading)}
               </div>
             )}
             {isPermanentGroup && (
@@ -303,7 +305,7 @@ export default function DynamicStepFields({
                   checked={sameAsCurrent}
                   onChange={e => onBuiltinChange("permanent_same_as_current", e.target.checked ? "true" : "false")}
                 />
-                <span>Permanent address is the same as current address</span>
+                <span>{t("Permanent address is the same as current address")}</span>
               </label>
             )}
             {!collapsed && (
@@ -316,7 +318,7 @@ export default function DynamicStepFields({
       })}
       {configs.length === 0 && (
         <p style={{ color: "var(--on-variant)", fontSize: ".85rem" }}>
-          No fields are configured for this step.
+          {t("No fields are configured for this step.")}
         </p>
       )}
     </div>

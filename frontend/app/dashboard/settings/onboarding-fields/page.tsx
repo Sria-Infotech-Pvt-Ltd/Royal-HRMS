@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
@@ -72,6 +73,7 @@ function buildTabs(sections: OnboardingSection[]): Tab[] {
 
 export default function OnboardingFieldsPage() {
   const router = useRouter();
+  const t = useT();
   const canEdit = usePermission("settings.edit");
   const { data: fields, loading, error, refetch } = useFetch<OnboardingFieldConfig[]>(API.settings.onboardingFields.list);
   const { data: sectionsData, loading: sectionsLoading, refetch: refetchSections } =
@@ -87,7 +89,7 @@ export default function OnboardingFieldsPage() {
   const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
 
   const tabs = buildTabs(sectionsData ?? []);
-  const activeTab = tabs.find(t => t.step === step) ?? tabs[0];
+  const activeTab = tabs.find(tab => tab.step === step) ?? tabs[0];
   const isDocumentsTab = step === DOCUMENTS_STEP;
   const isEducationExperienceTab = step === EDUCATION_EXPERIENCE_STEP;
   const list = fields ?? [];
@@ -95,7 +97,7 @@ export default function OnboardingFieldsPage() {
   const sortedDocTypes = (docTypes ?? []).slice().sort((a, b) => a.order - b.order);
 
   async function handleDeleteSection(section: OnboardingSection) {
-    if (!(await confirmDialog(`Delete the "${section.label}" section? This can't be undone.`))) return;
+    if (!(await confirmDialog(t("Delete the \"{label}\" section? This can't be undone.", { label: section.label })))) return;
     setSectionActionError(null);
     setDeletingSectionId(section.id);
     try {
@@ -103,7 +105,7 @@ export default function OnboardingFieldsPage() {
       if (step === section.step) setStep(0);
       refetchSections();
     } catch (err: unknown) {
-      setSectionActionError((err as { message?: string })?.message ?? "Failed to delete section.");
+      setSectionActionError((err as { message?: string })?.message ?? t("Failed to delete section."));
     } finally {
       setDeletingSectionId(null);
     }
@@ -113,20 +115,19 @@ export default function OnboardingFieldsPage() {
     <>
       <div className="page-header">
         <div>
-          <div className="page-title">Onboarding Fields</div>
+          <div className="page-title">{t("Onboarding Fields")}</div>
           <div className="page-sub">
-            Show, hide, or require fields and document types on the employee onboarding wizard —
-            and add your own custom ones.
+            {t("Show, hide, or require fields and document types on the employee onboarding wizard — and add your own custom ones.")}
           </div>
         </div>
         <div className="page-actions">
           {canEdit && (
             <button className="btn btn-ghost" onClick={() => setShowAddSection(true)}>
-              <i className="ti ti-layout-grid-add" /> Add Section
+              <i className="ti ti-layout-grid-add" /> {t("Add Section")}
             </button>
           )}
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
         </div>
       </div>
@@ -139,30 +140,30 @@ export default function OnboardingFieldsPage() {
       )}
 
       <div className="tabs mb-16" style={{ flexWrap: "wrap", rowGap: 6 }}>
-        {tabs.map(t => (
-          <div key={t.step} style={{ display: "inline-flex", alignItems: "center" }}>
+        {tabs.map(tab => (
+          <div key={tab.step} style={{ display: "inline-flex", alignItems: "center" }}>
             <button
-              className={`tab${step === t.step ? " active" : ""}`}
-              onClick={() => setStep(t.step)}
+              className={`tab${step === tab.step ? " active" : ""}`}
+              onClick={() => setStep(tab.step)}
             >
-              <i className={`ti ${t.icon}`} /> {t.label}
+              <i className={`ti ${tab.icon}`} /> {t(tab.label)}
             </button>
-            {canEdit && t.section && (
+            {canEdit && tab.section && (
               <>
                 <button
-                  title="Rename section"
-                  onClick={() => setRenamingSection(t.section!)}
+                  title={t("Rename section")}
+                  onClick={() => setRenamingSection(tab.section!)}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: "var(--on-variant)" }}
-                 aria-label="Rename section">
+                 aria-label={t("Rename section")}>
                   <i className="ti ti-pencil" style={{ fontSize: 13 }} />
                 </button>
-                {!BUILTIN_STEP_NUMBERS.has(t.step) && (
+                {!BUILTIN_STEP_NUMBERS.has(tab.step) && (
                 <button
-                  title="Delete section"
-                  disabled={deletingSectionId === t.section.id}
-                  onClick={() => handleDeleteSection(t.section!)}
+                  title={t("Delete section")}
+                  disabled={deletingSectionId === tab.section.id}
+                  onClick={() => handleDeleteSection(tab.section!)}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: "var(--error)" }}
-                 aria-label="Delete section">
+                 aria-label={t("Delete section")}>
                   <i className="ti ti-trash" style={{ fontSize: 13 }} />
                 </button>
                 )}
@@ -175,18 +176,18 @@ export default function OnboardingFieldsPage() {
       <div className="card">
         <div className="card-header">
           <div className="card-title">
-            <i className={`ti ${activeTab.icon}`} /> {activeTab.label}
+            <i className={`ti ${activeTab.icon}`} /> {t(activeTab.label)}
           </div>
           {canEdit && !isEducationExperienceTab && (
             <button className="btn btn-filled btn-sm" onClick={() => setShowAddModal(true)}>
-              <i className="ti ti-plus" /> {isDocumentsTab ? "Add Document Type" : "Add Custom Field"}
+              <i className="ti ti-plus" /> {isDocumentsTab ? t("Add Document Type") : t("Add Custom Field")}
             </button>
           )}
         </div>
 
         {isDocumentsTab ? (
           <>
-            {docTypesLoading && <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--on-variant)" }}>Loading document types…</div>}
+            {docTypesLoading && <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--on-variant)" }}>{t("Loading document types…")}</div>}
             {docTypesError && <div style={{ padding: "24px", color: "var(--error)", fontSize: 14 }}>{docTypesError}</div>}
             {!docTypesLoading && !docTypesError && (
               <DocumentTypeConfigTable types={sortedDocTypes} canEdit={canEdit} onChanged={refetchDocTypes} />
@@ -196,7 +197,7 @@ export default function OnboardingFieldsPage() {
           <EducationExperienceFieldConfigTable canEdit={canEdit} />
         ) : (
           <>
-            {(loading || sectionsLoading) && <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--on-variant)" }}>Loading fields…</div>}
+            {(loading || sectionsLoading) && <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--on-variant)" }}>{t("Loading fields…")}</div>}
             {error && <div style={{ padding: "24px", color: "var(--error)", fontSize: 14 }}>{error}</div>}
             {!loading && !sectionsLoading && !error && (
               <FieldConfigTable fields={stepFields} canEdit={canEdit} onChanged={refetch} onEdit={setEditingField} />

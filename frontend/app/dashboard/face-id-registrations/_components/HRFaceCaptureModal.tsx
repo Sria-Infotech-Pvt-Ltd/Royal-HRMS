@@ -12,6 +12,7 @@ import FaceStatusPanel from "@/components/FaceStatusPanel";
 import FaceCaptureStage from "@/components/FaceCaptureStage";
 import FaceConsentPanel from "@/components/FaceConsentPanel";
 import { FACE_CONSENT_NOTICE_HR } from "@/lib/faceApi/consentText";
+import { useT } from "@/hooks/useI18n";
 
 interface HRFaceCaptureModalProps {
   employeeUuid: string;
@@ -27,6 +28,7 @@ export default function HRFaceCaptureModal({
   const { phase, errorMessage, registeredRequest, modelProgress, liveHint, livenessProgress, videoRef, canvasRef, start, retry, stop } =
     useHRFaceCapture(employeeUuid);
   const [consentAcknowledged, setConsentAcknowledged] = useState(false);
+  const t = useT();
 
   function handleClose() {
     stop(); // always release the camera, whatever phase we're in
@@ -62,13 +64,13 @@ export default function HRFaceCaptureModal({
           <div className="flex items-center gap-2.5">
             <i className="ti ti-face-id text-white text-[18px]" />
             <p className="text-[14px] font-semibold text-white leading-tight">
-              {isUpdate ? "Update" : "Register"} Face ID — {employeeName}
+              {isUpdate ? t("Update Face ID — {name}", { name: employeeName }) : t("Register Face ID — {name}", { name: employeeName })}
             </p>
           </div>
           <button
             onClick={handleClose}
             suppressHydrationWarning
-            aria-label="Close"
+            aria-label={t("Close")}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/15 transition-colors"
           >
             <i className="ti ti-x text-[18px]" />
@@ -93,86 +95,86 @@ export default function HRFaceCaptureModal({
           {phase === "idle" && (
             <FaceStatusPanel
               icon="ti-face-id" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)"
-              title={`${isUpdate ? "Update" : "Register"} ${employeeName}'s face`}
+              title={isUpdate ? t("Update {name}'s face", { name: employeeName }) : t("Register {name}'s face", { name: employeeName })}
               message={
                 isUpdate
-                  ? "This will replace their currently registered face ID. Position them in front of the camera and start when ready."
-                  : "Have the employee sit in front of this camera, then start — a quick liveness check confirms it's really them before it's saved."
+                  ? t("This will replace their currently registered face ID. Position them in front of the camera and start when ready.")
+                  : t("Have the employee sit in front of this camera, then start — a quick liveness check confirms it's really them before it's saved.")
               }
-              action={{ label: "Start", onClick: () => start(true) }}
+              action={{ label: t("Start"), onClick: () => start(true) }}
             />
           )}
 
           {phase === "loading_models" && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
-              title="Preparing face recognition" message="Downloading face models (first time only)…" progress={modelProgress}
+              title={t("Preparing face recognition")} message={t("Downloading face models (first time only)…")} progress={modelProgress}
             />
           )}
 
           {phase === "requesting_camera" && (
             <FaceStatusPanel
               icon="ti-camera" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
-              title="Requesting camera access" message="Please allow camera access in the browser prompt."
+              title={t("Requesting camera access")} message={t("Please allow camera access in the browser prompt.")}
             />
           )}
 
           {phase === "camera_denied" && (
             <FaceStatusPanel
               icon="ti-camera-off" iconColor="var(--error)" iconBg="rgba(239,68,68,0.08)"
-              title="Camera access denied"
-              message="Registering a face ID needs camera access. Allow it for this site in your browser's settings, then try again."
-              action={{ label: "Try Again", onClick: retry }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              title={t("Camera access denied")}
+              message={t("Registering a face ID needs camera access. Allow it for this site in your browser's settings, then try again.")}
+              action={{ label: t("Try Again"), onClick: retry }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
 
           {phase === "liveness_failed" && (
             <FaceStatusPanel
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
-              title="Couldn't confirm they're live"
-              message="Registration needs both a natural blink and a slight head turn, and we didn't see both in time. Make sure they're well-lit and centered, then try again."
-              action={{ label: "Try Again", onClick: retry }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              title={t("Couldn't confirm they're live")}
+              message={t("Registration needs both a natural blink and a slight head turn, and we didn't see both in time. Make sure they're well-lit and centered, then try again.")}
+              action={{ label: t("Try Again"), onClick: retry }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
 
           {phase === "quality_failed" && (
             <FaceStatusPanel
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
-              title="Capture wasn't clear enough"
+              title={t("Capture wasn't clear enough")}
               message={
                 errorMessage
-                ?? "We couldn't get a reliably clear capture — this becomes their permanent face ID reference, so it's worth getting right. Try better lighting and have them hold steady."
+                ?? t("We couldn't get a reliably clear capture — this becomes their permanent face ID reference, so it's worth getting right. Try better lighting and have them hold steady.")
               }
-              action={{ label: "Try Again", onClick: retry }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              action={{ label: t("Try Again"), onClick: retry }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
 
           {phase === "submitting" && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
-              title="Saving" message="Registering face ID…"
+              title={t("Saving")} message={t("Registering face ID…")}
             />
           )}
 
           {phase === "submitted" && registeredRequest && (
             <FaceStatusPanel
               icon="ti-circle-check" iconColor="#15803d" iconBg="rgba(34,197,94,0.12)"
-              title="Face ID registered!"
-              message={`${employeeName}'s face ID is approved and active immediately — no further review needed.`}
-              action={{ label: "Done", onClick: handleClose }}
+              title={t("Face ID registered!")}
+              message={t("{name}'s face ID is approved and active immediately — no further review needed.", { name: employeeName })}
+              action={{ label: t("Done"), onClick: handleClose }}
             />
           )}
 
           {phase === "error" && (
             <FaceStatusPanel
               icon="ti-alert-circle" iconColor="var(--error)" iconBg="rgba(239,68,68,0.08)"
-              title="Something went wrong"
-              message={errorMessage ?? "Please try again."}
-              action={{ label: "Try Again", onClick: retry }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              title={t("Something went wrong")}
+              message={errorMessage ?? t("Please try again.")}
+              action={{ label: t("Try Again"), onClick: retry }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
           </>

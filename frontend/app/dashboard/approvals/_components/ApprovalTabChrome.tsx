@@ -3,6 +3,7 @@
 // Shared look for the single-purpose Approvals tabs (Timesheets, Personnel actions, Face registration):
 // a header with an icon, subtitle and stat chips, plus one empty state and one avatar.
 import type { CSSProperties, ReactNode } from "react";
+import { useT } from "@/hooks/useI18n";
 import { initials } from "../_data";
 
 export interface TabStat {
@@ -25,6 +26,7 @@ interface HeaderProps {
 }
 
 export function TabHeader({ icon, title, subtitle, accent, stats = [], actions }: HeaderProps) {
+  const t = useT();
   return (
     <div className="tb-head" style={{ "--tb-accent": accent } as CSSProperties}>
       <div className="tb-head-main">
@@ -39,7 +41,7 @@ export function TabHeader({ icon, title, subtitle, accent, stats = [], actions }
         <div className="tb-stats">
           {stats.map(stat => (
             <span key={stat.label} className={`tb-stat${stat.isUrgent ? " is-urgent" : ""}`} style={{ "--tb-stat": stat.accent } as CSSProperties}>
-              <i className={`ti ${stat.icon}`} /> {stat.label} <b>{stat.value}</b>
+              <i className={`ti ${stat.icon}`} /> {t(stat.label)} <b>{stat.value}</b>
             </span>
           ))}
         </div>

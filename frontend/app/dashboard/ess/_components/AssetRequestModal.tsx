@@ -12,6 +12,7 @@ import RequestModal from "@/components/RequestModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 // Matches the fields this tab reads off HRHelpRequestSerializer — kept local
 // (not the full ApiHrHelpRequest shape from HrHelpTab.tsx) since this tab
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export default function AssetRequestModal({ onClose, onSubmitted }: Props) {
+  const t = useT();
   const [assetType, setAssetType] = useState(ASSET_TYPES[0].value);
   const [neededBy, setNeededBy] = useState("");
   const [businessNeed, setBusinessNeed] = useState("");
@@ -50,7 +52,7 @@ export default function AssetRequestModal({ onClose, onSubmitted }: Props) {
   async function handleSubmit() {
     setError(null);
     if (businessNeed.trim().length < 10) {
-      setError("Please describe the business need in at least 10 characters.");
+      setError(t("Please describe the business need in at least 10 characters."));
       return;
     }
     setSubmitting(true);
@@ -60,7 +62,7 @@ export default function AssetRequestModal({ onClose, onSubmitted }: Props) {
       onSubmitted();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg ?? "Failed to submit request. Please try again.");
+      setError(msg ?? t("Failed to submit request. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -68,30 +70,30 @@ export default function AssetRequestModal({ onClose, onSubmitted }: Props) {
 
   return (
     <RequestModal
-      title={<><i className="ti ti-device-laptop" /> Request an asset</>}
+      title={<><i className="ti ti-device-laptop" /> {t("Request an asset")}</>}
       onClose={onClose}
       onSubmit={handleSubmit}
       submitting={submitting}
       error={error}
     >
       <div className="field-group mb-16">
-        <label className="field-label">Asset type</label>
+        <label className="field-label">{t("Asset type")}</label>
         <select className="field-input field-select" value={assetType} onChange={e => setAssetType(e.target.value)}>
-          {ASSET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          {ASSET_TYPES.map(type => <option key={type.value} value={type.value}>{t(type.label)}</option>)}
         </select>
       </div>
       <div className="field-group mb-16">
-        <label className="field-label">Needed by</label>
+        <label className="field-label">{t("Needed by")}</label>
         <DateInput className="field-input" value={neededBy} onChange={isoDate => setNeededBy(isoDate)} />
       </div>
       <div className="field-group">
-        <label className="field-label">Business need</label>
+        <label className="field-label">{t("Business need")}</label>
         <textarea
           className="field-input"
           rows={3}
           value={businessNeed}
           onChange={e => setBusinessNeed(e.target.value)}
-          placeholder="Describe why this asset is needed"
+          placeholder={t("Describe why this asset is needed")}
         />
       </div>
     </RequestModal>

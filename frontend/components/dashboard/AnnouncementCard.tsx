@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { formatDate as formatDisplayDate } from "@/lib/formatDate";
@@ -18,6 +19,7 @@ function resolveAuthor(data: AnnouncementData): string {
 }
 
 export default function AnnouncementCard() {
+  const t = useT();
   const { data, loading } = useFetch<AnnouncementData>(API.dashboard.announcement);
 
   const isValidAnnouncement =
@@ -33,22 +35,22 @@ export default function AnnouncementCard() {
   return (
     <div className="card mb-16">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-speakerphone" /> Latest Announcement</div>
+        <div className="card-title"><i className="ti ti-speakerphone" /> {t("Latest Announcement")}</div>
         {!loading && announcement && (
           <a href="/dashboard/announcements" className="btn btn-ghost btn-sm">
-            All{announcement.more_count ? ` (+${announcement.more_count})` : ""} <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />
+            {t("All")}{announcement.more_count ? ` (+${announcement.more_count})` : ""} <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />
           </a>
         )}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : !announcement ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-speakerphone" style={{ fontSize: 22, display: "block", marginBottom: 6, opacity: 0.3 }} />
-          No announcements
+          {t("No announcements")}
         </div>
       ) : (
         <div style={{ padding: "16px 20px" }}>

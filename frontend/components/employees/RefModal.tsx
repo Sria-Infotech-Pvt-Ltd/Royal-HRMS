@@ -4,6 +4,7 @@
 // a scrolling body of stacked sections, and a footer with a status note on the left and the actions on the
 // right. Used by "Perform an action", "Basic pay" and "Leave". Other dialogs keep the app's shared <Modal>.
 
+import { useT } from "@/hooks/useI18n";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
 interface Props {
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export default function RefModal({ title, accent, subtitle, onClose, closeDisabled = false, children, note, actions }: Props) {
+  const t = useT();
   const titleId = useId();
   const pressedOnBackdrop = useRef(false);
 
@@ -46,7 +48,7 @@ export default function RefModal({ title, accent, subtitle, onClose, closeDisabl
             <h2 id={titleId}>{title} <em className="hl">{accent}</em></h2>
             {subtitle && <p>{subtitle}</p>}
           </div>
-          <button className="xbtn" type="button" aria-label="Close" onClick={onClose} disabled={closeDisabled}>
+          <button className="xbtn" type="button" aria-label={t("Close")} onClick={onClose} disabled={closeDisabled}>
             <i className="ti ti-x" />
           </button>
         </div>

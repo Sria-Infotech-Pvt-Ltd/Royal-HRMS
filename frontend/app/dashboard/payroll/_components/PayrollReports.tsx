@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type CSSProperties } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -41,6 +42,7 @@ const SEARCH_BAR_SELECT_STYLE: CSSProperties = {
 };
 
 export default function PayrollReports() {
+  const t = useT();
   const [selectedCycle, setSelectedCycle] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>("");
   const [downloadingFormat, setDownloadingFormat] = useState<EcrFormat | null>(null);
@@ -94,12 +96,12 @@ export default function PayrollReports() {
           msg = parsed?.message;
         } catch { /* non-JSON error body — fall through to the generic message */ }
       }
-      const formatLabel = format === "pdf" ? "PDF" : format === "txt" ? "text file" : "Excel";
-      setDlError(msg || `Failed to download ECR ${formatLabel}. Please try again.`);
+      const formatLabel = format === "pdf" ? t("PDF") : format === "txt" ? t("text file") : t("Excel");
+      setDlError(msg || t("Failed to download ECR {format}. Please try again.", { format: formatLabel }));
     } finally {
       setDownloadingFormat(null);
     }
-  }, [cycle]);
+  }, [cycle, t]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -113,7 +115,7 @@ export default function PayrollReports() {
             onChange={e => setSelectedCycle(e.target.value)}
             style={SEARCH_BAR_SELECT_STYLE}
           >
-            <option value="">All Periods</option>
+            <option value="">{t("All Periods")}</option>
             {cycles.map(c => (
               <option key={c.id} value={c.id}>
                 {cyclePeriodLabel(c)}
@@ -129,7 +131,7 @@ export default function PayrollReports() {
             onChange={e => setSelectedBranch(e.target.value)}
             style={SEARCH_BAR_SELECT_STYLE}
           >
-            <option value="">All Company Codes</option>
+            <option value="">{t("All Company Codes")}</option>
             {branches.map(b => (
               <option key={b.id} value={b.id}>{b.branch_name}</option>
             ))}
@@ -143,14 +145,14 @@ export default function PayrollReports() {
       {paidCycles.length === 0 && cycles.length > 0 && (
         <div className="alert alert-warn">
           <i className="ti ti-alert-triangle" />
-          <span>ECR export is available after a payroll cycle is completed and payslips are dispatched. Complete a payroll run first.</span>
+          <span>{t("ECR export is available after a payroll cycle is completed and payslips are dispatched. Complete a payroll run first.")}</span>
         </div>
       )}
 
       {cycles.length === 0 && (
         <div className="alert alert-info">
           <i className="ti ti-info-circle" />
-          <span>No payroll cycles yet. Run your first payroll to enable ECR export.</span>
+          <span>{t("No payroll cycles yet. Run your first payroll to enable ECR export.")}</span>
         </div>
       )}
 
@@ -169,9 +171,9 @@ export default function PayrollReports() {
               <i className="ti ti-building-bank" style={{ fontSize: 20, color: "var(--primary)" }} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>ECR (Electronic Challan-cum-Return)</div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{t("ECR (Electronic Challan-cum-Return)")}</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", lineHeight: 1.5, marginBottom: 12 }}>
-                Export ECR file for EPFO submission
+                {t("Export ECR file for EPFO submission")}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -179,42 +181,42 @@ export default function PayrollReports() {
                   disabled={!canDownloadEcr || downloadingFormat !== null}
                   onClick={() => downloadEcr("pdf")}
                   title={
-                    !cycle ? "Select a period to export."
-                    : !canDownloadEcr ? "ECR is only available once payslips have been generated for this period."
+                    !cycle ? t("Select a period to export.")
+                    : !canDownloadEcr ? t("ECR is only available once payslips have been generated for this period.")
                     : undefined
                   }
                 >
                   {downloadingFormat === "pdf"
-                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Exporting…</>
-                    : <><i className="ti ti-file-type-pdf" /> Export PDF</>}
+                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Exporting…")}</>
+                    : <><i className="ti ti-file-type-pdf" /> {t("Export PDF")}</>}
                 </button>
                 <button
                   className="btn btn-filled btn-sm"
                   disabled={!canDownloadEcr || downloadingFormat !== null}
                   onClick={() => downloadEcr("xlsx")}
                   title={
-                    !cycle ? "Select a period to export."
-                    : !canDownloadEcr ? "ECR is only available once payslips have been generated for this period."
+                    !cycle ? t("Select a period to export.")
+                    : !canDownloadEcr ? t("ECR is only available once payslips have been generated for this period.")
                     : undefined
                   }
                 >
                   {downloadingFormat === "xlsx"
-                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Exporting…</>
-                    : <><i className="ti ti-table-export" /> Export Excel</>}
+                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Exporting…")}</>
+                    : <><i className="ti ti-table-export" /> {t("Export Excel")}</>}
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"
                   disabled={!canDownloadEcr || downloadingFormat !== null}
                   onClick={() => downloadEcr("txt")}
                   title={
-                    !cycle ? "Select a period to export."
-                    : !canDownloadEcr ? "ECR is only available once payslips have been generated for this period."
-                    : "EPFO Unified Portal ECR upload file (#~# delimited .txt)"
+                    !cycle ? t("Select a period to export.")
+                    : !canDownloadEcr ? t("ECR is only available once payslips have been generated for this period.")
+                    : t("EPFO Unified Portal ECR upload file (#~# delimited .txt)")
                   }
                 >
                   {downloadingFormat === "txt"
-                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Exporting…</>
-                    : <><i className="ti ti-file-text" /> Export Text (EPFO Upload)</>}
+                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Exporting…")}</>
+                    : <><i className="ti ti-file-text" /> {t("Export Text (EPFO Upload)")}</>}
                 </button>
               </div>
             </div>

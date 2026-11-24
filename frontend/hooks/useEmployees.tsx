@@ -1,3 +1,4 @@
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -83,7 +84,7 @@ export function useEmployees() {
       }
     } catch {
       if (requestId === employeeRequestId.current) {
-        setFetchError("Could not load employees. Please refresh.");
+        setFetchError(tr("Could not load employees. Please refresh."));
       }
     } finally {
       if (requestId === employeeRequestId.current) setLoading(false);
@@ -185,9 +186,9 @@ export function useEmployees() {
       const { data } = await clientApi.get<{ data: { results: ApiEmployee[] } }>(API.employees.list, { params });
       const rows = data.data?.results ?? [];
       downloadCsv(employeesToCsv(rows), `employee-directory-${new Date().toISOString().slice(0, 10)}.csv`);
-      showToast("Employee directory exported.", "success");
+      showToast(tr("Employee directory exported."), "success");
     } catch {
-      showToast("Could not export the employee directory. Please try again.", "error");
+      showToast(tr("Could not export the employee directory. Please try again."), "error");
     } finally {
       setExporting(false);
     }
@@ -195,8 +196,7 @@ export function useEmployees() {
 
   async function toggleStatus(employee: Employee) {
     const isCurrentlyActive = employee.status !== "inactive";
-    const label = isCurrentlyActive ? "deactivate" : "activate";
-    if (!(await confirmDialog(`Are you sure you want to ${label} ${fullName(employee)}?`))) return;
+    if (!(await confirmDialog((isCurrentlyActive ? tr("Are you sure you want to deactivate {name}?", { name: fullName(employee) }) : tr("Are you sure you want to activate {name}?", { name: fullName(employee) }))))) return;
     setToggling(employee.id);
     try {
       await clientApi.patch(API.employees.detail(employee.id), { is_active: !isCurrentlyActive });
@@ -218,25 +218,25 @@ export function useEmployees() {
   const stats: EmployeeStatCard[] = useMemo(() => [
     {
       label: "TOTAL HEADCOUNT", value: empStats.total, icon: "ti-users", tint: "primary" as const,
-      sub: <>across {empStats.departments} org units · <b>+{empStats.new_this_month}</b> this month</>,
+      sub: <>{tr("across {count} org units", { count: empStats.departments })} · <b>+{empStats.new_this_month}</b> {tr("this month")}</>,
       onClick: () => setStatus("all"),
     },
     {
       label: "ACTIVE", value: empStats.active, icon: "ti-user-check", tint: "success" as const,
-      sub: `${activePct}% of headcount · ${empStats.probation} on probation`,
+      sub: tr("{percent}% of headcount · {count} on probation", { percent: activePct, count: empStats.probation }),
       onClick: () => setStatus("active"),
     },
     {
       label: "ONBOARDING", value: empStats.onboarding, icon: "ti-clock", tint: "warn" as const,
       sub: empStats.needs_reporting_manager > 0
-        ? <><b>{empStats.needs_reporting_manager}</b> need a reporting manager</>
-        : "all assigned a reporting manager",
+        ? <><b>{empStats.needs_reporting_manager}</b> {tr("need a reporting manager")}</>
+        : tr("all assigned a reporting manager"),
       subTone: empStats.needs_reporting_manager > 0 ? "warn" as const : undefined,
       onClick: () => setStatus("onboarding"),
     },
     {
       label: "NOTICE PERIOD", value: empStats.notice_period, icon: "ti-alert-triangle", tint: "error" as const,
-      sub: "exit clearance opens automatically",
+      sub: tr("exit clearance opens automatically"),
       subTone: "crit" as const,
       onClick: () => setStatus("notice_period"),
     },

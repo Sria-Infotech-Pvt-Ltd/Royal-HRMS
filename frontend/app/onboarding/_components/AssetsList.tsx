@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+
 // ── Step: Assets ──────────────────────────────────────────────────────────────
 // A genuinely repeatable, unbounded list of company assets issued to the
 // employee — same shape/convention as ExperienceList.tsx. Optional at hire
@@ -45,17 +47,18 @@ interface Props {
 }
 
 export default function AssetsList({ entries, onAdd, onFieldChange, onRemove, error, showIssueToggle = false }: Props) {
+  const t = useT();
   return (
     <div>
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
       <p style={{ color: "var(--on-variant)", fontSize: ".85rem", marginBottom: 20 }}>
-        Optional at hiring time — assets are usually issued on the actual joining date.
+        {t("Optional at hiring time — assets are usually issued on the actual joining date.")}
       </p>
 
       {entries.length === 0 && (
         <p style={{ color: "var(--on-variant)", fontSize: ".9rem", marginBottom: 16 }}>
-          No assets added yet.
+          {t("No assets added yet.")}
         </p>
       )}
 
@@ -69,21 +72,21 @@ export default function AssetsList({ entries, onAdd, onFieldChange, onRemove, er
               floating in a full-width row. */}
           <div className={`form-row ${showIssueToggle ? "cols-3" : "cols-2"}`}>
             <div className="field-group">
-              <label className="field-label">Asset</label>
+              <label className="field-label">{t("Asset")}</label>
               <select className="field-input field-select" value={entry.asset_type} onChange={e => onFieldChange(entry.id, "asset_type", e.target.value)}>
-                <option value="">— Select —</option>
-                {ASSET_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                <option value="">{t("— Select —")}</option>
+                {ASSET_TYPES.map(a => <option key={a.value} value={a.value}>{t(a.label)}</option>)}
               </select>
             </div>
             <div className="field-group">
-              <label className="field-label">Condition</label>
+              <label className="field-label">{t("Condition")}</label>
               <select className="field-input field-select" value={entry.condition} onChange={e => onFieldChange(entry.id, "condition", e.target.value)}>
-                {CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                {CONDITIONS.map(c => <option key={c.value} value={c.value}>{t(c.label)}</option>)}
               </select>
             </div>
             {showIssueToggle && (
               <div className="field-group">
-                <label className="field-label">Issue</label>
+                <label className="field-label">{t("Issue")}</label>
                 <div className="flex rounded-lg overflow-hidden border border-[var(--outline-v)] w-full">
                   {(["now", "later"] as const).map(v => (
                     <button
@@ -93,7 +96,7 @@ export default function AssetsList({ entries, onAdd, onFieldChange, onRemove, er
                       className="flex-1 px-4 py-1.5 text-[12.5px] font-semibold"
                       style={{ background: (entry.issue_when ?? "later") === v ? "var(--primary)" : "var(--surface)", color: (entry.issue_when ?? "later") === v ? "#fff" : "var(--on-bg)" }}
                     >
-                      {v === "now" ? "Issue now" : "Issue later"}
+                      {v === "now" ? t("Issue now") : t("Issue later")}
                     </button>
                   ))}
                 </div>
@@ -103,19 +106,19 @@ export default function AssetsList({ entries, onAdd, onFieldChange, onRemove, er
 
           {(!showIssueToggle || entry.issue_when === "now") && (
             <div className="field-group" style={{ marginBottom: 12, maxWidth: 260 }}>
-              <label className="field-label">Tag / Serial number</label>
-              <input className="field-input" value={entry.tag_number} onChange={e => onFieldChange(entry.id, "tag_number", e.target.value)} placeholder="e.g. AIRA-LT-1042" />
+              <label className="field-label">{t("Tag / Serial number")}</label>
+              <input className="field-input" value={entry.tag_number} onChange={e => onFieldChange(entry.id, "tag_number", e.target.value)} placeholder={t("e.g. AIRA-LT-1042")} />
             </div>
           )}
 
           <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)}>
-            <i className="ti ti-trash" style={{ fontSize: 13 }} /> Remove
+            <i className="ti ti-trash" style={{ fontSize: 13 }} /> {t("Remove")}
           </button>
         </div>
       ))}
 
       <button className="btn btn-ghost" type="button" onClick={onAdd}>
-        <i className="ti ti-plus" /> Issue an Asset
+        <i className="ti ti-plus" /> {t("Issue an Asset")}
       </button>
     </div>
   );

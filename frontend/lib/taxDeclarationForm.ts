@@ -2,6 +2,7 @@
 // text-box state, turning the state back into the API payload, and the checks that
 // can be done before the server is asked.
 
+import { tr } from "@/lib/i18n/tr";
 import type {
   ApiTaxDeclaration, TaxDeclarationDetails, TaxDeclarationSchema, TaxDeclaredInvestments, TaxFormState, TaxProofItem, TaxSchemaGroup,
 } from "@/types/taxDeclaration";
@@ -148,10 +149,10 @@ export function fieldCap(fieldKey: string, schema: TaxDeclarationSchema, state: 
 /** Home loan interest needs the lender's name and PAN (Form 124). */
 export function validateHomeLoan(state: TaxFormState): string | null {
   if (parseAmount(state.amounts["24B"] ?? "") === 0) return null;
-  if (!state.homeLoan.lenderName.trim()) return "Enter your home loan lender's name.";
+  if (!state.homeLoan.lenderName.trim()) return tr("Enter your home loan lender's name.");
   const pan = state.homeLoan.lenderPan.trim().toUpperCase();
-  if (!pan) return "Enter your home loan lender's PAN.";
-  if (!PAN_PATTERN.test(pan)) return "Lender PAN must look like ABCDE1234F.";
+  if (!pan) return tr("Enter your home loan lender's PAN.");
+  if (!PAN_PATTERN.test(pan)) return tr("Lender PAN must look like ABCDE1234F.");
   return null;
 }
 
@@ -160,13 +161,13 @@ export function validateRent(state: TaxFormState, schema: TaxDeclarationSchema):
   const monthlyRent = parseAmount(state.rent.monthlyRent);
   if (monthlyRent === 0) return null;
   const months = Number(state.rent.months);
-  if (!Number.isInteger(months) || months < 1 || months > 12) return "Months of rent must be between 1 and 12.";
-  if (!state.rent.landlordName.trim()) return "Enter your landlord's name for the rent you are claiming.";
-  if (!state.rent.landlordAddress.trim()) return "Enter your landlord's address for the rent you are claiming.";
+  if (!Number.isInteger(months) || months < 1 || months > 12) return tr("Months of rent must be between 1 and 12.");
+  if (!state.rent.landlordName.trim()) return tr("Enter your landlord's name for the rent you are claiming.");
+  if (!state.rent.landlordAddress.trim()) return tr("Enter your landlord's address for the rent you are claiming.");
   const pan = state.rent.landlordPan.trim().toUpperCase();
-  if (pan && !PAN_PATTERN.test(pan)) return "Landlord PAN must look like ABCDE1234F.";
+  if (pan && !PAN_PATTERN.test(pan)) return tr("Landlord PAN must look like ABCDE1234F.");
   if (monthlyRent * months > schema.landlord_pan_threshold && !pan) {
-    return "Landlord PAN is required when your yearly rent is above ₹1,00,000.";
+    return tr("Landlord PAN is required when your yearly rent is above ₹1,00,000.");
   }
   return null;
 }

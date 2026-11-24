@@ -8,6 +8,7 @@ import { useAnyPermission } from "@/hooks/usePermission";
 import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
 import type { PaginatedFaceRegistrations } from "@/types/faceRegistration";
+import { useT } from "@/hooks/useI18n";
 
 // The server-computed queue plus the counts this component reads from the workflow lists that have their own endpoints.
 type QueueData = HRActionQueue & { face_registrations: number; wfh_requests: number };
@@ -24,6 +25,7 @@ const ROWS: { key: keyof Omit<QueueData, "total_pending">; label: string; icon: 
 ];
 
 export default function HrActionQueue() {
+  const t = useT();
   const { data: fetchedData, loading } = useFetch<HRActionQueue>(API.dashboard.hrActionQueue);
   // Live data pushed by the backend over WebSocket — takes priority over the
   // HTTP-fetched copy so the counts update instantly without a round trip.
@@ -73,15 +75,15 @@ export default function HrActionQueue() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-checks" /> Action Queue</div>
+        <div className="card-title"><i className="ti ti-checks" /> {t("Action Queue")}</div>
         {!loading && data && data.total_pending > 0 && (
-          <span className="badge badge-error">{data.total_pending} pending</span>
+          <span className="badge badge-error">{t("{count} pending", { count: data.total_pending })}</span>
         )}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : (
         <div style={{ padding: "4px 0 8px" }}>
@@ -106,7 +108,7 @@ export default function HrActionQueue() {
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <i className={`ti ${row.icon}`} style={{ fontSize: 15, color: isEmpty ? "var(--on-variant)" : "var(--primary)", width: 18 }} />
-                  <span style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{row.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{t(row.label)}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {count > 0 && (

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { NavItem } from "@/lib/navConfig";
@@ -32,6 +33,7 @@ interface Props {
  *  viewers without employees.view, rather than surfacing an empty section
  *  from a 403. */
 export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
+  const t = useT();
   const router = useRouter();
   const [query,     setQuery]     = useState("");
   const [open,       setOpen]      = useState(false);
@@ -90,7 +92,7 @@ export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
         </svg>
         <input
           type="text"
-          placeholder="Search…"
+          placeholder={t("Search…")}
           value={query}
           onChange={e => handleChange(e.target.value)}
           onFocus={() => trimmed && setOpen(true)}
@@ -108,16 +110,16 @@ export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
         }}>
           {loading ? (
             <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>
-              <i className="ti ti-loader-2 spin" /> Searching…
+              <i className="ti ti-loader-2 spin" /> {t("Searching…")}
             </div>
           ) : !hasResults ? (
-            <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>No results for &ldquo;{trimmed}&rdquo;.</div>
+            <div style={{ padding: 12, fontSize: 13, color: "var(--on-variant)" }}>{t("No results for “{query}”.", { query: trimmed })}</div>
           ) : (
             <>
               {employees.length > 0 && (
                 <div>
                   <div style={{ padding: "8px 12px 4px", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--outline)", textTransform: "uppercase" }}>
-                    Employees
+                    {t("Employees")}
                   </div>
                   {employees.map(emp => (
                     <button
@@ -136,7 +138,7 @@ export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
               {matchingPages.length > 0 && (
                 <div>
                   <div style={{ padding: "8px 12px 4px", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--outline)", textTransform: "uppercase" }}>
-                    Pages
+                    {t("Pages")}
                   </div>
                   {matchingPages.map(item => (
                     <button
@@ -144,7 +146,7 @@ export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
                       style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer" }}
                     >
                       <i className={`ti ${item.icon}`} style={{ color: "var(--outline)" }} />
-                      <span style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{item.label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{t(item.label)}</span>
                     </button>
                   ))}
                 </div>

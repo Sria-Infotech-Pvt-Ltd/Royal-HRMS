@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmDialog } from "@/components/DialogProvider";
+import { useT } from "@/hooks/useI18n";
 import { usePerformanceHub } from "@/hooks/usePerformanceHub";
 import { filterReviews, needsHr, reviewStage, type StageFilter } from "@/lib/performanceHub";
 import type { ApiReview } from "@/types/performanceHub";
@@ -15,6 +16,7 @@ import ReviewActionModal from "./ReviewActionModal";
 
 /** Performance, as HR runs it: an overview, the review queue, and the cycles. */
 export default function PerformanceHub() {
+  const t = useT();
   const router = useRouter();
   const hub = usePerformanceHub();
   const [tab, setTab] = useState<HubTab>("overview");
@@ -34,7 +36,7 @@ export default function PerformanceHub() {
   };
   const openQueue = (nextStage: StageFilter) => { setStage(nextStage); setSearch(""); setTab("queue"); };
   const closeCycle = async (id: string) => {
-    if (await confirmDialog("Close this review cycle? Closed cycles cannot be reopened.")) hub.close(id);
+    if (await confirmDialog(t("Close this review cycle? Closed cycles cannot be reopened."))) hub.close(id);
   };
 
   return (
@@ -43,7 +45,7 @@ export default function PerformanceHub() {
 
       {hub.error && (
         <div className="alert alert-error"><i className="ti ti-alert-circle" /><div>{hub.error}</div>
-          <button type="button" className="btn-link" style={{ marginLeft: "auto" }} onClick={hub.reload}>Try again</button>
+          <button type="button" className="btn-link" style={{ marginLeft: "auto" }} onClick={hub.reload}>{t("Try again")}</button>
         </div>
       )}
 

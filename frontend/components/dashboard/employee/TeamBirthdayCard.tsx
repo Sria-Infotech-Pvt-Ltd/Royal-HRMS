@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useMyBirthdayWidgets } from "@/hooks/useEmployeeDashboard";
 import { SendWishModal } from "@/components/dashboard/SendWishModal";
+import { useT } from "@/hooks/useI18n";
 
 // Strictly scoped to the logged-in user's own team (same reporting manager)
 // — never surfaces birthdays outside their reporting hierarchy.
 export default function TeamBirthdayCard() {
+  const t = useT();
   const { data, loading } = useMyBirthdayWidgets();
   const team = data?.team ?? [];
   const [index, setIndex] = useState(0);
@@ -29,10 +31,10 @@ export default function TeamBirthdayCard() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--info)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 2 }}>
-            🎂 Team Birthday Today
+            {t("🎂 Team Birthday Today")}
           </div>
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
-            Today is {person.full_name}&apos;s birthday.
+            {t("Today is {name}'s birthday.", { name: person.full_name })}
           </div>
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
             {person.message}
@@ -40,11 +42,11 @@ export default function TeamBirthdayCard() {
 
           {team.length > 1 && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
-              {team.map((t, i) => (
+              {team.map((member, i) => (
                 <button
-                  key={t.employee_id}
+                  key={member.employee_id}
                   onClick={() => setIndex(i)}
-                  aria-label={`Show ${t.full_name}`}
+                  aria-label={t("Show {name}", { name: member.full_name })}
                   style={{
                     width: 7, height: 7, borderRadius: "50%", padding: 0, border: "none", cursor: "pointer",
                     background: i === index ? "var(--info)" : "var(--outline-v)",
@@ -60,7 +62,7 @@ export default function TeamBirthdayCard() {
           style={{ flexShrink: 0 }}
           onClick={() => setSendingTo(index)}
         >
-          <i className="ti ti-confetti" /> Send Wishes
+          <i className="ti ti-confetti" /> {t("Send Wishes")}
         </button>
       </div>
 

@@ -39,7 +39,7 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
   const isDayComplete = session?.is_day_complete ?? false;
   // After too many failed face attempts the button stays disabled and counts down ("Please wait mm:ss").
   const isBusy      = isLoading || isPunching || isLockedOut;
-  const waitLabel   = `Please wait ${formatLockoutCountdown(lockoutSecondsRemaining)}`;
+  const waitLabel   = tr("Please wait {time}", { time: formatLockoutCountdown(lockoutSecondsRemaining) });
 
   async function handlePunch() {
     // Not registered / pending / rejected: stop here with the server's instruction. No location request, no camera.
@@ -125,7 +125,7 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
           ) : isPunching ? (
             <>
               <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />
-              Please wait…
+              {tr("Please wait…")}
             </>
           ) : (
             <>
@@ -155,7 +155,7 @@ export default function ClockInButton({ onPunchSuccess, variant = "default" }: P
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.65)"; }}
         >
           <i className="ti ti-flag-3" style={{ fontSize: 11 }} />
-          Request Attendance Correction
+          {tr("Request Attendance Correction")}
         </button>
       </div>
 

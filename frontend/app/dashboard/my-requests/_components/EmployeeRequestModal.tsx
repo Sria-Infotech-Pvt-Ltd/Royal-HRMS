@@ -12,6 +12,7 @@ import { useState } from "react";
 import RequestModal from "@/components/RequestModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { tr } from "@/lib/i18n/tr";
 
 // Maps onto the real HR_HELP_TOPIC_CHOICES in apps/hrms/models.py. Only
 // 'document_request' and 'payroll_query' have a dedicated topic that fits;
@@ -46,8 +47,8 @@ export default function EmployeeRequestModal({ onClose, onSubmitted }: Props) {
 
   async function handleSubmit() {
     setError(null);
-    if (!subject.trim()) { setError("Please enter a short summary."); return; }
-    if (description.trim().length < 10) { setError("Please describe your request in at least 10 characters."); return; }
+    if (!subject.trim()) { setError(tr("Please enter a short summary.")); return; }
+    if (description.trim().length < 10) { setError(tr("Please describe your request in at least 10 characters.")); return; }
     setSubmitting(true);
     try {
       const selected = REQUEST_TYPES.find(t => t.value === requestType) ?? REQUEST_TYPES[0];
@@ -56,7 +57,7 @@ export default function EmployeeRequestModal({ onClose, onSubmitted }: Props) {
       onSubmitted();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg ?? "Failed to submit request. Please try again.");
+      setError(msg ?? tr("Failed to submit request. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -64,7 +65,7 @@ export default function EmployeeRequestModal({ onClose, onSubmitted }: Props) {
 
   return (
     <RequestModal
-      title={<><i className="ti ti-plus" /> New request</>}
+      title={<><i className="ti ti-plus" /> {tr("New request")}</>}
       onClose={onClose}
       onSubmit={handleSubmit}
       submitting={submitting}
@@ -72,41 +73,41 @@ export default function EmployeeRequestModal({ onClose, onSubmitted }: Props) {
     >
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
-          <label className="field-label">Request type</label>
+          <label className="field-label">{tr("Request type")}</label>
           <select
             className="field-input field-select"
             value={requestType}
             onChange={e => setRequestType(e.target.value as typeof requestType)}
           >
-            {REQUEST_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            {REQUEST_TYPES.map(type => <option key={type.value} value={type.value}>{tr(type.label)}</option>)}
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">Subject</label>
+          <label className="field-label">{tr("Subject")}</label>
           <input
             className="field-input"
             value={subject}
             onChange={e => setSubject(e.target.value)}
-            placeholder="Short summary"
+            placeholder={tr("Short summary")}
           />
         </div>
       </div>
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
-          <label className="field-label">Priority</label>
+          <label className="field-label">{tr("Priority")}</label>
           <select className="field-input field-select" value={priority} onChange={e => setPriority(e.target.value)}>
-            {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            {PRIORITIES.map(p => <option key={p.value} value={p.value}>{tr(p.label)}</option>)}
           </select>
         </div>
       </div>
       <div className="field-group">
-        <label className="field-label">Description</label>
+        <label className="field-label">{tr("Description")}</label>
         <textarea
           className="field-input"
           rows={4}
           value={description}
           onChange={e => setDescription(e.target.value)}
-          placeholder="Describe your request"
+          placeholder={tr("Describe your request")}
         />
       </div>
     </RequestModal>

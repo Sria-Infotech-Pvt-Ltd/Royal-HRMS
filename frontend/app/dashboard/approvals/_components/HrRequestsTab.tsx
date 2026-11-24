@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import type { HrHelpRequest } from "@/types/hrHelp";
 import HrHelpRow from "@/app/dashboard/ess/_components/HrHelpRow";
@@ -32,6 +33,7 @@ interface HrRequestsTabProps {
 }
 
 export default function HrRequestsTab({ title, topic, excludeTopic, onChanged }: HrRequestsTabProps) {
+  const t = useT();
   const [filter, setFilter] = useState<StatusFilter>("open");
   const topicFilter = `${topic ? `&topic=${topic}` : ""}${excludeTopic ? `&exclude_topic=${excludeTopic}` : ""}`;
   const query = `${API.hrHelp.list}?page_size=100${filter === "all" ? "" : `&status=${filter}`}${topicFilter}`;
@@ -41,13 +43,13 @@ export default function HrRequestsTab({ title, topic, excludeTopic, onChanged }:
     refetch();
     onChanged?.();
   }
-  const filterLabel = FILTERS.find(option => option.value === filter)?.label.toLowerCase() ?? "";
+  const filterLabel = t(FILTERS.find(option => option.value === filter)?.label ?? "").toLowerCase();
 
   return (
     <div className="card">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-headset" /> {title}</div>
-        <div role="group" aria-label="Filter by status" style={{ display: "flex", gap: 6 }}>
+        <div role="group" aria-label={t("Filter by status")} style={{ display: "flex", gap: 6 }}>
           {FILTERS.map(option => (
             <button
               key={option.value}
@@ -57,25 +59,25 @@ export default function HrRequestsTab({ title, topic, excludeTopic, onChanged }:
               onClick={() => setFilter(option.value)}
               suppressHydrationWarning
             >
-              {option.label}
+              {t(option.label)}
             </button>
           ))}
         </div>
       </div>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
-        <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>Loading requests…</h3></div>
+        <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>{t("Loading requests…")}</h3></div>
       ) : requests.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-headset" />
-          <h3>No {filter === "all" ? "" : `${filterLabel} `}{title.toLowerCase()}</h3>
-          <p>Requests raised by employees will appear here.</p>
+          <h3>{filter === "all" ? t("No {title}", { title: title.toLowerCase() }) : t("No {status} {title}", { status: filterLabel, title: title.toLowerCase() })}</h3>
+          <p>{t("Requests raised by employees will appear here.")}</p>
         </div>
       ) : (
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Ref</th><th>From</th><th>Topic</th><th>Priority</th><th>Status</th><th>Submitted</th><th>Action</th></tr>
+              <tr><th>{t("Ref")}</th><th>{t("From")}</th><th>{t("Topic")}</th><th>{t("Priority")}</th><th>{t("Status")}</th><th>{t("Submitted")}</th><th>{t("Action")}</th></tr>
             </thead>
             <tbody>
               {requests.map(entry => <HrHelpRow key={entry.id} entry={entry} canRespond onUpdated={handleUpdated} />)}

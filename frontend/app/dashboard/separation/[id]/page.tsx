@@ -7,6 +7,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { useToast } from "@/components/ToastProvider";
+import { useT } from "@/hooks/useI18n";
 import type { SeparationRequest } from "@/types/separation";
 import { useSeparationAccess } from "../_access";
 import { statusBadgeClass } from "../_workflow";
@@ -23,6 +24,7 @@ import ActivitySection from "./_components/ActivitySection";
 
 export default function SeparationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const t = useT();
   const access = useSeparationAccess();
   const { showToast } = useToast();
   const router = useRouter();
@@ -44,13 +46,13 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
     setWorking(true);
     try {
       await clientApi.post(API.separation.stageAction(r.id, decision.stageId), { action: decision.action, remarks });
-      showToast(decision.action === "approve" ? "Stage approved." : "Stage rejected.", "success");
+      showToast(decision.action === "approve" ? t("Stage approved.") : t("Stage rejected."), "success");
       setDecision(null);
       // A rejection ends the request: go back to the list (the rejected request stays there, filterable, with its reason).
       if (decision.action === "reject") router.push("/dashboard/separation");
       else refetch();
     } catch (err: unknown) {
-      showToast(extractError(err, "Failed to submit the decision."), "error");
+      showToast(extractError(err, t("Failed to submit the decision.")), "error");
     } finally {
       setWorking(false);
     }
@@ -61,11 +63,11 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
     setWorking(true);
     try {
       await clientApi.patch(API.separation.detail(r.id), { action: "cancel" });
-      showToast("Separation request cancelled.", "success");
+      showToast(t("Separation request cancelled."), "success");
       setCancelling(false);
       refetch();
     } catch (err: unknown) {
-      showToast(extractError(err, "Failed to cancel the request."), "error");
+      showToast(extractError(err, t("Failed to cancel the request.")), "error");
     } finally {
       setWorking(false);
     }
@@ -81,30 +83,30 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
       // does the same status-only change the per-stage approval decision
       // does, just reachable directly from this page's header.
       await clientApi.patch(API.separation.detail(r.id), { action: "reject", reason });
-      showToast("Separation request rejected.", "success");
+      showToast(t("Separation request rejected."), "success");
       setRejecting(false);
       router.push("/dashboard/separation");
     } catch (err: unknown) {
-      showToast(extractError(err, "Failed to reject the request."), "error");
+      showToast(extractError(err, t("Failed to reject the request.")), "error");
     } finally {
       setWorking(false);
     }
   }
 
   if (loading) {
-    return <div style={{ padding: 48, textAlign: "center", color: "var(--on-variant)" }}><i className="ti ti-loader-2 spin" /> Loading…</div>;
+    return <div style={{ padding: 48, textAlign: "center", color: "var(--on-variant)" }}><i className="ti ti-loader-2 spin" /> {t("Loading…")}</div>;
   }
 
   if (error || !r) {
     return (
       <div className="card" style={{ padding: 48, textAlign: "center", maxWidth: 480, margin: "40px auto" }}>
         <i className="ti ti-file-off" style={{ fontSize: 40, color: "var(--outline)", display: "block", marginBottom: 12 }} />
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--on-bg)", marginBottom: 6 }}>Request not found</h3>
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--on-bg)", marginBottom: 6 }}>{t("Request not found")}</h3>
         <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 16 }}>
-          {error || `No separation request exists with ID ${id}.`}
+          {error || t("No separation request exists with ID {id}.", { id })}
         </p>
         <Link href="/dashboard/separation" className="btn btn-filled">
-          <i className="ti ti-arrow-left" /> Back to Separation & Exit
+          <i className="ti ti-arrow-left" /> {t("Back to Separation & Exit")}
         </Link>
       </div>
     );
@@ -115,7 +117,7 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
       <div className="page-header">
         <div>
           <nav style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 6 }}>
-            <Link href="/dashboard/separation" style={{ color: "var(--on-variant)" }}>Separation & Exit</Link>
+            <Link href="/dashboard/separation" style={{ color: "var(--on-variant)" }}>{t("Separation & Exit")}</Link>
             <i className="ti ti-chevron-right" style={{ fontSize: 10, margin: "0 4px" }} />
             <span style={{ color: "var(--on-bg)", fontWeight: 500 }}>{r.request_ref}</span>
           </nav>
@@ -128,12 +130,12 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
         <div className="page-actions">
           {r.can_cancel && (
             <button className="btn btn-ghost" onClick={() => setCancelling(true)} suppressHydrationWarning>
-              <i className="ti ti-ban" /> Cancel Request
+              <i className="ti ti-ban" /> {t("Cancel Request")}
             </button>
           )}
           {r.can_delete && (
             <button className="btn btn-danger" onClick={() => setRejecting(true)} suppressHydrationWarning>
-              <i className="ti ti-x" /> Reject
+              <i className="ti ti-x" /> {t("Reject")}
             </button>
           )}
         </div>
@@ -160,9 +162,9 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
 
       {cancelling && (
         <ConfirmModal
-          title="Cancel Separation Request"
-          body={`This will cancel the separation request for ${r.employee_name}. This cannot be undone.`}
-          confirmLabel="Yes, Cancel Request"
+          title={t("Cancel Separation Request")}
+          body={t("This will cancel the separation request for {name}. This cannot be undone.", { name: r.employee_name })}
+          confirmLabel={t("Yes, Cancel Request")}
           danger
           saving={working}
           onConfirm={handleCancelConfirm}

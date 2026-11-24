@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function PermissionTemplateEditor({ catalogue, template, onClose, onSaved }: Props) {
+  const t = useT();
   const [name, setName] = useState(template?.name ?? "");
   const [description, setDescription] = useState(template?.description ?? "");
   const [canManageTeam, setCanManageTeam] = useState(template?.can_manage_team ?? false);
@@ -40,7 +42,7 @@ export default function PermissionTemplateEditor({ catalogue, template, onClose,
   }
 
   async function save() {
-    if (!name.trim()) { setError("Name is required."); return; }
+    if (!name.trim()) { setError(t("Name is required.")); return; }
     setIsSaving(true);
     setError(null);
     const payload = {
@@ -58,7 +60,7 @@ export default function PermissionTemplateEditor({ catalogue, template, onClose,
       setError(
         (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
           ?? (err as { message?: string })?.message
-          ?? "Could not save this template.",
+          ?? t("Could not save this template."),
       );
     } finally {
       setIsSaving(false);
@@ -69,17 +71,17 @@ export default function PermissionTemplateEditor({ catalogue, template, onClose,
 
   return (
     <Modal
-      title={template ? <>Edit <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{template.name}</span></> : "New permission template"}
+      title={template ? <>{t("Edit")} <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{template.name}</span></> : t("New permission template")}
       onClose={onClose}
       maxWidth={1040}
       scrollBody
       footer={
         <>
-          <span className="mr-auto text-xs text-[var(--on-variant)]">{granted.size} permission{granted.size === 1 ? "" : "s"} selected</span>
-          <button className="btn btn-ghost" type="button" onClick={onClose} disabled={isSaving}>Cancel</button>
+          <span className="mr-auto text-xs text-[var(--on-variant)]">{granted.size === 1 ? t("{count} permission selected", { count: granted.size }) : t("{count} permissions selected", { count: granted.size })}</span>
+          <button className="btn btn-ghost" type="button" onClick={onClose} disabled={isSaving}>{t("Cancel")}</button>
           <button className="btn btn-filled" type="button" onClick={save} disabled={isSaving}>
             <i className={`ti ${isSaving ? "ti-loader-2 animate-spin" : "ti-device-floppy"}`} />
-            {isSaving ? "Saving…" : "Save template"}
+            {isSaving ? t("Saving…") : t("Save template")}
           </button>
         </>
       }
@@ -89,38 +91,38 @@ export default function PermissionTemplateEditor({ catalogue, template, onClose,
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="field-group">
-            <label className="field-label">Template name <span style={{ color: "var(--error)" }}>*</span></label>
-            <input className="field-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Manager" maxLength={100} />
+            <label className="field-label">{t("Template name")} <span style={{ color: "var(--error)" }}>*</span></label>
+            <input className="field-input" value={name} onChange={e => setName(e.target.value)} placeholder={t("e.g. Manager")} maxLength={100} />
           </div>
           <div className="field-group">
-            <label className="field-label">Description <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
-            <input className="field-input" value={description} onChange={e => setDescription(e.target.value)} placeholder="What this template is for" maxLength={255} />
+            <label className="field-label">{t("Description")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("optional")}</span></label>
+            <input className="field-input" value={description} onChange={e => setDescription(e.target.value)} placeholder={t("What this template is for")} maxLength={255} />
           </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
           <label className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-[var(--outline-v)] bg-[var(--surface)] p-4">
             <span>
-              <span className="block text-sm font-semibold text-[var(--on-bg)]">Team manager</span>
-              <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">Applied positions are marked as team managers.</span>
+              <span className="block text-sm font-semibold text-[var(--on-bg)]">{t("Team manager")}</span>
+              <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">{t("Applied positions are marked as team managers.")}</span>
             </span>
             <ToggleSwitch checked={canManageTeam} onChange={setCanManageTeam} />
           </label>
           <label className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-[var(--outline-v)] bg-[var(--surface)] p-4">
             <span>
-              <span className="block text-sm font-semibold text-[var(--on-bg)]">Branch-wide access</span>
-              <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">Applied positions get branch scope where the module supports it.</span>
+              <span className="block text-sm font-semibold text-[var(--on-bg)]">{t("Branch-wide access")}</span>
+              <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">{t("Applied positions get branch scope where the module supports it.")}</span>
             </span>
             <ToggleSwitch checked={canManageBranch} onChange={setCanManageBranch} />
           </label>
         </div>
 
-        <section aria-label="Template permissions">
+        <section aria-label={t("Template permissions")}>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h3 className="text-sm font-bold text-[var(--on-bg)]">Module permissions</h3>
+              <h3 className="text-sm font-bold text-[var(--on-bg)]">{t("Module permissions")}</h3>
               <p className="mt-1 text-xs text-[var(--on-variant)]">
-                <strong className="text-[var(--on-bg)]">{grantedCount} of {permissionCount}</strong> enabled.
+                <strong className="text-[var(--on-bg)]">{t("{granted} of {total}", { granted: grantedCount, total: permissionCount })}</strong> {t("enabled.")}
               </p>
             </div>
             <label className="relative w-full sm:w-64">
@@ -130,14 +132,14 @@ export default function PermissionTemplateEditor({ catalogue, template, onClose,
                 type="search"
                 value={search}
                 onChange={event => setSearch(event.target.value)}
-                placeholder="Search modules or actions"
-                aria-label="Search permissions"
+                placeholder={t("Search modules or actions")}
+                aria-label={t("Search permissions")}
               />
             </label>
           </div>
           {modules.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--outline)] px-4 py-10 text-center text-sm text-[var(--on-variant)]">
-              No permissions match that search.
+              {t("No permissions match that search.")}
             </div>
           ) : (
             <PermissionMatrix modules={modules} granted={granted} onToggle={toggle} onToggleMany={toggleMany} />

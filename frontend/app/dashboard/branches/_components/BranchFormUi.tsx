@@ -4,6 +4,7 @@
 // and the Active / Inactive switch. Styling uses the app's CSS variables only.
 
 import type { ReactNode } from "react";
+import { useT } from "@/hooks/useI18n";
 
 interface FormSectionProps {
   id: string;
@@ -91,8 +92,9 @@ export function ChoiceCard({ checked, onChange, icon, title, description }: Choi
 const STATUSES = [{ value: "active", label: "Active", dot: "var(--success, #16a34a)" }, { value: "inactive", label: "Inactive", dot: "var(--outline, #9ca3af)" }];
 
 export function StatusSwitch({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const t = useT();
   return (
-    <div role="radiogroup" aria-label="Status" style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: "var(--bg-low)", border: "1px solid var(--outline-v)" }}>
+    <div role="radiogroup" aria-label={t("Status")} style={{ display: "inline-flex", padding: 3, borderRadius: 999, background: "var(--bg-low)", border: "1px solid var(--outline-v)" }}>
       {STATUSES.map(status => {
         const selected = value === status.value;
         return (
@@ -104,7 +106,7 @@ export function StatusSwitch({ value, onChange }: { value: string; onChange: (va
               boxShadow: selected ? "0 1px 3px rgba(0,0,0,.12)" : "none",
             }}
           >
-            <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: status.dot }} />{status.label}
+            <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: status.dot }} />{t(status.label)}
           </button>
         );
       })}

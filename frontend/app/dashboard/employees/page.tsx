@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePermission } from "@/hooks/usePermission";
+import { useT } from "@/hooks/useI18n";
 import { useToast } from "@/components/ToastProvider";
 import { useEmployees } from "@/hooks/useEmployees";
 import Pagination from "@/components/shared/Pagination";
@@ -46,6 +47,7 @@ export default function EmployeesPage() {
 }
 
 function EmployeesPageInner() {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const canCreate = usePermission("employees.create");
@@ -89,8 +91,8 @@ function EmployeesPageInner() {
     if (found) { setDrawerEmployee(found); return; }
     clientApi.get<{ data: ApiEmployee }>(API.employees.detail(openId))
       .then(({ data }) => setDrawerEmployee(apiToEmployee(data.data, [])))
-      .catch(() => showToast("Could not load that employee.", "error"));
-  }, [searchParams, router, emp.employees, showToast]);
+      .catch(() => showToast(t("Could not load that employee."), "error"));
+  }, [searchParams, router, emp.employees, showToast, t]);
 
   return (
     <div className="emp-fit">
@@ -117,11 +119,11 @@ function EmployeesPageInner() {
       <section className="panel">
         <div className="panel-h">
           <h2>
-            All <em className="hl">employees</em>
+            {t("All")} <em className="hl">{t("employees")}</em>
             <span className="cnt">
               {emp.search.trim()
-                ? `${emp.totalCount} matches for "${emp.search.trim()}"`
-                : `${emp.totalCount} of ${emp.total}`}
+                ? t("{count} matches for \"{query}\"", { count: emp.totalCount, query: emp.search.trim() })
+                : t("{count} of {total}", { count: emp.totalCount, total: emp.total })}
             </span>
           </h2>
         </div>
@@ -155,7 +157,7 @@ function EmployeesPageInner() {
 
         <Pagination
           page={emp.page} totalPages={emp.totalPages} totalCount={emp.totalCount}
-          pageSize={20} itemLabel="employees" onPageChange={emp.handlePageChange}
+          pageSize={20} itemLabel={t("employees")} onPageChange={emp.handlePageChange}
         />
       </section>
 
@@ -170,7 +172,7 @@ function EmployeesPageInner() {
             // HireEmployeeModal's own onHired wrapper) — nothing told the
             // user the hire actually succeeded. QA: "after successful
             // hiring it was not showing successfully message".
-            showToast("Employee hired successfully.", "success");
+            showToast(t("Employee hired successfully."), "success");
           }}
         />
       )}

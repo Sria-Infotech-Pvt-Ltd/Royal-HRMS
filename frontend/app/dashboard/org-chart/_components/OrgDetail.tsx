@@ -6,6 +6,7 @@ import type { BranchOption, Selected } from "./OrgStructureClient";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import SearchableSelect from "@/components/SearchableSelect";
 import { confirmDialog } from "@/components/DialogProvider";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   selected: Selected;
@@ -85,6 +86,7 @@ function HeadBox({ icon, role, name, vacant, action }: { icon: ReactNode; role: 
 }
 
 function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => void; onAssign: () => void }) {
+  const t = useT();
   return (
     <div
       onClick={onSelect}
@@ -95,7 +97,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
         <div style={{ fontSize: 13.5, fontWeight: 580, display: "flex", alignItems: "center", gap: 7 }}>
           {p.title}
           {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 13 }} />}
-          {!p.is_active && <span className="badge" style={{ background: "var(--bg-low)", color: "var(--on-variant)", fontSize: 9.5, fontWeight: 650, padding: "2px 7px", borderRadius: 5 }}>Inactive</span>}
+          {!p.is_active && <span className="badge" style={{ background: "var(--bg-low)", color: "var(--on-variant)", fontSize: 9.5, fontWeight: 650, padding: "2px 7px", borderRadius: 5 }}>{t("Inactive")}</span>}
         </div>
         <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>
           {p.job_template_name ?? "—"}{p.grade ? ` · ${p.grade}` : ""}{p.branch_name ? ` · ${p.branch_name}` : ""}
@@ -106,13 +108,13 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
           <Avatar name={p.holder_name} size={20} /> {p.holder_name}
         </span>
       ) : (
-        <span style={{ fontSize: 12, color: "var(--warn)", fontStyle: "italic" }}>Vacant</span>
+        <span style={{ fontSize: 12, color: "var(--warn)", fontStyle: "italic" }}>{t("Vacant")}</span>
       )}
       <button
         className="btn btn-ghost btn-sm"
         onClick={e => { e.stopPropagation(); onAssign(); }}
       >
-        {p.holder_name ? "Reassign" : "Assign"}
+        {p.holder_name ? t("Reassign") : t("Assign")}
       </button>
     </div>
   );
@@ -122,11 +124,12 @@ export default function OrgDetail({
   selected, units, positions, jobs, branches, canEdit, placementHistory, placementHistoryLoading, onSelect,
   onAddSubUnit, onDeleteUnit, onAddPosition, onAssign, onVacate, onDeactivate, canManagePermissions, onPermissions, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
 }: Props) {
+  const t = useT();
   if (!selected) {
     return (
       <div style={{ padding: "60px 20px", textAlign: "center", color: "var(--on-variant)" }}>
         <i className="ti ti-sitemap" style={{ fontSize: 34, color: "var(--outline)", display: "block", marginBottom: 10 }} />
-        Select something in the structure to see its details.
+        {t("Select something in the structure to see its details.")}
       </div>
     );
   }
@@ -148,14 +151,14 @@ export default function OrgDetail({
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 680 }}>{unit.name}</div>
             <div style={{ fontSize: 11, fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)", marginTop: 3, display: "flex", alignItems: "center", gap: 8 }}>
-              Org unit
+              {t("Org unit")}
               {unit.code && <span style={{ fontFamily: "monospace", color: "var(--primary)", background: "color-mix(in srgb, var(--brand) 8%, transparent)", borderRadius: 5, padding: "1px 6px", fontSize: 11 }}>{unit.code}</span>}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             {canEdit && (
               <button className="btn btn-ghost btn-sm" onClick={() => onAddSubUnit(unit.id)}>
-                <i className="ti ti-plus" /> Sub-unit
+                <i className="ti ti-plus" /> {t("Sub-unit")}
               </button>
             )}
             {canDelete && (
@@ -163,60 +166,60 @@ export default function OrgDetail({
                 className="btn btn-ghost"
                 style={{ width: 32, height: 32, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)" }}
                 onClick={async () => {
-                  if (await confirmDialog(`Permanently delete "${unit.name}"? This can't be undone, and only works if none of its positions have ever been held by anyone — if any have, this will be rejected; deactivate the unit instead.`)) {
+                  if (await confirmDialog(t("Permanently delete \"{name}\"? This can't be undone, and only works if none of its positions have ever been held by anyone — if any have, this will be rejected; deactivate the unit instead.", { name: unit.name }))) {
                     onDeleteUnit(unit.id);
                   }
                 }}
-                title="Delete org unit — only possible if it has no sub-units and no position in it has ever had a holder"
-               aria-label="Delete org unit — only possible if it has no sub-units and no position in it has ever had a holder">
+                title={t("Delete org unit — only possible if it has no sub-units and no position in it has ever had a holder")}
+               aria-label={t("Delete org unit — only possible if it has no sub-units and no position in it has ever had a holder")}>
                 <i className="ti ti-trash" style={{ fontSize: 13 }} />
               </button>
             )}
           </div>
         </div>
 
-        <SectionTitle>Head of unit</SectionTitle>
+        <SectionTitle>{t("Head of unit")}</SectionTitle>
         {!chief ? (
           <HeadBox
-            icon={<i className="ti ti-user-question" />} role="Head of unit" name="No chief position yet" vacant
-            action={canEdit && <button className="linkbtn" onClick={() => onAddPosition(unit.id)} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Add chief position</button>}
+            icon={<i className="ti ti-user-question" />} role={t("Head of unit")} name={t("No chief position yet")} vacant
+            action={canEdit && <button className="linkbtn" onClick={() => onAddPosition(unit.id)} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t("Add chief position")}</button>}
           />
         ) : chief.holder_name ? (
           <HeadBox
             icon={<Avatar name={chief.holder_name} size={30} />}
-            role={`Head of unit · ${chief.title}${chief.holder_since ? ` · since ${chief.holder_since}` : ""}`}
+            role={`${t("Head of unit")} · ${chief.title}${chief.holder_since ? ` · ${t("since {date}", { date: chief.holder_since })}` : ""}`}
             name={chief.holder_name} vacant={false}
-            action={<button className="btn btn-ghost btn-sm" onClick={() => onSelect({ type: "position", id: chief.id })}>Open position</button>}
+            action={<button className="btn btn-ghost btn-sm" onClick={() => onSelect({ type: "position", id: chief.id })}>{t("Open position")}</button>}
           />
         ) : (
           <HeadBox
-            icon={<i className="ti ti-user-question" />} role={`Head of unit · ${chief.title}`} name="Vacant — no holder" vacant
-            action={canEdit && <button className="linkbtn" onClick={() => onAssign(chief.id)} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Assign holder</button>}
+            icon={<i className="ti ti-user-question" />} role={`${t("Head of unit")} · ${chief.title}`} name={t("Vacant — no holder")} vacant
+            action={canEdit && <button className="linkbtn" onClick={() => onAssign(chief.id)} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t("Assign holder")}</button>}
           />
         )}
 
-        <SectionTitle>Details</SectionTitle>
+        <SectionTitle>{t("Details")}</SectionTitle>
         <div className="form-row cols-2">
           <div className="field-group">
-            <label className="field-label">Unit name</label>
+            <label className="field-label">{t("Unit name")}</label>
             <input className="field-input" defaultValue={unit.name} disabled={!canEdit} onBlur={e => e.target.value !== unit.name && onUnitField(unit.id, "name", e.target.value)} />
           </div>
           <div className="field-group">
-            <label className="field-label">Code</label>
+            <label className="field-label">{t("Code")}</label>
             <input className="field-input" style={{ fontFamily: "monospace" }} defaultValue={unit.code} disabled={!canEdit} onBlur={e => onUnitField(unit.id, "code", e.target.value.toUpperCase())} />
           </div>
           <div className="field-group">
-            <label className="field-label">Parent unit</label>
+            <label className="field-label">{t("Parent unit")}</label>
             <SearchableSelect
               value={unit.parent ?? ""} disabled={!canEdit}
               onChange={v => onUnitField(unit.id, "parent", v || null)}
-              placeholder="None — top level"
+              placeholder={t("None — top level")}
               options={parentOptions.map(o => ({ value: o.id, label: o.name }))}
               inputClassName="field-input"
             />
           </div>
           <div className="field-group">
-            <label className="field-label">Cost center <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+            <label className="field-label">{t("Cost center")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
             <input className="field-input" style={{ fontFamily: "monospace" }} defaultValue={unit.cost_center} disabled={!canEdit} placeholder="CC-…" onBlur={e => onUnitField(unit.id, "cost_center", e.target.value.toUpperCase())} />
           </div>
         </div>
@@ -225,20 +228,20 @@ export default function OrgDetail({
             checked={unit.is_department_level}
             disabled={!canEdit}
             onChange={checked => onUnitField(unit.id, "is_department_level", checked)}
-            label={<>This unit counts as a <b>department</b> for leave eligibility and reporting.</>}
+            label={<>{t("This unit counts as a")} <b>{t("department")}</b> {t("for leave eligibility and reporting.")}</>}
           />
         </div>
 
         <SectionTitle>
-          Positions in this unit
-          {canEdit && <button className="linkbtn" onClick={() => onAddPosition(unit.id)} style={{ background: "var(--primary-c, color-mix(in srgb, var(--brand) 10%, transparent))", color: "var(--primary)", border: "1px solid color-mix(in srgb, var(--brand) 20%, transparent)", borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-plus" style={{ fontSize: 11 }} /> Add position</button>}
+          {t("Positions in this unit")}
+          {canEdit && <button className="linkbtn" onClick={() => onAddPosition(unit.id)} style={{ background: "var(--primary-c, color-mix(in srgb, var(--brand) 10%, transparent))", color: "var(--primary)", border: "1px solid color-mix(in srgb, var(--brand) 20%, transparent)", borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-plus" style={{ fontSize: 11 }} /> {t("Add position")}</button>}
         </SectionTitle>
-        {poss.length === 0 && <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>No positions yet in this unit.</div>}
+        {poss.length === 0 && <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>{t("No positions yet in this unit.")}</div>}
         {poss.map(p => <PositionRow key={p.id} p={p} onSelect={() => onSelect({ type: "position", id: p.id })} onAssign={() => onAssign(p.id)} />)}
         <div style={{ display: "flex", gap: 20, marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--outline-v)" }}>
-          <div style={{ fontSize: 12, color: "var(--on-variant)" }}><b style={{ fontSize: 16, fontWeight: 700, color: "var(--on-bg)", display: "block" }}>{poss.length}</b>positions</div>
-          <div style={{ fontSize: 12, color: "var(--on-variant)" }}><b style={{ fontSize: 16, fontWeight: 700, color: "var(--on-bg)", display: "block" }}>{filled}</b>filled</div>
-          <div style={{ fontSize: 12, color: "var(--on-variant)" }}><b style={{ fontSize: 16, fontWeight: 700, color: "var(--on-bg)", display: "block" }}>{poss.length - filled}</b>vacant</div>
+          <div style={{ fontSize: 12, color: "var(--on-variant)" }}><b style={{ fontSize: 16, fontWeight: 700, color: "var(--on-bg)", display: "block" }}>{poss.length}</b>{t("positions")}</div>
+          <div style={{ fontSize: 12, color: "var(--on-variant)" }}><b style={{ fontSize: 16, fontWeight: 700, color: "var(--on-bg)", display: "block" }}>{filled}</b>{t("filled")}</div>
+          <div style={{ fontSize: 12, color: "var(--on-variant)" }}><b style={{ fontSize: 16, fontWeight: 700, color: "var(--on-bg)", display: "block" }}>{poss.length - filled}</b>{t("vacant")}</div>
         </div>
       </div>
     );
@@ -255,26 +258,26 @@ export default function OrgDetail({
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 680, display: "flex", alignItems: "center", gap: 8 }}>
               {p.title} {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 16 }} />}
-              {!p.is_active && <span className="badge" style={{ background: "var(--bg-low)", color: "var(--on-variant)", fontSize: 10.5, fontWeight: 650, padding: "2px 8px", borderRadius: 5 }}>Inactive</span>}
+              {!p.is_active && <span className="badge" style={{ background: "var(--bg-low)", color: "var(--on-variant)", fontSize: 10.5, fontWeight: 650, padding: "2px 8px", borderRadius: 5 }}>{t("Inactive")}</span>}
             </div>
             <div style={{ fontSize: 11, fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)", marginTop: 3 }}>
-              Position · {p.org_unit_name}{p.branch_name ? ` · ${p.branch_name}` : ""}
+              {t("Position")} · {p.org_unit_name}{p.branch_name ? ` · ${p.branch_name}` : ""}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             {canManagePermissions && (
               <button className="btn btn-ghost btn-sm" onClick={() => onPermissions(p.id)}>
-                <i className="ti ti-shield-lock" /> Permissions
+                <i className="ti ti-shield-lock" /> {t("Permissions")}
               </button>
             )}
             {canEdit && (
               p.is_active ? (
                 <button className="btn btn-ghost btn-sm" onClick={() => onDeactivate(p.id)}>
-                  <i className="ti ti-eye-off" /> Deactivate
+                  <i className="ti ti-eye-off" /> {t("Deactivate")}
                 </button>
               ) : (
                 <button className="btn btn-ghost btn-sm" onClick={() => onReactivate(p.id)}>
-                  <i className="ti ti-eye" /> Reactivate
+                  <i className="ti ti-eye" /> {t("Reactivate")}
                 </button>
               )
             )}
@@ -283,35 +286,35 @@ export default function OrgDetail({
                 className="btn btn-ghost"
                 style={{ width: 32, height: 32, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)" }}
                 onClick={async () => {
-                  if (await confirmDialog(`Permanently delete "${p.title}"? This can't be undone, and only works if it has never had a holder — if it has any placement history, this will be rejected; deactivate it instead.`)) {
+                  if (await confirmDialog(t("Permanently delete \"{name}\"? This can't be undone, and only works if it has never had a holder — if it has any placement history, this will be rejected; deactivate it instead.", { name: p.title }))) {
                     onDelete(p.id);
                   }
                 }}
-                title="Delete position — only possible if it has no placement history"
-               aria-label="Delete position — only possible if it has no placement history">
+                title={t("Delete position — only possible if it has no placement history")}
+               aria-label={t("Delete position — only possible if it has no placement history")}>
                 <i className="ti ti-trash" style={{ fontSize: 13 }} />
               </button>
             )}
           </div>
         </div>
 
-        <SectionTitle>Holder</SectionTitle>
+        <SectionTitle>{t("Holder")}</SectionTitle>
         {p.holder_name ? (
           <HeadBox
             icon={<Avatar name={p.holder_name} size={30} />}
-            role={p.holder_since ? `Current holder · since ${p.holder_since}` : "Current holder"}
+            role={p.holder_since ? t("Current holder · since {date}", { date: p.holder_since }) : t("Current holder")}
             name={p.holder_name} vacant={false}
             action={canEdit && (
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-ghost btn-sm" onClick={() => onAssign(p.id)}>Reassign</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => onVacate(p.id)}>Vacate</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => onAssign(p.id)}>{t("Reassign")}</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => onVacate(p.id)}>{t("Vacate")}</button>
               </div>
             )}
           />
         ) : (
           <HeadBox
-            icon={<i className="ti ti-user-question" />} role="Current holder" name="Vacant" vacant
-            action={canEdit && <button className="linkbtn" onClick={() => onAssign(p.id)} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Assign holder</button>}
+            icon={<i className="ti ti-user-question" />} role={t("Current holder")} name={t("Vacant")} vacant
+            action={canEdit && <button className="linkbtn" onClick={() => onAssign(p.id)} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{t("Assign holder")}</button>}
           />
         )}
 
@@ -324,33 +327,33 @@ export default function OrgDetail({
             }}>
               <i className="ti ti-clock" style={{ color: "var(--warn)", fontSize: 15 }} />
               <div style={{ flex: 1 }}>
-                <b>{scheduled.employee_name}</b> is scheduled to take this seat on <b>{scheduled.effective_from}</b>.
+                <b>{scheduled.employee_name}</b> {t("is scheduled to take this seat on")} <b>{scheduled.effective_from}</b>.
               </div>
               {canEdit && (
-                <button className="btn btn-ghost btn-sm" onClick={() => onCancelScheduled(scheduled.placement_id)}>Cancel</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => onCancelScheduled(scheduled.placement_id)}>{t("Cancel")}</button>
               )}
             </div>
           );
         })()}
 
-        <SectionTitle>Reporting</SectionTitle>
+        <SectionTitle>{t("Reporting")}</SectionTitle>
         <div className="field-group">
-          <label className="field-label">Reports to</label>
-          <input className="field-input" disabled value={p.reports_to ? `${p.reports_to.holder_name ?? "Vacant"} · ${p.reports_to.title}` : "—"} style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} />
+          <label className="field-label">{t("Reports to")}</label>
+          <input className="field-input" disabled value={p.reports_to ? `${p.reports_to.holder_name ?? t("Vacant")} · ${p.reports_to.title}` : "—"} style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} />
         </div>
 
-        <SectionTitle>Details</SectionTitle>
+        <SectionTitle>{t("Details")}</SectionTitle>
         <div className="form-row cols-2">
           <div className="field-group">
-            <label className="field-label">Position title</label>
+            <label className="field-label">{t("Position title")}</label>
             <input className="field-input" defaultValue={p.title} disabled={!canEdit} onBlur={e => e.target.value !== p.title && onPositionField(p.id, "title", e.target.value)} />
           </div>
           <div className="field-group">
-            <label className="field-label">Grade / band</label>
+            <label className="field-label">{t("Grade / band")}</label>
             <input className="field-input" style={{ fontFamily: "monospace" }} defaultValue={p.grade} disabled={!canEdit} onBlur={e => onPositionField(p.id, "grade", e.target.value.toUpperCase())} />
           </div>
           <div className="field-group">
-            <label className="field-label">Org unit</label>
+            <label className="field-label">{t("Org unit")}</label>
             <SearchableSelect
               value={p.org_unit} disabled={!canEdit}
               onChange={v => onPositionField(p.id, "org_unit", v)}
@@ -359,21 +362,21 @@ export default function OrgDetail({
             />
           </div>
           <div className="field-group">
-            <label className="field-label">Job template</label>
+            <label className="field-label">{t("Job template")}</label>
             <SearchableSelect
               value={p.job_template ?? ""} disabled={!canEdit}
               onChange={v => onPositionField(p.id, "job_template", v || null)}
-              placeholder="None"
+              placeholder={t("None")}
               options={jobs.map(j => ({ value: j.id, label: `${j.name}${j.band ? ` · ${j.band}` : ""}` }))}
               inputClassName="field-input"
             />
           </div>
           <div className="field-group">
-            <label className="field-label">Company Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
+            <label className="field-label">{t("Company Code")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional — leave unset for a company-wide seat)")}</span></label>
             <SearchableSelect
               value={p.branch != null ? String(p.branch) : ""} disabled={!canEdit}
               onChange={v => onPositionField(p.id, "branch", v || null)}
-              placeholder="Company-wide"
+              placeholder={t("Company-wide")}
               options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
               inputClassName="field-input"
             />
@@ -384,14 +387,14 @@ export default function OrgDetail({
             checked={p.is_chief}
             disabled={!canEdit}
             onChange={() => onToggleChief(p)}
-            label={<>This position is the <b>head</b> of {p.org_unit_name}.</>}
+            label={<>{t("This position is the")} <b>{t("head")}</b> {t("of {unit}.", { unit: p.org_unit_name })}</>}
           />
         </div>
 
-        <SectionTitle>Placement history</SectionTitle>
-        {placementHistoryLoading && <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>Loading…</div>}
+        <SectionTitle>{t("Placement history")}</SectionTitle>
+        {placementHistoryLoading && <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>{t("Loading…")}</div>}
         {!placementHistoryLoading && placementHistory.length === 0 && (
-          <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>No placements yet on this seat.</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>{t("No placements yet on this seat.")}</div>
         )}
         {!placementHistoryLoading && placementHistory.map(pl => {
           const badge = STATUS_BADGE[pl.status];
@@ -401,11 +404,11 @@ export default function OrgDetail({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 570 }}>{pl.employee_name}</div>
                 <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 1 }}>
-                  {pl.effective_from} – {pl.effective_to ?? "present"}{pl.note ? ` · ${pl.note}` : ""}
+                  {pl.effective_from} – {pl.effective_to ?? t("present")}{pl.note ? ` · ${pl.note}` : ""}
                 </div>
               </div>
               <span className="badge" style={{ background: badge.bg, color: badge.color, fontSize: 10.5, fontWeight: 650, padding: "3px 9px", borderRadius: 5, flexShrink: 0 }}>
-                {badge.label}
+                {t(badge.label)}
               </span>
             </div>
           );
@@ -416,7 +419,7 @@ export default function OrgDetail({
 
   // person
   const held = positions.filter(p => p.holder === selected.id);
-  const name = held[0]?.holder_name ?? "Employee";
+  const name = held[0]?.holder_name ?? t("Employee");
   const rep = held[0]?.reports_to;
 
   return (
@@ -425,18 +428,18 @@ export default function OrgDetail({
         <Avatar name={name} size={44} />
         <div>
           <div style={{ fontSize: 18, fontWeight: 680 }}>{name}</div>
-          <div style={{ fontSize: 11, fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)", marginTop: 3 }}>Employee</div>
+          <div style={{ fontSize: 11, fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)", marginTop: 3 }}>{t("Employee")}</div>
         </div>
       </div>
 
-      <SectionTitle>Holds</SectionTitle>
-      {held.length === 0 && <div style={{ fontSize: 12.5, color: "var(--on-variant)" }}>Not placed on any position.</div>}
+      <SectionTitle>{t("Holds")}</SectionTitle>
+      {held.length === 0 && <div style={{ fontSize: 12.5, color: "var(--on-variant)" }}>{t("Not placed on any position.")}</div>}
       {held.map(p => <PositionRow key={p.id} p={p} onSelect={() => onSelect({ type: "position", id: p.id })} onAssign={() => onAssign(p.id)} />)}
 
-      <SectionTitle>Reporting</SectionTitle>
+      <SectionTitle>{t("Reporting")}</SectionTitle>
       <div className="field-group">
-        <label className="field-label">Reports to</label>
-        <input className="field-input" disabled value={rep ? `${rep.holder_name ?? "Vacant"} · ${rep.title}` : "—"} style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} />
+        <label className="field-label">{t("Reports to")}</label>
+        <input className="field-input" disabled value={rep ? `${rep.holder_name ?? t("Vacant")} · ${rep.title}` : "—"} style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} />
       </div>
     </div>
   );

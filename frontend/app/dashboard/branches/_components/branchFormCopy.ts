@@ -1,3 +1,5 @@
+import { tr } from "@/lib/i18n/tr";
+
 // The words on the Add / Edit Company Code form, in one place: a plain heading and one sentence of help for each part.
 
 export const SECTION_COPY = {
@@ -16,5 +18,5 @@ export const RADIUS_SLIDER_MAX = 1000;
 
 /** The geofence part's folded summary: "Off: people can punch in from anywhere" or "On: within 150 m of the office". */
 export function geofenceSummary(enabled: boolean, radius: string): string {
-  return enabled ? `On: within ${radius.trim() || "?"} m of the office` : "Off: people can punch in from anywhere";
+  return enabled ? tr("On: within {radius} m of the office", { radius: radius.trim() || "?" }) : tr("Off: people can punch in from anywhere");
 }

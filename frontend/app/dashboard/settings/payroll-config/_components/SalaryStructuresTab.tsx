@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
@@ -55,6 +56,7 @@ const EMPTY_COMP: ComponentFormState = {
 };
 
 export default function SalaryStructuresTab() {
+  const t = useT();
   // List endpoint returns items WITHOUT components — only detail has components
   const { data: structures, loading: listLoading, refetch: refetchList } =
     useFetch<SalaryStructureListItem[]>(API.payroll.structures);
@@ -118,9 +120,9 @@ export default function SalaryStructuresTab() {
       setShowNewStructure(false);
       setNewStructName(""); setNewStructDesc(""); setNewStructDefault(false);
       refetchList();
-      flash("Salary structure created.");
+      flash(t("Salary structure created."));
     } catch {
-      flash("Failed to create structure.", true);
+      flash(t("Failed to create structure."), true);
     } finally {
       setSaving(false);
     }
@@ -132,7 +134,7 @@ export default function SalaryStructuresTab() {
       refetchList();
       refetchDetail();
     } catch {
-      flash("Failed to update default.", true);
+      flash(t("Failed to update default."), true);
     }
   }
 
@@ -144,11 +146,11 @@ export default function SalaryStructuresTab() {
       setShowDeleteConfirm(false);
       setSelectedId(null);
       refetchList();
-      flash("Salary structure removed from active use. Payroll history is preserved.");
+      flash(t("Salary structure removed from active use. Payroll history is preserved."));
     } catch (err: unknown) {
       // The server says why (for example how many employees still use it).
       setShowDeleteConfirm(false);
-      flash((err as { message?: string })?.message || "Could not delete this salary structure. Please try again.", true);
+      flash((err as { message?: string })?.message || t("Could not delete this salary structure. Please try again."), true);
     } finally {
       setSaving(false);
     }
@@ -158,17 +160,17 @@ export default function SalaryStructuresTab() {
     const valueRequired = !["metro_hra_of_basic", "balance_to_ctc"].includes(compForm.calculation_type);
     if (!selectedId || !compForm.name.trim() || (valueRequired && !compForm.value)) return;
     if (compForm.component_type === "allowance" && !selectedAllowance) {
-      flash("Choose an active allowance from the company catalogue first.", true);
+      flash(t("Choose an active allowance from the company catalogue first."), true);
       return;
     }
     const value = Number(compForm.value || "0");
-    if (Number.isNaN(value) || value < 0) { flash("Enter a non-negative value.", true); return; }
+    if (Number.isNaN(value) || value < 0) { flash(t("Enter a non-negative value."), true); return; }
     if ([
       "percentage_of_ctc",
       "percentage_of_basic",
       "percentage_of_basic_plus_da",
     ].includes(compForm.calculation_type) && value > 100) {
-      flash("Percentage cannot exceed 100.", true);
+      flash(t("Percentage cannot exceed 100."), true);
       return;
     }
     setSaving(true);
@@ -189,9 +191,9 @@ export default function SalaryStructuresTab() {
       setCompForm(EMPTY_COMP);
       setShowAddComp(false);
       refetchDetail();
-      flash("Component added.");
+      flash(t("Component added."));
     } catch {
-      flash("Failed to add component.", true);
+      flash(t("Failed to add component."), true);
     } finally {
       setSaving(false);
     }
@@ -233,9 +235,9 @@ export default function SalaryStructuresTab() {
       }
       setPendingComponentChange(null);
       refetchDetail();
-      flash(`Component change scheduled for ${componentEffectiveDate}.`);
+      flash(t("Component change scheduled for {date}.", { date: componentEffectiveDate }));
     } catch {
-      flash("Could not schedule this component change.", true);
+      flash(t("Could not schedule this component change."), true);
     } finally {
       setChangeSaving(false);
     }
@@ -247,11 +249,11 @@ export default function SalaryStructuresTab() {
       <div className="w-64 shrink-0">
         <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--outline-v)]">
-            <span className="font-semibold text-[13px] text-[var(--on-bg)]">Structures</span>
+            <span className="font-semibold text-[13px] text-[var(--on-bg)]">{t("Structures")}</span>
             <button
               onClick={() => setShowNewStructure(true)}
               className="p-1 rounded-lg text-[var(--info)] hover:bg-[var(--info-c)] transition-colors"
-              title="Add structure"
+              title={t("Add structure")}
             >
               <i className="ti ti-plus text-sm" />
             </button>
@@ -259,7 +261,7 @@ export default function SalaryStructuresTab() {
 
           {listLoading ? (
             <div className="px-4 py-6 text-center text-[var(--outline)] text-xs">
-              <i className="ti ti-loader-2 animate-spin" /> Loading…
+              <i className="ti ti-loader-2 animate-spin" /> {t("Loading…")}
             </div>
           ) : (
             <div className="divide-y divide-[var(--outline-v)]">
@@ -271,13 +273,13 @@ export default function SalaryStructuresTab() {
                 >
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-[13px] text-[var(--on-bg)] flex-1 truncate">{s.name}</span>
-                    {s.is_default && <span className="text-[10px] bg-[var(--info-c)] text-[var(--info)] px-1.5 py-0.5 rounded font-semibold">Default</span>}
+                    {s.is_default && <span className="text-[10px] bg-[var(--info-c)] text-[var(--info)] px-1.5 py-0.5 rounded font-semibold">{t("Default")}</span>}
                   </div>
                   {s.description && <div className="text-[11px] text-[var(--outline)] mt-0.5 truncate">{s.description}</div>}
                 </button>
               ))}
               {!listLoading && (structures ?? []).length === 0 && (
-                <div className="px-4 py-6 text-center text-[var(--outline)] text-xs">No structures yet</div>
+                <div className="px-4 py-6 text-center text-[var(--outline)] text-xs">{t("No structures yet")}</div>
               )}
             </div>
           )}
@@ -295,7 +297,7 @@ export default function SalaryStructuresTab() {
         {!selectedItem ? (
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] px-6 py-12 text-center text-[var(--outline)]">
             <i className="ti ti-stack text-3xl mb-2 block" />
-            Select a structure to view and edit its components
+            {t("Select a structure to view and edit its components")}
           </div>
         ) : (
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] overflow-hidden">
@@ -310,7 +312,7 @@ export default function SalaryStructuresTab() {
                     onClick={() => toggleDefault(selectedItem.id)}
                     className="text-[12px] text-[var(--info)] border border-[var(--info)] hover:bg-[var(--info-c)] px-3 py-1.5 rounded-lg transition-colors"
                   >
-                    Set as Default
+                    {t("Set as Default")}
                   </button>
                 )}
                 {canDelete && (
@@ -318,10 +320,10 @@ export default function SalaryStructuresTab() {
                     type="button"
                     onClick={() => setShowDeleteConfirm(true)}
                     disabled={selectedItem.is_default}
-                    title={selectedItem.is_default ? "Set another structure as default before deleting this one." : "Delete this salary structure"}
+                    title={selectedItem.is_default ? t("Set another structure as default before deleting this one.") : t("Delete this salary structure")}
                     className="btn btn-ghost shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <i className="ti ti-trash" /> Delete
+                    <i className="ti ti-trash" /> {t("Delete")}
                   </button>
                 )}
                 <button
@@ -335,7 +337,7 @@ export default function SalaryStructuresTab() {
                   }}
                   className="btn btn-filled shrink-0"
                 >
-                  <i className="ti ti-plus text-xs" /> Add Component
+                  <i className="ti ti-plus text-xs" /> {t("Add Component")}
                 </button>
               </div>
             </div>
@@ -343,7 +345,7 @@ export default function SalaryStructuresTab() {
             {detailLoading ? (
               <div className="px-4 py-10 text-center text-[var(--outline)] text-xs">
                 <i className="ti ti-loader-2 animate-spin text-lg" />
-                <div className="mt-2">Loading components…</div>
+                <div className="mt-2">{t("Loading components…")}</div>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -351,7 +353,7 @@ export default function SalaryStructuresTab() {
                   <thead>
                     <tr className="bg-[var(--bg-mid)] border-b border-[var(--outline-v)]">
                       {["Component", "Type", "Calc", "Value", "Taxable", "Effective from", "Order", "Status"].map(h => (
-                        <th key={h} className="text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>
+                        <th key={h} className="text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase tracking-wider px-4 py-3 whitespace-nowrap">{t(h)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -364,17 +366,17 @@ export default function SalaryStructuresTab() {
                             {comp.component_type}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-[var(--on-variant)] text-[12px]">{CALC_LABEL[comp.calculation_type]}</td>
+                        <td className="px-4 py-3 text-[var(--on-variant)] text-[12px]">{t(CALC_LABEL[comp.calculation_type])}</td>
                         <td className="px-4 py-3 font-semibold text-[var(--on-bg)]">
                           {comp.calculation_type === "fixed"
                             ? `₹${Number(comp.value).toLocaleString("en-IN")}`
                             : comp.calculation_type === "metro_hra_of_basic"
                             ? "50% / 40%"
                             : comp.calculation_type === "balance_to_ctc"
-                            ? "Remaining CTC"
+                            ? t("Remaining CTC")
                             : `${comp.value}%`}
                         </td>
-                        <td className="px-4 py-3 text-[12px] text-[var(--on-variant)]">{comp.is_taxable ? "Yes" : "No"}</td>
+                        <td className="px-4 py-3 text-[12px] text-[var(--on-variant)]">{comp.is_taxable ? t("Yes") : t("No")}</td>
                         <td className="px-4 py-3 text-[12px] text-[var(--on-variant)]">{comp.effective_from}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
@@ -383,7 +385,7 @@ export default function SalaryStructuresTab() {
                               onClick={() => scheduleOrderChange(comp, -1)}
                               disabled={components.slice().sort((left, right) => left.order - right.order)[0]?.id === comp.id}
                               className="rounded p-1 text-[var(--on-variant)] hover:bg-[var(--outline-v)] disabled:opacity-30"
-                              aria-label={`Move ${comp.name} up`}
+                              aria-label={t("Move {name} up", { name: comp.name })}
                             >
                               <i className="ti ti-arrow-up" />
                             </button>
@@ -393,7 +395,7 @@ export default function SalaryStructuresTab() {
                               onClick={() => scheduleOrderChange(comp, 1)}
                               disabled={components.slice().sort((left, right) => left.order - right.order)[components.length - 1]?.id === comp.id}
                               className="rounded p-1 text-[var(--on-variant)] hover:bg-[var(--outline-v)] disabled:opacity-30"
-                              aria-label={`Move ${comp.name} down`}
+                              aria-label={t("Move {name} down", { name: comp.name })}
                             >
                               <i className="ti ti-arrow-down" />
                             </button>
@@ -404,8 +406,8 @@ export default function SalaryStructuresTab() {
                             type="button"
                             onClick={() => toggleComponent(comp)}
                             aria-pressed={comp.is_active}
-                            aria-label={`${comp.is_active ? "Deactivate" : "Activate"} ${comp.name}`}
-                            title={`Click to ${comp.is_active ? "deactivate" : "activate"} ${comp.name}`}
+                            aria-label={comp.is_active ? t("Deactivate {name}", { name: comp.name }) : t("Activate {name}", { name: comp.name })}
+                            title={comp.is_active ? t("Click to deactivate {name}", { name: comp.name }) : t("Click to activate {name}", { name: comp.name })}
                             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
                               comp.is_active
                                 ? "bg-[var(--success-c)] text-[var(--success)]"
@@ -415,14 +417,14 @@ export default function SalaryStructuresTab() {
                             <span className={`h-1.5 w-1.5 rounded-full ${
                               comp.is_active ? "bg-[var(--success)]" : "bg-[var(--outline)]"
                             }`} />
-                            {comp.is_active ? "Active" : "Inactive"}
+                            {comp.is_active ? t("Active") : t("Inactive")}
                           </button>
                         </td>
                       </tr>
                     ))}
                     {components.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-[var(--outline)] text-sm">No components yet — click &quot;Add Component&quot; above</td>
+                        <td colSpan={8} className="px-4 py-8 text-center text-[var(--outline)] text-sm">{t("No components yet — click \"Add Component\" above")}</td>
                       </tr>
                     )}
                   </tbody>
@@ -436,37 +438,37 @@ export default function SalaryStructuresTab() {
       {/* New structure modal */}
       {showNewStructure && (
         <Modal
-          title={<><i className="ti ti-layers" style={{ marginRight: 8, color: "var(--primary)" }} />Create Salary Structure</>}
+          title={<><i className="ti ti-layers" style={{ marginRight: 8, color: "var(--primary)" }} />{t("Create Salary Structure")}</>}
           onClose={() => setShowNewStructure(false)}
           maxWidth={520}
           footer={
             <>
-              <button className="btn btn-ghost" onClick={() => setShowNewStructure(false)} disabled={saving}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => setShowNewStructure(false)} disabled={saving}>{t("Cancel")}</button>
               <button className="btn btn-filled" onClick={createStructure} disabled={saving || !newStructName.trim()}>
-                {saving ? "Creating…" : "Create Structure"}
+                {saving ? t("Creating…") : t("Create Structure")}
               </button>
             </>
           }
         >
           <div className="flex flex-col gap-5">
             <p className="text-sm leading-relaxed -mt-1" style={{ color: "var(--on-variant)" }}>
-              Set up a reusable salary template. You can add earnings, allowances, and deductions after creating it.
+              {t("Set up a reusable salary template. You can add earnings, allowances, and deductions after creating it.")}
             </p>
-            <Field label="Name" required>
+            <Field label={t("Name")} required>
               <input
                 type="text"
                 autoFocus
                 maxLength={100}
-                placeholder="e.g. Standard, Management, Executive"
+                placeholder={t("e.g. Standard, Management, Executive")}
                 value={newStructName}
                 onChange={e => setNewStructName(e.target.value)}
                 className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
               />
             </Field>
-            <Field label="Description">
+            <Field label={t("Description")}>
               <input
                 type="text"
-                placeholder="Optional description"
+                placeholder={t("Optional description")}
                 value={newStructDesc}
                 onChange={e => setNewStructDesc(e.target.value)}
                 maxLength={500}
@@ -482,9 +484,9 @@ export default function SalaryStructuresTab() {
                 className="mt-0.5 rounded"
               />
               <span>
-                <span className="block text-[13px] font-semibold" style={{ color: "var(--on-bg)" }}>Set as company default</span>
+                <span className="block text-[13px] font-semibold" style={{ color: "var(--on-bg)" }}>{t("Set as company default")}</span>
                 <span className="block text-xs mt-1" style={{ color: "var(--on-variant)" }}>
-                  Use this structure as the default when setting up employee compensation.
+                  {t("Use this structure as the default when setting up employee compensation.")}
                 </span>
               </span>
             </label>
@@ -495,7 +497,7 @@ export default function SalaryStructuresTab() {
       {/* Add component modal */}
       {showAddComp && selectedItem && (
         <Modal
-          title={<><i className="ti ti-circle-plus" style={{ marginRight: 8, color: "var(--primary)" }} />Add Component — {selectedItem.name}</>}
+          title={<><i className="ti ti-circle-plus" style={{ marginRight: 8, color: "var(--primary)" }} />{t("Add Component")} — {selectedItem.name}</>}
           onClose={() => { setShowAddComp(false); setCompForm(EMPTY_COMP); }}
           maxWidth={560}
           footer={
@@ -505,7 +507,7 @@ export default function SalaryStructuresTab() {
                 onClick={() => { setShowAddComp(false); setCompForm(EMPTY_COMP); }}
                 disabled={saving}
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 className="btn btn-filled"
@@ -514,14 +516,14 @@ export default function SalaryStructuresTab() {
                   !["metro_hra_of_basic", "balance_to_ctc"].includes(compForm.calculation_type) && !compForm.value
                 )}
               >
-                {saving ? "Adding…" : "Add Component"}
+                {saving ? t("Adding…") : t("Add Component")}
               </button>
             </>
           }
         >
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Type">
+              <Field label={t("Type")}>
                 <select
                   value={compForm.component_type}
                   onChange={e => {
@@ -531,12 +533,12 @@ export default function SalaryStructuresTab() {
                   }}
                   className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
                 >
-                  <option value="earning">Earning</option>
-                  <option value="allowance">Allowance</option>
-                  <option value="deduction">Deduction</option>
+                  <option value="earning">{t("Earning")}</option>
+                  <option value="allowance">{t("Allowance")}</option>
+                  <option value="deduction">{t("Deduction")}</option>
                 </select>
               </Field>
-              <Field label="Calculation">
+              <Field label={t("Calculation")}>
                 <select
                   value={compForm.calculation_type}
                   onChange={e => {
@@ -545,17 +547,17 @@ export default function SalaryStructuresTab() {
                   }}
                   className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
                 >
-                  <option value="percentage_of_ctc">% of CTC</option>
-                  <option value="percentage_of_basic">% of Basic</option>
-                  <option value="percentage_of_basic_plus_da">% of Basic + DA</option>
-                  <option value="fixed">Fixed Amount</option>
-                  <option value="balance_to_ctc">Balances earnings to CTC</option>
-                  <option value="metro_hra_of_basic">Metro HRA (50%/40% of Basic)</option>
+                  <option value="percentage_of_ctc">{t("% of CTC")}</option>
+                  <option value="percentage_of_basic">{t("% of Basic")}</option>
+                  <option value="percentage_of_basic_plus_da">{t("% of Basic + DA")}</option>
+                  <option value="fixed">{t("Fixed Amount")}</option>
+                  <option value="balance_to_ctc">{t("Balances earnings to CTC")}</option>
+                  <option value="metro_hra_of_basic">{t("Metro HRA (50%/40% of Basic)")}</option>
                 </select>
               </Field>
             </div>
             {compForm.component_type === "allowance" ? (
-              <Field label="Company allowance" required>
+              <Field label={t("Company allowance")} required>
                 <select
                   value={selectedAllowanceId}
                   onChange={event => {
@@ -569,22 +571,22 @@ export default function SalaryStructuresTab() {
                   }}
                   className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm field-select"
                 >
-                  <option value="">Select an active allowance</option>
+                  <option value="">{t("Select an active allowance")}</option>
                   {activeAllowances.map(allowance => (
                     <option key={allowance.id} value={allowance.id}>{allowance.name}</option>
                   ))}
                 </select>
                 {activeAllowances.length === 0 && (
                   <p className="text-[11px] text-[var(--on-variant)] mt-1">
-                    Add or activate allowance options in Payroll Settings → Allowances first.
+                    {t("Add or activate allowance options in Payroll Settings → Allowances first.")}
                   </p>
                 )}
               </Field>
             ) : (
-              <Field label="Component Name" required>
+              <Field label={t("Component Name")} required>
                 <input
                   type="text"
-                  placeholder="e.g. Basic, HRA, Special Allowance"
+                  placeholder={t("e.g. Basic, HRA, Special Allowance")}
                   value={compForm.name}
                   onChange={e => setCompForm(p => ({ ...p, name: e.target.value }))}
                   className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
@@ -593,17 +595,17 @@ export default function SalaryStructuresTab() {
             )}
             {compForm.calculation_type === "metro_hra_of_basic" && (
               <p className="text-[12px] text-[var(--on-variant)] -mt-2 mb-1">
-                Computed automatically from each employee&apos;s branch (50% of Basic if the branch is marked Metro, 40% otherwise) — the Percentage field below is ignored for this calculation type.
+                {t("Computed automatically from each employee's branch (50% of Basic if the branch is marked Metro, 40% otherwise) — the Percentage field below is ignored for this calculation type.")}
               </p>
             )}
             {compForm.calculation_type === "balance_to_ctc" && (
               <p className="text-[12px] text-[var(--on-variant)] -mt-2 mb-1">
-                The remaining CTC after other enabled earnings and statutory employer contributions.
+                {t("The remaining CTC after other enabled earnings and statutory employer contributions.")}
               </p>
             )}
             <div className="grid grid-cols-2 gap-3">
               <Field
-                label={compForm.calculation_type === "fixed" ? "Amount (₹)" : "Percentage (%)"}
+                label={compForm.calculation_type === "fixed" ? t("Amount (₹)") : t("Percentage (%)")}
                 required={!["metro_hra_of_basic", "balance_to_ctc"].includes(compForm.calculation_type)}
               >
                 <input
@@ -616,7 +618,7 @@ export default function SalaryStructuresTab() {
                   className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] disabled:bg-[var(--bg-mid)] disabled:text-[var(--outline)]"
                 />
               </Field>
-              <Field label="Display Order">
+              <Field label={t("Display Order")}>
                 <input
                   type="number"
                   min={0}
@@ -626,7 +628,7 @@ export default function SalaryStructuresTab() {
                 />
               </Field>
             </div>
-            <Field label="Effective from">
+            <Field label={t("Effective from")}>
               <input
                 type="date"
                 min={nextCycleDate}
@@ -635,7 +637,7 @@ export default function SalaryStructuresTab() {
                 className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm"
               />
               <span className="text-[11px] text-[var(--on-variant)]">
-                Defaults to the next payroll cycle; issued payslips are not recalculated.
+                {t("Defaults to the next payroll cycle; issued payslips are not recalculated.")}
               </span>
             </Field>
             <div className="flex items-center gap-2 py-1">
@@ -647,25 +649,25 @@ export default function SalaryStructuresTab() {
                 disabled={compForm.component_type === "allowance" && Boolean(selectedAllowance)}
                 className="rounded"
               />
-              <label htmlFor="is-taxable" className="text-[13px] text-[var(--on-bg)] cursor-pointer">Taxable</label>
+              <label htmlFor="is-taxable" className="text-[13px] text-[var(--on-bg)] cursor-pointer">{t("Taxable")}</label>
             </div>
           </div>
         </Modal>
       )}
       {pendingComponentChange && (
         <Modal
-          title={pendingComponentChange.orderedIds ? "Schedule component order" : "Schedule component change"}
+          title={pendingComponentChange.orderedIds ? t("Schedule component order") : t("Schedule component change")}
           onClose={() => setPendingComponentChange(null)}
           maxWidth={520}
           footer={
             <>
-              <button className="btn btn-ghost" onClick={() => setPendingComponentChange(null)} disabled={changeSaving}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => setPendingComponentChange(null)} disabled={changeSaving}>{t("Cancel")}</button>
               <button
                 className="btn btn-filled"
                 onClick={saveComponentChange}
                 disabled={changeSaving || !componentEffectiveDate || componentEffectiveDate < nextCycleDate}
               >
-                {changeSaving ? "Scheduling…" : "Schedule change"}
+                {changeSaving ? t("Scheduling…") : t("Schedule change")}
               </button>
             </>
           }
@@ -673,12 +675,12 @@ export default function SalaryStructuresTab() {
           <div className="flex flex-col gap-4">
             <p className="text-sm leading-relaxed text-[var(--on-variant)]">
               {pendingComponentChange.orderedIds
-                ? `The new component order will apply to ${pendingComponentChange.component.affected_employee_count} affected employee(s).`
+                ? t("The new component order will apply to {count} affected employee(s).", { count: pendingComponentChange.component.affected_employee_count })
                 : pendingComponentChange.changes.is_active === false
-                ? `Disabling ${pendingComponentChange.component.name} affects ${pendingComponentChange.component.affected_employee_count} employee(s). Existing values and historical payslips are retained; the component will be excluded from future calculations from the selected date.`
-                : `Enabling ${pendingComponentChange.component.name} affects ${pendingComponentChange.component.affected_employee_count} employee(s). Previously stored overrides will not be reused; a fresh value must be entered where required.`}
+                ? t("Disabling {name} affects {count} employee(s). Existing values and historical payslips are retained; the component will be excluded from future calculations from the selected date.", { name: pendingComponentChange.component.name, count: pendingComponentChange.component.affected_employee_count })
+                : t("Enabling {name} affects {count} employee(s). Previously stored overrides will not be reused; a fresh value must be entered where required.", { name: pendingComponentChange.component.name, count: pendingComponentChange.component.affected_employee_count })}
             </p>
-            <Field label="Effective from">
+            <Field label={t("Effective from")}>
               <input
                 type="date"
                 min={nextCycleDate}
@@ -687,7 +689,7 @@ export default function SalaryStructuresTab() {
                 className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm"
               />
               <span className="text-[11px] text-[var(--on-variant)]">
-                Default: next payroll cycle start ({nextCycleDate}).
+                {t("Default: next payroll cycle start ({date}).", { date: nextCycleDate })}
               </span>
             </Field>
           </div>
@@ -695,9 +697,9 @@ export default function SalaryStructuresTab() {
       )}
       {showDeleteConfirm && selectedItem && (
         <ConfirmModal
-          title="Deactivate Salary Structure?"
-          body={`"${selectedItem.name}" will be removed from the active salary structure list. Existing employee compensation records and payslip history will be preserved.`}
-          confirmLabel={saving ? "Deleting…" : "Yes, Delete"}
+          title={t("Deactivate Salary Structure?")}
+          body={t("\"{name}\" will be removed from the active salary structure list. Existing employee compensation records and payslip history will be preserved.", { name: selectedItem.name })}
+          confirmLabel={saving ? t("Deleting…") : t("Yes, Delete")}
           danger
           saving={saving}
           onConfirm={deleteStructure}

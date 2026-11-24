@@ -1,5 +1,6 @@
 "use client";
 
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -50,7 +51,7 @@ export function useReportActions(key: string, filters: ReportFilterValues) {
       downloadBlob(response.data, filenameFromDisposition(header, `${key}-report.csv`));
       return true;
     } catch (err: unknown) {
-      setError(messageOf(err, "Could not download this report."));
+      setError(messageOf(err, tr("Could not download this report.")));
       return false;
     } finally {
       setIsBusy(false);
@@ -64,7 +65,7 @@ export function useReportActions(key: string, filters: ReportFilterValues) {
       const response = await clientApi.post<{ message: string }>(API.dashboard.reportSend(key), { filters, recipients, note });
       return response.data.message;
     } catch (err: unknown) {
-      setError(messageOf(err, "Could not send this report."));
+      setError(messageOf(err, tr("Could not send this report.")));
       return null;
     } finally {
       setIsBusy(false);

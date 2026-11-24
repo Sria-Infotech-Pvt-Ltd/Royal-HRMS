@@ -1,6 +1,8 @@
 // Pure types/constants/helpers for the Branches (Company Codes) module — no
 // component state, safe to import from anywhere in this folder.
 
+import { tr } from "@/lib/i18n/tr";
+
 export interface StateObj {
   id: number;
   name: string;
@@ -79,10 +81,11 @@ export function branchToForm(branch: Branch): BranchForm {
   };
 }
 
+// Outside a component, so it reads the language through tr().
 export function geofenceBadge(branch: Branch): { label: string; cls: string } {
-  if (!branch.geofencing_enabled) return { label: "Disabled", cls: "badge-neutral" };
-  if (!branch.has_coordinates)    return { label: "No Coordinates", cls: "badge-warn" };
-  return { label: "Active", cls: "badge-success" };
+  if (!branch.geofencing_enabled) return { label: tr("Disabled"), cls: "badge-neutral" };
+  if (!branch.has_coordinates)    return { label: tr("No Coordinates"), cls: "badge-warn" };
+  return { label: tr("Active"), cls: "badge-success" };
 }
 
 export interface BranchStats {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ function RuleForm({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   return (
     <div>
       {error && (
@@ -62,29 +64,29 @@ function RuleForm({
       <div style={{ display: "grid", gridTemplateColumns: "140px 1fr 80px", gap: "0 16px", marginBottom: 12 }}>
         {/* Icon picker */}
         <div className="field-group">
-          <label className="field-label">Icon</label>
+          <label className="field-label">{t("Icon")}</label>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 34, height: 34, borderRadius: 8, background: "color-mix(in srgb, var(--brand) 9%, transparent)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <i className={`ti ${form.icon}`} style={{ fontSize: 16, color: "var(--primary)" }} />
             </div>
             <select className="field-input field-select" style={{ flex: 1 }}
               value={form.icon} onChange={e => setField("icon", e.target.value)} suppressHydrationWarning>
-              {ICON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {ICON_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
             </select>
           </div>
         </div>
 
         {/* Title */}
         <div className="field-group">
-          <label className="field-label">Rule Title <span style={{ color: "var(--error)" }}>*</span></label>
-          <input className="field-input" placeholder="e.g. Eligibility"
+          <label className="field-label">{t("Rule Title")} <span style={{ color: "var(--error)" }}>*</span></label>
+          <input className="field-input" placeholder={t("e.g. Eligibility")}
             value={form.title} onChange={e => setField("title", e.target.value)}
             required suppressHydrationWarning />
         </div>
 
         {/* Order */}
         <div className="field-group">
-          <label className="field-label">Order</label>
+          <label className="field-label">{t("Order")}</label>
           <input type="number" className="field-input" min={1}
             value={form.order} onChange={e => setField("order", Number(e.target.value))}
             suppressHydrationWarning />
@@ -93,9 +95,9 @@ function RuleForm({
 
       {/* Body */}
       <div className="field-group" style={{ marginBottom: 14 }}>
-        <label className="field-label">Description <span style={{ color: "var(--error)" }}>*</span></label>
+        <label className="field-label">{t("Description")} <span style={{ color: "var(--error)" }}>*</span></label>
         <textarea className="field-input" rows={2}
-          placeholder="Explain this rule clearly so employees understand it…"
+          placeholder={t("Explain this rule clearly so employees understand it…")}
           value={form.body} onChange={e => setField("body", e.target.value)}
           suppressHydrationWarning style={{ resize: "vertical" }} />
       </div>
@@ -105,16 +107,16 @@ function RuleForm({
         <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, userSelect: "none" }}>
           <input type="checkbox" checked={form.is_active}
             onChange={e => setField("is_active", e.target.checked)} suppressHydrationWarning />
-          Show this rule to employees
+          {t("Show this rule to employees")}
         </label>
       </div>
 
       <div style={{ display: "flex", gap: 10 }}>
         <button className="btn btn-filled" onClick={onSave} disabled={saving} suppressHydrationWarning>
-          {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-device-floppy" /> Save Rule</>}
+          {saving ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : <><i className="ti ti-device-floppy" /> {t("Save Rule")}</>}
         </button>
         <button className="btn btn-ghost" onClick={onCancel} suppressHydrationWarning>
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
     </div>
@@ -125,6 +127,7 @@ function RuleForm({
 
 export default function ReferralRulesSettingsPage() {
   const router = useRouter();
+  const t = useT();
 
   const [editing,  setEditing]  = useState<number | "new" | null>(null);
   const [form,     setForm]     = useState<typeof EMPTY_FORM>(EMPTY_FORM);
@@ -154,7 +157,7 @@ export default function ReferralRulesSettingsPage() {
 
   async function handleSave() {
     if (!form.title.trim() || !form.body.trim()) {
-      setFormErr("Title and description are required.");
+      setFormErr(t("Title and description are required."));
       return;
     }
     setSaving(true);
@@ -170,7 +173,7 @@ export default function ReferralRulesSettingsPage() {
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })
-          ?.response?.data?.message ?? "Failed to save rule.";
+          ?.response?.data?.message ?? t("Failed to save rule.");
       setFormErr(msg);
     } finally {
       setSaving(false);
@@ -192,15 +195,15 @@ export default function ReferralRulesSettingsPage() {
       {/* Header */}
       <div className="page-header">
         <div>
-          <div className="page-title">Referral Rules</div>
-          <div className="page-sub">Rules shown to employees on the Referral page. Changes take effect immediately.</div>
+          <div className="page-title">{t("Referral Rules")}</div>
+          <div className="page-sub">{t("Rules shown to employees on the Referral page. Changes take effect immediately.")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.back()} suppressHydrationWarning>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
           <button className="btn btn-filled" onClick={startAdd} disabled={isBusy} suppressHydrationWarning>
-            <i className="ti ti-plus" /> Add Rule
+            <i className="ti ti-plus" /> {t("Add Rule")}
           </button>
         </div>
       </div>
@@ -210,7 +213,7 @@ export default function ReferralRulesSettingsPage() {
         <div className="card" style={{ marginBottom: 20, borderColor: "var(--primary)", borderWidth: 2 }}>
           <div className="card-header">
             <span className="card-title" style={{ color: "var(--primary)" }}>
-              <i className="ti ti-plus" /> New Rule
+              <i className="ti ti-plus" /> {t("New Rule")}
             </span>
           </div>
           <div style={{ padding: "0 20px 20px" }}>
@@ -224,7 +227,7 @@ export default function ReferralRulesSettingsPage() {
       <div className="card">
         <div className="card-header">
           <span className="card-title">
-            <i className="ti ti-list" /> Configured Rules ({rules.length})
+            <i className="ti ti-list" /> {t("Configured Rules ({count})", { count: rules.length })}
           </span>
         </div>
 
@@ -233,8 +236,8 @@ export default function ReferralRulesSettingsPage() {
         ) : rules.length === 0 && editing !== "new" ? (
           <div className="empty-state">
             <i className="ti ti-file-text" />
-            <h3>No rules configured</h3>
-            <p>Click &ldquo;Add Rule&rdquo; to create the first referral rule.</p>
+            <h3>{t("No rules configured")}</h3>
+            <p>{t("Click “Add Rule” to create the first referral rule.")}</p>
           </div>
         ) : (
           <div>
@@ -255,11 +258,11 @@ export default function ReferralRulesSettingsPage() {
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                         <span style={{ fontSize: 10, fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                          Rule {rule.order}
+                          {t("Rule {order}", { order: rule.order })}
                         </span>
                         <strong style={{ fontSize: 14, color: "var(--on-bg)" }}>{rule.title}</strong>
                         {!rule.is_active && (
-                          <span className="badge badge-neutral" style={{ fontSize: 10 }}>Hidden</span>
+                          <span className="badge badge-neutral" style={{ fontSize: 10 }}>{t("Hidden")}</span>
                         )}
                       </div>
                       <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0, lineHeight: 1.6 }}>{rule.body}</p>
@@ -268,23 +271,23 @@ export default function ReferralRulesSettingsPage() {
                     {/* Actions */}
                     <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                       <button className="btn btn-ghost btn-sm" onClick={() => startEdit(rule)} disabled={isBusy} suppressHydrationWarning>
-                        <i className="ti ti-pencil" /> Edit
+                        <i className="ti ti-pencil" /> {t("Edit")}
                       </button>
                       {confirmDelete === rule.id ? (
                         <>
                           <button suppressHydrationWarning
                             style={{ background: "var(--error-solid)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}
                             onClick={() => handleDelete(rule.id)}>
-                            <i className="ti ti-check" /> Confirm
+                            <i className="ti ti-check" /> {t("Confirm")}
                           </button>
                           <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)} suppressHydrationWarning>
-                            Cancel
+                            {t("Cancel")}
                           </button>
                         </>
                       ) : (
                         <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }}
                           onClick={() => setConfirmDelete(rule.id)} disabled={isBusy} suppressHydrationWarning>
-                          <i className="ti ti-trash" /> Delete
+                          <i className="ti ti-trash" /> {t("Delete")}
                         </button>
                       )}
                     </div>

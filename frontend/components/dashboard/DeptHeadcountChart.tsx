@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { DeptHeadcount } from "@/types/dashboard";
@@ -16,6 +17,7 @@ const BAR_COLORS = [
 ];
 
 export default function DeptHeadcountChart({ endpoint = API.dashboard.departmentHeadcount }: Props) {
+  const t = useT();
   const { data, loading } = useFetch<DeptHeadcount[]>(endpoint);
 
   const rows = Array.isArray(data) ? data : [];
@@ -25,20 +27,20 @@ export default function DeptHeadcountChart({ endpoint = API.dashboard.department
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-chart-bar" /> Department Headcount</div>
+        <div className="card-title"><i className="ti ti-chart-bar" /> {t("Department Headcount")}</div>
         {!loading && total > 0 && (
-          <span className="badge badge-primary">{total} total</span>
+          <span className="badge badge-primary">{t("{total} total", { total })}</span>
         )}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : rows.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-chart-bar" style={{ fontSize: 22, display: "block", marginBottom: 6, opacity: 0.3 }} />
-          No data available
+          {t("No data available")}
         </div>
       ) : (
         <div style={{ padding: "12px 20px 16px" }}>

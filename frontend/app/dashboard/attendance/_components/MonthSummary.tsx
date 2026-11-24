@@ -4,6 +4,7 @@
 // then present, absent, late, half-day and leave days, total hours and average hours. Counts and hours are the backend's own month
 // numbers; the percentage and the average are worked out from the same days the calendar shows.
 
+import { useT } from "@/hooks/useI18n";
 import { PALETTE, tint } from "./attendancePalette";
 import { STATUS_META, type BarSegment, type MonthInsights, type MonthStats } from "./monthView";
 
@@ -36,9 +37,10 @@ function StatCard({ spec }: { spec: CardSpec }) {
 }
 
 function Ring({ percent, colour }: { percent: number | null; colour: string }) {
+  const t = useT();
   const filled = percent ?? 0;
   return (
-    <div role="img" aria-label={percent === null ? "No attendance rate yet" : `Attendance ${percent} percent`} style={{ width: 84, height: 84, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center", background: `conic-gradient(${colour} ${filled * 3.6}deg, ${tint(colour, 0.15)} 0)`, transition: "background .3s" }}>
+    <div role="img" aria-label={percent === null ? t("No attendance rate yet") : t("Attendance {percent} percent", { percent })} style={{ width: 84, height: 84, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center", background: `conic-gradient(${colour} ${filled * 3.6}deg, ${tint(colour, 0.15)} 0)`, transition: "background .3s" }}>
       <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--surface)", display: "grid", placeItems: "center", fontSize: 18, fontWeight: 800, color: colour, fontVariantNumeric: "tabular-nums" }}>
         {percent === null ? "—" : `${percent}%`}
       </div>
@@ -47,31 +49,32 @@ function Ring({ percent, colour }: { percent: number | null; colour: string }) {
 }
 
 export default function MonthSummary({ insights, stats, segments }: Props) {
+  const t = useT();
   const total = segments.reduce((sum, segment) => sum + segment.count, 0);
   const rate = insights.attendancePercent;
   const rateColour = rate === null ? PALETTE.not_marked : rate >= 90 ? PALETTE.present : rate >= 75 ? PALETTE.late : PALETTE.absent;
   const cards: CardSpec[] = [
-    { label: "Present days", value: String(stats.present), icon: "ti-user-check", colour: PALETTE.present },
-    { label: "Absent days", value: String(stats.absent), icon: "ti-user-off", colour: PALETTE.absent },
-    { label: "Late days", value: String(stats.late), icon: "ti-clock-exclamation", colour: PALETTE.late },
-    { label: "Half days", value: String(stats.half_day), icon: "ti-circle-half-2", colour: PALETTE.half_day },
-    { label: "Leave days", value: String(stats.on_leave), icon: "ti-plane", colour: PALETTE.on_leave },
-    { label: "Total hours", value: String(stats.total_hours), unit: "h", icon: "ti-clock-hour-4", colour: PALETTE.holiday },
-    { label: "Average hours", value: insights.averageHours === null ? "—" : String(insights.averageHours), unit: insights.averageHours === null ? undefined : "h", icon: "ti-chart-line", colour: PALETTE.brand, hint: "per day worked" },
-    { label: "LOP days", value: String(stats.lop_days), icon: "ti-calendar-minus", colour: PALETTE.incomplete },
+    { label: t("Present days"), value: String(stats.present), icon: "ti-user-check", colour: PALETTE.present },
+    { label: t("Absent days"), value: String(stats.absent), icon: "ti-user-off", colour: PALETTE.absent },
+    { label: t("Late days"), value: String(stats.late), icon: "ti-clock-exclamation", colour: PALETTE.late },
+    { label: t("Half days"), value: String(stats.half_day), icon: "ti-circle-half-2", colour: PALETTE.half_day },
+    { label: t("Leave days"), value: String(stats.on_leave), icon: "ti-plane", colour: PALETTE.on_leave },
+    { label: t("Total hours"), value: String(stats.total_hours), unit: "h", icon: "ti-clock-hour-4", colour: PALETTE.holiday },
+    { label: t("Average hours"), value: insights.averageHours === null ? "—" : String(insights.averageHours), unit: insights.averageHours === null ? undefined : "h", icon: "ti-chart-line", colour: PALETTE.brand, hint: t("per day worked") },
+    { label: t("LOP days"), value: String(stats.lop_days), icon: "ti-calendar-minus", colour: PALETTE.incomplete },
   ];
   return (
-    <section aria-label="Month at a glance" style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
+    <section aria-label={t("Month at a glance")} style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
       <div className="card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 16, background: `linear-gradient(135deg, ${tint(rateColour, 0.1)} 0%, var(--surface) 65%)` }}>
         <Ring percent={rate} colour={rateColour} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".05em" }}>Attendance</div>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--on-bg)", marginTop: 2 }}>{insights.worked} of {insights.workingDays} working days</div>
-          {insights.unrecorded > 0 && <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 1 }}>{insights.unrecorded} past {insights.unrecorded === 1 ? "day" : "days"} not marked</div>}
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".05em" }}>{t("Attendance")}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--on-bg)", marginTop: 2 }}>{t("{worked} of {days} working days", { worked: insights.worked, days: insights.workingDays })}</div>
+          {insights.unrecorded > 0 && <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 1 }}>{insights.unrecorded === 1 ? t("{count} past day not marked", { count: insights.unrecorded }) : t("{count} past days not marked", { count: insights.unrecorded })}</div>}
           {total > 0 && (
-            <div role="img" aria-label="How the working days so far were spent" style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "var(--outline-v)", marginTop: 10 }}>
+            <div role="img" aria-label={t("How the working days so far were spent")} style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "var(--outline-v)", marginTop: 10 }}>
               {segments.map(segment => (
-                <div key={segment.status} title={`${STATUS_META[segment.status]?.label ?? segment.status}: ${segment.count}`} style={{ width: `${(segment.count / total) * 100}%`, background: STATUS_META[segment.status]?.colour ?? "var(--outline)" }} />
+                <div key={segment.status} title={`${STATUS_META[segment.status] ? t(STATUS_META[segment.status].label) : segment.status}: ${segment.count}`} style={{ width: `${(segment.count / total) * 100}%`, background: STATUS_META[segment.status]?.colour ?? "var(--outline)" }} />
               ))}
             </div>
           )}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { useSettingsPrefs } from "@/hooks/useSettingsPrefs";
 import { API } from "@/lib/api/endpoints";
@@ -18,6 +19,7 @@ const CATS: { id: CatId; icon: string; label: string }[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
+  const t = useT();
   const [activeCat, setActiveCat] = useState<CatId>("all");
   const { data } = useFetch<OverviewData>(API.dashboard.settingsOverview);
   const { pinned, layout, togglePinned, setLayout } = useSettingsPrefs();
@@ -29,51 +31,51 @@ export default function SettingsPage() {
 
   return (
     <div className="plain-stack">
-      <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>Dashboard / Settings</div>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>{t("Dashboard / Settings")}</div>
       <div className="pagehead">
         <div>
-          <h1>HRMS <em>settings</em></h1>
+          <h1>{t("HRMS")} <em>{t("settings")}</em></h1>
           <p className="lede">
-            Configure organization rules, permissions, workflows, payroll and statutory defaults.
+            {t("Configure organization rules, permissions, workflows, payroll and statutory defaults.")}
           </p>
         </div>
-        <button className="btn btn-filled" onClick={() => router.push("/dashboard/settings/audit")}>View audit log</button>
+        <button className="btn btn-filled" onClick={() => router.push("/dashboard/settings/audit")}>{t("View audit log")}</button>
       </div>
 
       <div className="stats">
-        <KpiTile label="CONFIGURED" value={SETTINGS_ITEMS.length} sub="Settings groups" tone="brand" />
-        <KpiTile label="ACCESS SEATS" value={data?.access_seats ?? "—"} sub="Positions with extra access" tone="ok" />
-        <KpiTile label="AUTOMATIONS" value="—" sub="Not yet configured" tone="warn" />
-        <KpiTile label="AUDIT EVENTS" value={data?.audit_events_30d ?? "—"} sub="Last 30 days" tone="brand" />
+        <KpiTile label={t("CONFIGURED")} value={SETTINGS_ITEMS.length} sub={t("Settings groups")} tone="brand" />
+        <KpiTile label={t("ACCESS SEATS")} value={data?.access_seats ?? "—"} sub={t("Positions with extra access")} tone="ok" />
+        <KpiTile label={t("AUTOMATIONS")} value="—" sub={t("Not yet configured")} tone="warn" />
+        <KpiTile label={t("AUDIT EVENTS")} value={data?.audit_events_30d ?? "—"} sub={t("Last 30 days")} tone="brand" />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "16px 0 20px" }}>
-        <div className="settings-cats" role="group" aria-label="Setting categories" style={{ marginBottom: 0, padding: 5, flex: "1 1 520px" }}>
+        <div className="settings-cats" role="group" aria-label={t("Setting categories")} style={{ marginBottom: 0, padding: 5, flex: "1 1 520px" }}>
           {CATS.map(category => (
             <button
               key={category.id} type="button" aria-pressed={activeCat === category.id}
               className={`settings-cat-pill${activeCat === category.id ? " active" : ""}`} style={{ flex: 1, justifyContent: "center", padding: "10px 16px", fontSize: 13.5 }}
               onClick={() => setActiveCat(category.id)}
             >
-              <i className={`ti ${category.icon}`} /> {category.label}
+              <i className={`ti ${category.icon}`} /> {t(category.label)}
               <span style={{ fontSize: 11, fontWeight: 700, padding: "0 7px", borderRadius: 999, background: activeCat === category.id ? "rgba(255,255,255,.25)" : "var(--bg-mid)" }}>{counts[category.id]}</span>
             </button>
           ))}
         </div>
-        <div className="settings-cats" role="group" aria-label="Layout" style={{ marginBottom: 0, padding: 4 }}>
+        <div className="settings-cats" role="group" aria-label={t("Layout")} style={{ marginBottom: 0, padding: 4 }}>
           {([["grid", "ti-layout-grid", "Grid"], ["list", "ti-list", "List"]] as const).map(([id, icon, label]) => (
-            <button key={id} type="button" aria-pressed={layout === id} aria-label={`${label} view`} title={`${label} view`} className={`settings-cat-pill${layout === id ? " active" : ""}`} style={{ padding: "7px 11px" }} onClick={() => setLayout(id)}>
+            <button key={id} type="button" aria-pressed={layout === id} aria-label={t("{label} view", { label: t(label) })} title={t("{label} view", { label: t(label) })} className={`settings-cat-pill${layout === id ? " active" : ""}`} style={{ padding: "7px 11px" }} onClick={() => setLayout(id)}>
               <i className={`ti ${icon}`} />
             </button>
           ))}
         </div>
       </div>
 
-      {activeCat === "all" && <SettingsSection label="Pinned" blurb="Your shortcuts" items={byId(pinned)} {...sectionProps} />}
+      {activeCat === "all" && <SettingsSection label={t("Pinned")} blurb={t("Your shortcuts")} items={byId(pinned)} {...sectionProps} />}
 
       {activeCat === "all"
-        ? CATEGORY_ORDER.map(cat => <SettingsSection key={cat} label={CATEGORY_INFO[cat].label} blurb={CATEGORY_INFO[cat].blurb} items={visible.filter(item => item.cat === cat)} {...sectionProps} />)
-        : <SettingsSection label={CATEGORY_INFO[activeCat].label} hideHeading items={visible} {...sectionProps} />}
+        ? CATEGORY_ORDER.map(cat => <SettingsSection key={cat} label={t(CATEGORY_INFO[cat].label)} blurb={t(CATEGORY_INFO[cat].blurb)} items={visible.filter(item => item.cat === cat)} {...sectionProps} />)
+        : <SettingsSection label={t(CATEGORY_INFO[activeCat].label)} hideHeading items={visible} {...sectionProps} />}
     </div>
   );
 }

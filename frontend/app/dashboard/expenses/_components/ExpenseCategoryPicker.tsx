@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { categoryStyle, tint } from "./expenseView";
 
 export type ExpenseCategory = "travel" | "meals" | "equipment" | "other";
@@ -19,8 +20,9 @@ interface Props {
 
 /** Tap-a-tile category choice (replaces the drop-down). */
 export default function ExpenseCategoryPicker({ value, hasError, onChange }: Props) {
+  const t = useT();
   return (
-    <div className="xf-cats" role="radiogroup" aria-label="Expense category">
+    <div className="xf-cats" role="radiogroup" aria-label={t("Expense category")}>
       {CATEGORIES.map(category => {
         const colour = categoryStyle(category.value).colour;
         const selected = value === category.value;
@@ -37,7 +39,7 @@ export default function ExpenseCategoryPicker({ value, hasError, onChange }: Pro
             <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: selected ? colour : tint(colour, 0.14), color: selected ? "#fff" : colour, transition: "all .15s ease" }}>
               <i className={`ti ${category.icon}`} style={{ fontSize: 22 }} />
             </span>
-            {category.label}
+            {t(category.label)}
           </button>
         );
       })}

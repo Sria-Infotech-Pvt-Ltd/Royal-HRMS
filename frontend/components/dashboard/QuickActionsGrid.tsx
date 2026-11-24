@@ -4,6 +4,7 @@
 // grid of QuickActionTile entries, then (optionally) the weekly bar chart
 // beneath it, matching the reference layout used across every module page.
 
+import { useT } from "@/hooks/useI18n";
 import { QuickActionTile, WeeklyBarChart } from "./ModuleOverviewKit";
 
 export interface QuickActionItem {
@@ -20,16 +21,17 @@ interface Props {
 }
 
 export default function QuickActionsGrid({
-  title = "Quick actions",
-  subtitle = "Common tasks for your current role.",
+  title,
+  subtitle,
   items,
   chartData,
 }: Props) {
+  const t = useT();
   return (
     <div className="module-card">
       <div className="mc-head">
-        <div className="mc-title">{title}</div>
-        <div className="mc-sub">{subtitle}</div>
+        <div className="mc-title">{title ? t(title) : t("Quick actions")}</div>
+        <div className="mc-sub">{subtitle ? t(subtitle) : t("Common tasks for your current role.")}</div>
       </div>
       <div className="quick-grid">
         {items.map((item, i) => (

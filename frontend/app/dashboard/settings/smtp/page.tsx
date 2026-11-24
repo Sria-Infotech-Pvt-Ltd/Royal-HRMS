@@ -14,9 +14,11 @@ import {
   type ApiSmtpEntry, type ApiSmtpResponse, type SmtpForm,
 } from "./_data";
 import { confirmDialog } from "@/components/DialogProvider";
+import { useT } from "@/hooks/useI18n";
 
 export default function SmtpSettingsPage() {
   const router = useRouter();
+  const t = useT();
 
   const [entries,     setEntries]     = useState<ApiSmtpEntry[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -50,7 +52,7 @@ export default function SmtpSettingsPage() {
       const envelope = res.data?.data as ApiSmtpResponse;
       setEntries(envelope?.results ?? []);
     } catch (err: unknown) {
-      setError((err as { message?: string }).message ?? "Failed to load SMTP configurations");
+      setError((err as { message?: string }).message ?? t("Failed to load SMTP configurations"));
     } finally {
       setLoading(false);
     }
@@ -65,9 +67,9 @@ export default function SmtpSettingsPage() {
       const created = (res.data.data ?? res.data) as ApiSmtpEntry;
       setEntries(prev => [...prev, created]);
       setEditing(null);
-      showToast(`"${form.name}" added successfully`);
+      showToast(t("\"{name}\" added successfully", { name: form.name }));
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Failed to add configuration", false);
+      showToast((err as { message?: string }).message ?? t("Failed to add configuration"), false);
     } finally {
       setSaving(false);
     }
@@ -84,9 +86,9 @@ export default function SmtpSettingsPage() {
       const updated = (res.data.data ?? res.data) as ApiSmtpEntry;
       setEntries(prev => prev.map(e => e.id === target.id ? { ...e, ...updated } : e));
       setEditing(null);
-      showToast(`"${form.name}" updated`);
+      showToast(t("\"{name}\" updated", { name: form.name }));
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Failed to update", false);
+      showToast((err as { message?: string }).message ?? t("Failed to update"), false);
     } finally {
       setSaving(false);
     }
@@ -95,14 +97,14 @@ export default function SmtpSettingsPage() {
   // ── Activate ─────────────────────────────────────────────────────────────────
 
   async function handleActivate(entry: ApiSmtpEntry) {
-    if (!(await confirmDialog(`Make "${entry.name}" the active SMTP configuration? Every company email will be sent through it from now on.`))) return;
+    if (!(await confirmDialog(t("Make \"{name}\" the active SMTP configuration? Every company email will be sent through it from now on.", { name: entry.name })))) return;
     setActivating(entry.id);
     try {
       await clientApi.post(smtpActivate(entry.id));
       setEntries(prev => prev.map(e => ({ ...e, is_active: e.id === entry.id })));
-      showToast(`"${entry.name}" is now active`);
+      showToast(t("\"{name}\" is now active", { name: entry.name }));
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Failed to activate", false);
+      showToast((err as { message?: string }).message ?? t("Failed to activate"), false);
     } finally {
       setActivating(null);
     }
@@ -121,10 +123,10 @@ export default function SmtpSettingsPage() {
     try {
       await clientApi.delete(smtpDetail(entry.id));
       setEntries(prev => prev.filter(e => e.id !== entry.id));
-      showToast(`"${entry.name}" deleted`);
+      showToast(t("\"{name}\" deleted", { name: entry.name }));
       setDeleteTarget(null);
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Failed to delete", false);
+      showToast((err as { message?: string }).message ?? t("Failed to delete"), false);
     } finally {
       setDeleting(null);
     }
@@ -146,12 +148,12 @@ export default function SmtpSettingsPage() {
         use_tls:        testEntry.use_tls,
         test_recipient: testEmail.trim(),
       });
-      showToast(`Test email sent to ${testEmail}`);
+      showToast(t("Test email sent to {email}", { email: testEmail }));
       setTestEntry(null);
       setTestEmail("");
       setTestPassword("");
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Test email failed", false);
+      showToast((err as { message?: string }).message ?? t("Test email failed"), false);
     } finally {
       setTestLoading(false);
     }
@@ -171,7 +173,7 @@ export default function SmtpSettingsPage() {
       { icon: "ti-user",         label: "Sender Name", value: entry.sender_name || "—" },
       { icon: "ti-mail-forward", label: "BCC Email",   value: entry.bcc_email || "—" },
       { icon: "ti-flag",         label: "Priority",    value: entry.priority ? entry.priority.charAt(0).toUpperCase() + entry.priority.slice(1) : "—" },
-      { icon: "ti-inbox",        label: "Receiver",    value: entry.receiver_email_type === "personal_email_id" ? "Personal Email" : "Email ID" },
+      { icon: "ti-inbox",        label: "Receiver",    value: entry.receiver_email_type === "personal_email_id" ? t("Personal Email") : t("Email ID") },
     ];
   };
 
@@ -192,29 +194,29 @@ export default function SmtpSettingsPage() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <div className="page-title">SMTP Settings</div>
-          <div className="page-sub">Configure outgoing mail servers for transactional emails</div>
+          <div className="page-title">{t("SMTP Settings")}</div>
+          <div className="page-sub">{t("Configure outgoing mail servers for transactional emails")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} suppressHydrationWarning>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
           <button className="btn btn-filled btn-sm" onClick={() => setEditing("add")} style={{ gap: 6 }} suppressHydrationWarning>
-            <i className="ti ti-plus" /> Add SMTP
+            <i className="ti ti-plus" /> {t("Add SMTP")}
           </button>
         </div>
       </div>
 
       {/* Loading */}
-      {loading && <LoadingState label="Loading SMTP configurations…" fullHeight />}
+      {loading && <LoadingState label={t("Loading SMTP configurations…")} fullHeight />}
 
       {/* Error */}
       {!loading && error && (
         <div className="alert alert-error mb-24">
           <i className="ti ti-alert-circle" />
           <div>
-            <strong>Failed to load</strong> — {error}
-            <div style={{ marginTop: 8 }}><button className="btn btn-ghost btn-sm" onClick={loadData} suppressHydrationWarning>Retry</button></div>
+            <strong>{t("Failed to load")}</strong> — {error}
+            <div style={{ marginTop: 8 }}><button className="btn btn-ghost btn-sm" onClick={loadData} suppressHydrationWarning>{t("Retry")}</button></div>
           </div>
         </div>
       )}
@@ -224,14 +226,14 @@ export default function SmtpSettingsPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", marginBottom: 20, background: "rgba(23,144,90,0.07)", border: "1px solid rgba(23,144,90,0.2)", borderRadius: "var(--radius)" }}>
           <i className="ti ti-circle-check-filled" style={{ fontSize: 16, color: "var(--success)" }} />
           <span style={{ fontSize: 13 }}>
-            Currently using <strong>{activeEntry.name}</strong> ({activeEntry.from_email}) for sending emails.
+            {t("Currently using")} <strong>{activeEntry.name}</strong> ({activeEntry.from_email}) {t("for sending emails.")}
           </span>
         </div>
       )}
 
       {/* Empty state */}
       {!loading && !error && entries.length === 0 && (
-        <EmptyState icon="ti-mail-off" title="No SMTP configurations yet" description="Click Add SMTP to get started" />
+        <EmptyState icon="ti-mail-off" title={t("No SMTP configurations yet")} description={t("Click Add SMTP to get started")} />
       )}
 
       {/* Cards grid */}
@@ -250,12 +252,12 @@ export default function SmtpSettingsPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</div>
                   <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 1 }}>
-                    Updated {formatDateTime(entry.updated_at)}
+                    {t("Updated {date}", { date: formatDateTime(entry.updated_at) })}
                   </div>
                 </div>
                 {entry.is_active
-                  ? <span className="badge badge-success" style={{ fontSize: 11, flexShrink: 0 }}><i className="ti ti-star-filled" style={{ fontSize: 9, marginRight: 3 }} />Active</span>
-                  : <span className="badge badge-neutral"  style={{ fontSize: 11, flexShrink: 0 }}>Inactive</span>
+                  ? <span className="badge badge-success" style={{ fontSize: 11, flexShrink: 0 }}><i className="ti ti-star-filled" style={{ fontSize: 9, marginRight: 3 }} />{t("Active")}</span>
+                  : <span className="badge badge-neutral"  style={{ fontSize: 11, flexShrink: 0 }}>{t("Inactive")}</span>
                 }
               </div>
 
@@ -266,7 +268,7 @@ export default function SmtpSettingsPage() {
                     <div key={row.label} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
                       <i className={`ti ${row.icon}`} style={{ fontSize: 13, color: "var(--outline)", marginTop: 2, flexShrink: 0 }} />
                       <div>
-                        <div style={{ fontSize: 10, color: "var(--outline)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{row.label}</div>
+                        <div style={{ fontSize: 10, color: "var(--outline)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{t(row.label)}</div>
                         <div style={{ fontSize: 12, color: "var(--on-bg)", marginTop: 2, wordBreak: "break-all" }}>{row.value}</div>
                       </div>
                     </div>
@@ -279,22 +281,22 @@ export default function SmtpSettingsPage() {
                 {!entry.is_active && (
                   <button className="btn btn-ghost btn-sm" onClick={() => handleActivate(entry)} disabled={activating === entry.id} style={{ gap: 6 }} suppressHydrationWarning>
                     {activating === entry.id
-                      ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Activating…</>
-                      : <><i className="ti ti-star" style={{ color: "var(--secondary)" }} /> Set Active</>
+                      ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Activating…")}</>
+                      : <><i className="ti ti-star" style={{ color: "var(--secondary)" }} /> {t("Set Active")}</>
                     }
                   </button>
                 )}
                 <button className="btn btn-ghost btn-sm" onClick={() => { setTestEntry(entry); setTestEmail(""); setTestPassword(""); }} style={{ gap: 6 }} suppressHydrationWarning>
-                  <i className="ti ti-send" style={{ color: "var(--info)" }} /> Test
+                  <i className="ti ti-send" style={{ color: "var(--info)" }} /> {t("Test")}
                 </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(entry)} disabled={deleting === entry.id} style={{ gap: 6, color: "var(--error)" }} suppressHydrationWarning>
                   {deleting === entry.id
-                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Deleting…</>
-                    : <><i className="ti ti-trash" /> Delete</>
+                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Deleting…")}</>
+                    : <><i className="ti ti-trash" /> {t("Delete")}</>
                   }
                 </button>
                 <button className="btn btn-filled btn-sm" onClick={() => setEditing(entry)} style={{ marginLeft: "auto", gap: 6 }} suppressHydrationWarning>
-                  <i className="ti ti-pencil" /> Edit
+                  <i className="ti ti-pencil" /> {t("Edit")}
                 </button>
               </div>
             </div>
@@ -307,9 +309,9 @@ export default function SmtpSettingsPage() {
         <Modal
           title={
             <>
-              <div>Send Test Email</div>
+              <div>{t("Send Test Email")}</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                Via <strong>{testEntry.name}</strong> · from <code style={{ background: "var(--bg-low)", padding: "1px 5px", borderRadius: 3 }}>{testEntry.from_email}</code>
+                {t("Via")} <strong>{testEntry.name}</strong> · {t("from")} <code style={{ background: "var(--bg-low)", padding: "1px 5px", borderRadius: 3 }}>{testEntry.from_email}</code>
               </div>
             </>
           }
@@ -317,13 +319,13 @@ export default function SmtpSettingsPage() {
           maxWidth="min(440px, 96vw)"
           footer={
             <>
-              <button className="btn btn-ghost" onClick={() => setTestEntry(null)} suppressHydrationWarning>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => setTestEntry(null)} suppressHydrationWarning>{t("Cancel")}</button>
               <button className="btn btn-filled" onClick={handleTest}
                 disabled={!testEmail.trim() || !testPassword.trim() || testLoading}
                 suppressHydrationWarning>
                 {testLoading
-                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Sending…</>
-                  : <><i className="ti ti-send" /> Send Test</>
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Sending…")}</>
+                  : <><i className="ti ti-send" /> {t("Send Test")}</>
                 }
               </button>
             </>
@@ -331,14 +333,14 @@ export default function SmtpSettingsPage() {
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div className="field-group">
-              <label className="field-label">Recipient email <span style={{ color: "var(--error)" }}>*</span></label>
-              <input className="field-input" type="email" placeholder="recipient@example.com"
+              <label className="field-label">{t("Recipient email")} <span style={{ color: "var(--error)" }}>*</span></label>
+              <input className="field-input" type="email" placeholder={t("recipient@example.com")}
                 value={testEmail} onChange={e => setTestEmail(e.target.value)}
                 autoFocus suppressHydrationWarning />
             </div>
             <div className="field-group">
-              <label className="field-label">SMTP Password <span style={{ color: "var(--error)" }}>*</span></label>
-              <input className="field-input" type="password" placeholder="Enter SMTP password to authenticate"
+              <label className="field-label">{t("SMTP Password")} <span style={{ color: "var(--error)" }}>*</span></label>
+              <input className="field-input" type="password" placeholder={t("Enter SMTP password to authenticate")}
                 value={testPassword} onChange={e => setTestPassword(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleTest()}
                 suppressHydrationWarning />
@@ -354,19 +356,19 @@ export default function SmtpSettingsPage() {
             <div className="modal-header">
               <div className="modal-title">
                 <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
-                Delete SMTP Configuration?
+                {t("Delete SMTP Configuration?")}
               </div>
-              <button className="modal-close" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id} aria-label="Close">
+              <button className="modal-close" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id} aria-label={t("Close")}>
                 <i className="ti ti-x" />
               </button>
             </div>
             <div className="modal-body">
               <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
-                Are you sure you want to delete <strong>{deleteTarget.name}</strong>? This action cannot be undone.
+                {t("Are you sure you want to delete")} <strong>{deleteTarget.name}</strong>{t("? This action cannot be undone.")}
               </p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id}>{t("Cancel")}</button>
               <button
                 className="btn btn-filled"
                 style={{ background: "var(--error-solid)" }}
@@ -375,8 +377,8 @@ export default function SmtpSettingsPage() {
                 suppressHydrationWarning
               >
                 {deleting === deleteTarget.id
-                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Deleting…</>
-                  : "Yes, Delete"}
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{t("Deleting…")}</>
+                  : t("Yes, Delete")}
               </button>
             </div>
           </div>

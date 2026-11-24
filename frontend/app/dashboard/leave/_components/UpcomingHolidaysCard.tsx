@@ -37,9 +37,9 @@ function daysUntil(iso: string): string | null {
   const start = new Date();
   start.setHours(12, 0, 0, 0);
   const days = Math.round((new Date(iso + "T12:00:00").getTime() - start.getTime()) / 86_400_000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  return days > 1 && days <= 31 ? `in ${days} days` : null;
+  if (days === 0) return tr("Today");
+  if (days === 1) return tr("Tomorrow");
+  return days > 1 && days <= 31 ? tr("in {count} days", { count: days }) : null;
 }
 
 export default function UpcomingHolidaysCard() {
@@ -56,7 +56,7 @@ export default function UpcomingHolidaysCard() {
   // No per-employee "state" field exists in this codebase (only `branch`,
   // which is what the holidays endpoint actually filters by) — branch is
   // the closest real substitute for the reference copy's "<state>" token.
-  const scopeLabel = currentUser?.branch || "branch";
+  const scopeLabel = currentUser?.branch || tr("branch");
 
   return (
     <div className="card">

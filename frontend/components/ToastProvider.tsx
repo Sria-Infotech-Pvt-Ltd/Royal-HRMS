@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 
 type ToastType = "success" | "error" | "info";
 
@@ -44,10 +45,11 @@ function toastDuration(message: string): number {
 let _id = 0;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const dismiss = useCallback((id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+    setToasts(prev => prev.filter(item => item.id !== id));
   }, []);
 
   const showToast = useCallback((message: string, type: ToastType = "info") => {
@@ -60,16 +62,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       <div className="toast-container">
-        {toasts.map(t => (
+        {toasts.map(toast => (
           <div
-            key={t.id}
-            className={`toast toast-${t.type}`}
-            onClick={() => dismiss(t.id)}
-            title="Dismiss"
+            key={toast.id}
+            className={`toast toast-${toast.type}`}
+            onClick={() => dismiss(toast.id)}
+            title={t("Dismiss")}
             style={{ cursor: "pointer" }}
           >
-            <i className={`ti ${ICON[t.type]}`} style={{ fontSize: 16, flexShrink: 0 }} />
-            {t.message}
+            <i className={`ti ${ICON[toast.type]}`} style={{ fontSize: 16, flexShrink: 0 }} />
+            {toast.message}
           </div>
         ))}
       </div>

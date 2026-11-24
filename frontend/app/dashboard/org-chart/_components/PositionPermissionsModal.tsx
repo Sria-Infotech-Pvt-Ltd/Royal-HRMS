@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import PermissionMatrix from "@/components/PermissionMatrix";
 import { filterCatalogueForMatrix, toggleManyInSet } from "@/lib/permissionMatrixHelpers";
@@ -28,6 +30,7 @@ interface Props {
 const TEAM_MANAGER_DEFAULT_PERMISSIONS = ["employees.view", "leave.approve", "attendance.view"];
 
 export default function PositionPermissionsModal({ position, onClose, onSaved }: Props) {
+  const t = useT();
   const [catalogue, setCatalogue] = useState<Record<string, PermissionCatalogueItem[]>>({});
   const [granted, setGranted] = useState<Set<string>>(new Set());
   const [canManageTeam, setCanManageTeam] = useState(false);
@@ -67,7 +70,7 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
           setError(
             (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
               ?? (err as { message?: string })?.message
-              ?? "Could not load this position's permissions.",
+              ?? tr("Could not load this position's permissions."),
           );
         }
       })
@@ -115,7 +118,7 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
       setError(
         (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
           ?? (err as { message?: string })?.message
-          ?? "Could not save these permissions.",
+          ?? t("Could not save these permissions."),
       );
     } finally {
       setIsSaving(false);
@@ -128,19 +131,19 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
 
   return (
     <Modal
-      title={<><i className="ti ti-shield-lock" style={{ marginRight: 8 }} />Position access</>}
+      title={<><i className="ti ti-shield-lock" style={{ marginRight: 8 }} />{t("Position access")}</>}
       onClose={onClose}
       maxWidth={1040}
       scrollBody
       footer={
         <>
           <span className="mr-auto text-xs text-[var(--on-variant)]">
-            {granted.size} permission{granted.size === 1 ? "" : "s"} selected
+            {granted.size === 1 ? t("{count} permission selected", { count: granted.size }) : t("{count} permissions selected", { count: granted.size })}
           </span>
-          <button className="btn btn-ghost" type="button" onClick={onClose} disabled={isSaving}>Cancel</button>
+          <button className="btn btn-ghost" type="button" onClick={onClose} disabled={isSaving}>{t("Cancel")}</button>
           <button className="btn btn-filled" type="button" onClick={save} disabled={isSaving || isLoading || loadedPositionId !== position.id || !!error}>
             <i className={`ti ${isSaving ? "ti-loader-2 animate-spin" : "ti-device-floppy"}`} />
-            {isSaving ? "Saving…" : "Save access"}
+            {isSaving ? t("Saving…") : t("Save access")}
           </button>
         </>
       }
@@ -156,41 +159,40 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
                 <h2 className="truncate text-base font-bold text-[var(--on-bg)]">{position.title}</h2>
                 <p className="mt-0.5 text-sm text-[var(--on-variant)]">{position.org_unit_name}</p>
                 <p className="mt-2 text-xs text-[var(--on-variant)]">
-                  Current holder: <strong className="text-[var(--on-bg)]">{position.holder_name ?? "Vacant position"}</strong>
-                  {position.is_chief && <span className="ml-2 rounded-full bg-[var(--warn-c)] px-2 py-0.5 font-semibold text-[var(--warn)]">Unit head</span>}
+                  {t("Current holder:")} <strong className="text-[var(--on-bg)]">{position.holder_name ?? t("Vacant position")}</strong>
+                  {position.is_chief && <span className="ml-2 rounded-full bg-[var(--warn-c)] px-2 py-0.5 font-semibold text-[var(--warn)]">{t("Unit head")}</span>}
                 </p>
               </div>
             </div>
             <div className="rounded-full border border-[var(--primary-c)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--primary)]">
-              {granted.size} permissions enabled
+              {t("{count} permissions enabled", { count: granted.size })}
             </div>
           </div>
           <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--info-c)] bg-[var(--surface)] p-3 text-xs leading-5 text-[var(--on-variant)]">
             <i className="ti ti-info-circle mt-0.5 shrink-0 text-base text-[var(--info)]" />
             <p>
-              These permissions belong to this position. The current holder receives them; a future holder receives the same access.
-              Permissions do not automatically pass between a manager and their reports. Give each position its own access below.
+              {t("These permissions belong to this position. The current holder receives them; a future holder receives the same access. Permissions do not automatically pass between a manager and their reports. Give each position its own access below.")}
             </p>
           </div>
         </section>
 
-        <section aria-label="Access scope" className="space-y-3">
+        <section aria-label={t("Access scope")} className="space-y-3">
           <div>
-            <h3 className="text-sm font-bold text-[var(--on-bg)]">Data scope</h3>
-            <p className="mt-1 text-xs text-[var(--on-variant)]">Choose the team or branch visibility associated with this position.</p>
+            <h3 className="text-sm font-bold text-[var(--on-bg)]">{t("Data scope")}</h3>
+            <p className="mt-1 text-xs text-[var(--on-variant)]">{t("Choose the team or branch visibility associated with this position.")}</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-[var(--outline-v)] bg-[var(--surface)] p-4">
               <span>
-                <span className="block text-sm font-semibold text-[var(--on-bg)]">Team manager</span>
-                <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">Marks this position as a team manager for manager-based workflows.</span>
+                <span className="block text-sm font-semibold text-[var(--on-bg)]">{t("Team manager")}</span>
+                <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">{t("Marks this position as a team manager for manager-based workflows.")}</span>
               </span>
               <ToggleSwitch checked={canManageTeam} onChange={onTeamManagerChange} />
             </label>
             <label className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-[var(--outline-v)] bg-[var(--surface)] p-4">
               <span>
-                <span className="block text-sm font-semibold text-[var(--on-bg)]">Branch-wide access</span>
-                <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">Enables branch scope where the module supports it.</span>
+                <span className="block text-sm font-semibold text-[var(--on-bg)]">{t("Branch-wide access")}</span>
+                <span className="mt-1 block text-xs leading-5 text-[var(--on-variant)]">{t("Enables branch scope where the module supports it.")}</span>
               </span>
               <ToggleSwitch checked={canManageBranch} onChange={setCanManageBranch} />
             </label>
@@ -199,19 +201,18 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
             <div className="flex items-start gap-2 rounded-xl border border-[var(--primary-c)] bg-[var(--sec-c)] p-3 text-xs leading-5 text-[var(--on-bg)]">
               <i className="ti ti-info-circle mt-0.5 shrink-0 text-base text-[var(--primary)]" />
               <p>
-                Turning on Team manager also checked the usual manager permissions below (View employees, Approve leave, View attendance)
-                so this position isn&apos;t left with 0 permissions. Uncheck any you don&apos;t want before saving.
+                {t("Turning on Team manager also checked the usual manager permissions below (View employees, Approve leave, View attendance) so this position isn't left with 0 permissions. Uncheck any you don't want before saving.")}
               </p>
             </div>
           )}
         </section>
 
-        <section aria-label="Position permissions">
+        <section aria-label={t("Position permissions")}>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h3 className="text-sm font-bold text-[var(--on-bg)]">Module permissions</h3>
+              <h3 className="text-sm font-bold text-[var(--on-bg)]">{t("Module permissions")}</h3>
               <p className="mt-1 text-xs text-[var(--on-variant)]">
-                Select only the actions required for this position. <strong className="text-[var(--on-bg)]">{grantedCount} of {permissionCount}</strong> enabled.
+                {t("Select only the actions required for this position.")} <strong className="text-[var(--on-bg)]">{t("{granted} of {total}", { granted: grantedCount, total: permissionCount })}</strong> {t("enabled.")}
               </p>
             </div>
             <label className="relative w-full sm:w-64">
@@ -221,8 +222,8 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
                 type="search"
                 value={search}
                 onChange={event => setSearch(event.target.value)}
-                placeholder="Search modules or actions"
-                aria-label="Search permissions"
+                placeholder={t("Search modules or actions")}
+                aria-label={t("Search permissions")}
               />
             </label>
           </div>
@@ -231,11 +232,11 @@ export default function PositionPermissionsModal({ position, onClose, onSaved }:
           {isLoading ? (
             <div className="rounded-xl border border-[var(--outline-v)] bg-[var(--bg-low)] px-4 py-10 text-center text-sm text-[var(--on-variant)]">
               <i className="ti ti-loader-2 mr-2 animate-spin text-lg text-[var(--primary)]" />
-              Loading position permissions…
+              {t("Loading position permissions…")}
             </div>
           ) : modules.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--outline)] px-4 py-10 text-center text-sm text-[var(--on-variant)]">
-              No permissions match that search.
+              {t("No permissions match that search.")}
             </div>
           ) : (
             <PermissionMatrix modules={modules} granted={granted} onToggle={toggle} onToggleMany={toggleMany} />

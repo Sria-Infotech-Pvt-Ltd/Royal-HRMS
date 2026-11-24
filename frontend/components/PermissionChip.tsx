@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+
 interface PermissionChipProps {
   label: string;
   isOn: boolean;
@@ -13,6 +15,7 @@ interface PermissionChipProps {
 
 /** One permission as a pill that toggles: a plus when off, a tick when on, a small warning mark when it is sensitive. */
 export default function PermissionChip({ label, isOn, isDisabled = false, isSensitive = false, title, note, onToggle }: PermissionChipProps) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -30,7 +33,7 @@ export default function PermissionChip({ label, isOn, isDisabled = false, isSens
       <i className={`ti ${isDisabled && isOn ? "ti-lock" : isOn ? "ti-check" : "ti-plus"} text-[11px]`} />
       {label}
       {note && <span className="text-[10px] font-medium normal-case opacity-80">({note})</span>}
-      {isSensitive && <i className="ti ti-alert-triangle" style={{ color: "var(--warn)" }} aria-label="Sensitive permission" />}
+      {isSensitive && <i className="ti ti-alert-triangle" style={{ color: "var(--warn)" }} aria-label={t("Sensitive permission")} />}
     </button>
   );
 }

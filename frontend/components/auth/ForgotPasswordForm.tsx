@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 type ForgotStep = "email" | "otp" | "reset" | "done";
 
@@ -57,6 +58,7 @@ export default function ForgotPasswordForm({
   sent: boolean;
   onSend: () => void;
 }) {
+  const t = useT();
   const [step,        setStep]        = useState<ForgotStep>("email");
   const [emailVal,    setEmailVal]    = useState("");
   const [otp,         setOtp]         = useState("");
@@ -78,7 +80,7 @@ export default function ForgotPasswordForm({
 
   async function sendForgot(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!emailVal.trim()) { setError("Please enter your email address."); return; }
+    if (!emailVal.trim()) { setError(t("Please enter your email address.")); return; }
     setLoading(true); setError("");
     try {
       await clientApi.post(API.auth.forgotPassword, { email: emailVal.trim() });
@@ -86,7 +88,7 @@ export default function ForgotPasswordForm({
       setResendIn(RESEND_COOLDOWN_SECONDS);
     } catch (err) {
       const { message } = err as { message: string };
-      setError(message || "Unable to send OTP. Please try again.");
+      setError(message || t("Unable to send OTP. Please try again."));
     } finally { setLoading(false); }
   }
 
@@ -98,13 +100,13 @@ export default function ForgotPasswordForm({
       setResendIn(RESEND_COOLDOWN_SECONDS);
     } catch (err) {
       const { message } = err as { message: string };
-      setError(message || "Unable to resend OTP. Please try again.");
+      setError(message || t("Unable to resend OTP. Please try again."));
     } finally { setLoading(false); }
   }
 
   async function verifyOtp(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!otp.trim()) { setError("Please enter the OTP."); return; }
+    if (!otp.trim()) { setError(t("Please enter the OTP.")); return; }
     setLoading(true); setError("");
     try {
       const { data } = await clientApi.post<{ data?: { reset_token?: string }; reset_token?: string }>(
@@ -115,14 +117,14 @@ export default function ForgotPasswordForm({
       setStep("reset");
     } catch (err) {
       const { message } = err as { message: string };
-      setError(message || "Invalid or expired OTP.");
+      setError(message || t("Invalid or expired OTP."));
     } finally { setLoading(false); }
   }
 
   async function resetPassword(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!newPwd)              { setError("Enter your new password."); return; }
-    if (newPwd !== confirmPwd) { setError("Passwords do not match."); return; }
+    if (!newPwd)              { setError(t("Enter your new password.")); return; }
+    if (newPwd !== confirmPwd) { setError(t("Passwords do not match.")); return; }
     setLoading(true); setError("");
     try {
       await clientApi.post(API.auth.resetPassword, {
@@ -131,7 +133,7 @@ export default function ForgotPasswordForm({
       setStep("done");
     } catch (err) {
       const { message } = err as { message: string };
-      setError(message || "Password reset failed. Please try again.");
+      setError(message || t("Password reset failed. Please try again."));
     } finally { setLoading(false); }
   }
 
@@ -141,10 +143,10 @@ export default function ForgotPasswordForm({
       <div style={{ textAlign: "center", padding: "8px 0" }}>
         <div style={{ fontSize: "40px", marginBottom: "14px" }}>✅</div>
         <p style={{ fontSize: "13px", color: "var(--on-variant)", lineHeight: 1.6, marginBottom: "16px" }}>
-          Your password has been reset. You can now sign in with your new password.
+          {t("Your password has been reset. You can now sign in with your new password.")}
         </p>
         <button type="button" className="login-submit-btn" onClick={onBack} suppressHydrationWarning>
-          Back to Sign In
+          {t("Back to Sign In")}
         </button>
       </div>
     );
@@ -156,27 +158,27 @@ export default function ForgotPasswordForm({
       {/* Back navigation */}
       <button type="button" onClick={onBack} className="forgot-back-btn" suppressHydrationWarning>
         <span className="forgot-back-arrow">←</span>
-        Back to Sign In
+        {t("Back to Sign In")}
       </button>
 
       {/* ── Step: email ── */}
       {step === "email" && (
         <>
           <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--on-bg)", marginBottom: "6px", letterSpacing: "-0.01em" }}>
-            Reset your password
+            {t("Reset your password")}
           </h3>
           <p style={{ fontSize: "13px", color: "var(--on-variant)", marginBottom: "20px", lineHeight: 1.6 }}>
-            Enter your registered email and we&apos;ll send you a one-time code.
+            {t("Enter your registered email and we'll send you a one-time code.")}
           </p>
           {error && <ErrorBanner msg={error} />}
           <form onSubmit={sendForgot} noValidate>
             <div style={fieldStyle}>
-              <label htmlFor="forgot-email" style={labelStyle}>Email</label>
+              <label htmlFor="forgot-email" style={labelStyle}>{t("Email")}</label>
               <input
                 id="forgot-email"
                 type="email"
                 className="login-input"
-                placeholder="you@company.com"
+                placeholder={t("you@company.com")}
                 value={emailVal}
                 onChange={e => setEmailVal(e.target.value)}
                 required
@@ -187,7 +189,7 @@ export default function ForgotPasswordForm({
             </div>
             <button type="submit" className="login-submit-btn" disabled={loading} suppressHydrationWarning>
               {loading && <Spinner />}
-              {loading ? "Sending…" : "Send OTP"}
+              {loading ? t("Sending…") : t("Send OTP")}
             </button>
           </form>
         </>
@@ -197,15 +199,15 @@ export default function ForgotPasswordForm({
       {step === "otp" && (
         <>
           <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--on-bg)", marginBottom: "6px", letterSpacing: "-0.01em" }}>
-            Enter OTP
+            {t("Enter OTP")}
           </h3>
           <p style={{ fontSize: "13px", color: "var(--on-variant)", marginBottom: "20px", lineHeight: 1.6 }}>
-            A 6-digit code was sent to <strong>{emailVal}</strong>.
+            {t("A 6-digit code was sent to")} <strong>{emailVal}</strong>.
           </p>
           {error && <ErrorBanner msg={error} />}
           <form onSubmit={verifyOtp} noValidate>
             <div style={fieldStyle}>
-              <label htmlFor="otp-input" style={labelStyle}>One-time code</label>
+              <label htmlFor="otp-input" style={labelStyle}>{t("One-time code")}</label>
               <input
                 id="otp-input"
                 type="text"
@@ -223,7 +225,7 @@ export default function ForgotPasswordForm({
             </div>
             <button type="submit" className="login-submit-btn" disabled={loading} suppressHydrationWarning>
               {loading && <Spinner />}
-              {loading ? "Verifying…" : "Verify OTP"}
+              {loading ? t("Verifying…") : t("Verify OTP")}
             </button>
             <button
               type="button"
@@ -232,7 +234,7 @@ export default function ForgotPasswordForm({
               onClick={resendOtp}
               suppressHydrationWarning
             >
-              {resendIn > 0 ? `Resend code in ${resendIn}s (use the latest email)` : "Resend code"}
+              {resendIn > 0 ? t("Resend code in {seconds}s (use the latest email)", { seconds: resendIn }) : t("Resend code")}
             </button>
             <button
               type="button"
@@ -241,7 +243,7 @@ export default function ForgotPasswordForm({
               onClick={() => { setStep("email"); setError(""); setOtp(""); }}
               suppressHydrationWarning
             >
-              Change email address
+              {t("Change email address")}
             </button>
           </form>
         </>
@@ -251,21 +253,21 @@ export default function ForgotPasswordForm({
       {step === "reset" && (
         <>
           <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--on-bg)", marginBottom: "6px", letterSpacing: "-0.01em" }}>
-            Set new password
+            {t("Set new password")}
           </h3>
           <p style={{ fontSize: "13px", color: "var(--on-variant)", marginBottom: "20px", lineHeight: 1.6 }}>
-            Choose a strong password for your account.
+            {t("Choose a strong password for your account.")}
           </p>
           {error && <ErrorBanner msg={error} />}
           <form onSubmit={resetPassword} noValidate>
             <div style={fieldStyle}>
-              <label htmlFor="new-pwd" style={labelStyle}>New password</label>
+              <label htmlFor="new-pwd" style={labelStyle}>{t("New password")}</label>
               <div style={{ position: "relative" }}>
                 <input
                   id="new-pwd"
                   type={showNew ? "text" : "password"}
                   className="login-input login-input-pwd"
-                  placeholder="New password"
+                  placeholder={t("New password")}
                   value={newPwd}
                   onChange={e => setNewPwd(e.target.value)}
                   required
@@ -284,13 +286,13 @@ export default function ForgotPasswordForm({
               </div>
             </div>
             <div style={fieldStyle}>
-              <label htmlFor="confirm-pwd" style={labelStyle}>Confirm password</label>
+              <label htmlFor="confirm-pwd" style={labelStyle}>{t("Confirm password")}</label>
               <div style={{ position: "relative" }}>
                 <input
                   id="confirm-pwd"
                   type={showConf ? "text" : "password"}
                   className="login-input login-input-pwd"
-                  placeholder="Confirm password"
+                  placeholder={t("Confirm password")}
                   value={confirmPwd}
                   onChange={e => setConfirmPwd(e.target.value)}
                   required
@@ -309,7 +311,7 @@ export default function ForgotPasswordForm({
             </div>
             <button type="submit" className="login-submit-btn" disabled={loading} suppressHydrationWarning>
               {loading && <Spinner />}
-              {loading ? "Resetting…" : "Reset password"}
+              {loading ? t("Resetting…") : t("Reset password")}
             </button>
           </form>
         </>

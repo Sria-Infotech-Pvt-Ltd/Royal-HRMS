@@ -8,6 +8,7 @@
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   hireActionId: string;
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function EmployeePhotoUpload({ hireActionId, photoUrl, onPhotoChange }: Props) {
+  const t = useT();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +34,7 @@ export default function EmployeePhotoUpload({ hireActionId, photoUrl, onPhotoCha
       onPhotoChange(data.data.photo_url);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg ?? "Could not upload this photo.");
+      setError(msg ?? t("Could not upload this photo."));
     } finally {
       setUploading(false);
     }
@@ -41,15 +43,15 @@ export default function EmployeePhotoUpload({ hireActionId, photoUrl, onPhotoCha
   return (
     <div className="photorow" style={{ marginBottom: 16 }}>
       <div className="photodrop" style={photoUrl ? { backgroundImage: `url(${photoUrl})` } : undefined}>
-        {!photoUrl && <>ADD<br />PHOTO</>}
+        {!photoUrl && <>{t("ADD")}<br />{t("PHOTO")}</>}
       </div>
       <div>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>Employee photo</div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>{t("Employee photo")}</div>
         <div className="hint" style={{ margin: "3px 0 8px" }}>
-          JPG or PNG — resized automatically to fit. Cropped to a circle on ID cards and reports.
+          {t("JPG or PNG — resized automatically to fit. Cropped to a circle on ID cards and reports.")}
         </div>
         <label className="filebtn" style={{ cursor: uploading ? "not-allowed" : "pointer", opacity: uploading ? 0.6 : 1 }}>
-          {uploading ? "Uploading…" : "Upload file"}
+          {uploading ? t("Uploading…") : t("Upload file")}
           <input
             type="file"
             accept=".jpg,.jpeg,.png,image/jpeg,image/png"

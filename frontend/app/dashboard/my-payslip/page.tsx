@@ -112,7 +112,7 @@ export default function MyPayslipPage({ onNavigateToTax }: Props) {
         </div>
         <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
           <PayslipTaxNotice
-            financialYearLabel={taxDecl?.financial_year ? `FY ${taxDecl.financial_year}` : fyLabel}
+            financialYearLabel={taxDecl?.financial_year ? tr("FY {year}", { year: taxDecl.financial_year }) : fyLabel}
             fyEndLabel={fyEndLabel(fyStart)}
             isApproved={taxDecl?.status === "approved"}
             onNavigateToTax={onNavigateToTax ?? (() => router.push("/dashboard/ess"))}

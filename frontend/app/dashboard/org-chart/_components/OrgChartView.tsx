@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { OrgUnit, Position } from "@/types/orgStructure";
 import { initialsOf, type UnitRollup } from "@/lib/orgStructureStats";
 import { useChartBranches } from "@/hooks/useChartBranches";
+import { useT } from "@/hooks/useI18n";
 import OrgChartFrame from "./OrgChartFrame";
 
 interface Props {
@@ -20,6 +21,7 @@ const MAX_SEATS_SHOWN = 5;
 
 /** The organisation drawn as boxes joined by lines: one box per org unit, top of the company first. */
 export default function OrgChartView({ units, positions, rollups, selectedUnitId, onSelectUnit }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [showSeats, setShowSeats] = useState(false);
   const branches = useChartBranches(OPEN_DEPTH);
@@ -76,14 +78,14 @@ export default function OrgChartView({ units, positions, rollups, selectedUnitId
   const roots = childrenOf.get(null) ?? [];
   const seatsToggle = (
     <button type="button" className={showSeats ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"} aria-pressed={showSeats} onClick={() => setShowSeats(!showSeats)}>
-      <i className="ti ti-id-badge-2" /> Show seats
+      <i className="ti ti-id-badge-2" /> {t("Show seats")}
     </button>
   );
   return (
     <OrgChartFrame
-      query={query} onQueryChange={setQuery} searchPlaceholder="Find unit, position or person"
+      query={query} onQueryChange={setQuery} searchPlaceholder={t("Find unit, position or person")}
       onExpandAll={() => branches.setAll(true)} onCollapseAll={() => branches.setAll(false)}
-      isEmpty={roots.length === 0} emptyText="No org units yet — add one to get started." tools={seatsToggle}
+      isEmpty={roots.length === 0} emptyText={t("No org units yet — add one to get started.")} tools={seatsToggle}
     >
       <ul>{roots.map(root => renderBranch(root, 0))}</ul>
     </OrgChartFrame>
@@ -96,6 +98,7 @@ interface BoxProps {
 }
 
 function UnitBox({ unit, rollup, seats, showSeats, selected, state, childCount, isOpen, onSelect, onToggle }: BoxProps) {
+  const t = useT();
   const total = rollup?.total ?? 0;
   const filled = rollup?.filled ?? 0;
   const openSeats = total - filled;
@@ -111,12 +114,12 @@ function UnitBox({ unit, rollup, seats, showSeats, selected, state, childCount, 
         <div className="oc-name" title={unit.name}>{unit.name}</div>
         <div className="oc-head">
           {chief?.holder_name ? <><i className="ti ti-crown" /> {chief.holder_name}</>
-            : chief ? <span className="oc-warn">Head seat vacant</span>
-            : <span className="oc-muted">No head set</span>}
+            : chief ? <span className="oc-warn">{t("Head seat vacant")}</span>
+            : <span className="oc-muted">{t("No head set")}</span>}
         </div>
-        <div className="oc-bar" title={`${filled} of ${total} seats filled`}><span style={{ width: `${percent}%` }} /></div>
+        <div className="oc-bar" title={t("{filled} of {total} seats filled", { filled, total })}><span style={{ width: `${percent}%` }} /></div>
         <div className="oc-foot">
-          <span>{filled}/{total} filled{openSeats > 0 && <span className="oc-warn"> · {openSeats} open</span>}</span>
+          <span>{t("{filled}/{total} filled", { filled, total })}{openSeats > 0 && <span className="oc-warn"> · {t("{count} open", { count: openSeats })}</span>}</span>
           {!showSeats && (
             <span className="oc-avatars">
               {holders.slice(0, MAX_AVATARS).map(name => <span key={name} className="oc-avatar" title={name}>{initialsOf(name)}</span>)}
@@ -127,18 +130,18 @@ function UnitBox({ unit, rollup, seats, showSeats, selected, state, childCount, 
         {showSeats && seats.length > 0 && (
           <div className="oc-seats">
             {seats.slice(0, MAX_SEATS_SHOWN).map(seat => (
-              <div key={seat.id} className="oc-seat" title={seat.holder_name ? `${seat.title} — ${seat.holder_name}` : `${seat.title} — vacant`}>
+              <div key={seat.id} className="oc-seat" title={seat.holder_name ? `${seat.title} — ${seat.holder_name}` : `${seat.title} — ${t("vacant")}`}>
                 <span className={`oc-avatar${seat.holder_name ? "" : " oc-avatar-vacant"}`}>{seat.holder_name ? initialsOf(seat.holder_name) : "?"}</span>
                 <span className="oc-seat-title">{seat.title}</span>
                 {seat.is_chief && <i className="ti ti-crown" />}
               </div>
             ))}
-            {seats.length > MAX_SEATS_SHOWN && <div className="oc-muted" style={{ fontSize: 11 }}>+{seats.length - MAX_SEATS_SHOWN} more seats</div>}
+            {seats.length > MAX_SEATS_SHOWN && <div className="oc-muted" style={{ fontSize: 11 }}>{t("+{count} more seats", { count: seats.length - MAX_SEATS_SHOWN })}</div>}
           </div>
         )}
       </div>
       {childCount > 0 && (
-        <button type="button" className="oc-toggle" onClick={onToggle} aria-label={isOpen ? "Collapse sub-units" : "Expand sub-units"} title={isOpen ? "Collapse" : `Show ${childCount} sub-unit${childCount === 1 ? "" : "s"}`}>
+        <button type="button" className="oc-toggle" onClick={onToggle} aria-label={isOpen ? t("Collapse sub-units") : t("Expand sub-units")} title={isOpen ? t("Collapse") : childCount === 1 ? t("Show {count} sub-unit", { count: childCount }) : t("Show {count} sub-units", { count: childCount })}>
           {isOpen ? <i className="ti ti-minus" /> : childCount}
         </button>
       )}

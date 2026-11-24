@@ -12,12 +12,14 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
+import { useT } from "@/hooks/useI18n";
 
 // Where the banner may appear (the dashboard "home" pages only - never inside other modules).
 const HOME_PATHS = new Set(["/dashboard", "/dashboard/ess", "/dashboard/team"]);
 const DISMISS_KEY = "aira_face_banner_dismissed";
 
 export default function FaceRegistrationBanner() {
+  const t = useT();
   const pathname = usePathname();
   const { isMandatory, state, canSelfRegister, message, loading, refetch } = useFaceVerificationStatus({ asSignedInUser: true });
   const [dismissed, setDismissed] = useState(false);
@@ -34,9 +36,9 @@ export default function FaceRegistrationBanner() {
 
   const canAct = canSelfRegister && state !== "pending";
   const headline =
-    state === "pending" ? "Face ID waiting for approval"
-    : state === "rejected" ? "Face ID registration was rejected"
-    : "Register your Face ID";
+    state === "pending" ? t("Face ID waiting for approval")
+    : state === "rejected" ? t("Face ID registration was rejected")
+    : t("Register your Face ID");
 
   function dismiss() {
     setDismissed(true);
@@ -58,11 +60,11 @@ export default function FaceRegistrationBanner() {
         </div>
         {canAct && (
           <button type="button" className="btn btn-primary btn-sm" suppressHydrationWarning onClick={() => setShowModal(true)}>
-            <i className="ti ti-camera" /> Register My Face
+            <i className="ti ti-camera" /> {t("Register My Face")}
           </button>
         )}
         <button
-          type="button" aria-label="Dismiss" suppressHydrationWarning onClick={dismiss}
+          type="button" aria-label={t("Dismiss")} suppressHydrationWarning onClick={dismiss}
           className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-black/5"
           style={{ color: "var(--on-variant)" }}
         >

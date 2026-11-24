@@ -4,6 +4,7 @@
 
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import { STATUS_LABEL, toDisplayStatus, wfhToMyItem, type MyCorrectionRequest } from "../../my-requests/_data";
+import { tr } from "@/lib/i18n/tr";
 
 export const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -22,7 +23,9 @@ export interface AttendanceRequestRow {
 
 export function correctionTitle(dateIso: string): string {
   const date = new Date(`${dateIso}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? "Correction" : `${date.getDate()} ${MONTH_LONG[date.getMonth()]} correction`;
+  return Number.isNaN(date.getTime())
+    ? tr("Correction")
+    : tr("{day} {month} correction", { day: date.getDate(), month: tr(MONTH_LONG[date.getMonth()]) });
 }
 
 function correctionRow(request: MyCorrectionRequest): AttendanceRequestRow {
@@ -31,7 +34,7 @@ function correctionRow(request: MyCorrectionRequest): AttendanceRequestRow {
   return {
     key: `correction:${request.id}`,
     title: correctionTitle(request.date),
-    detail: `${status === "approved" && approver ? `Approved by ${approver}` : STATUS_LABEL[status]} · View details`,
+    detail: tr("{status} · View details", { status: status === "approved" && approver ? tr("Approved by {name}", { name: approver }) : STATUS_LABEL[status] }),
     statusLabel: STATUS_LABEL[status].toUpperCase(),
     isApproved: status === "approved",
     createdAt: request.created_at,
@@ -41,11 +44,11 @@ function correctionRow(request: MyCorrectionRequest): AttendanceRequestRow {
 
 function wfhRow(request: WorkFromHomeRequest): AttendanceRequestRow {
   const item = wfhToMyItem(request);
-  const approvedBy = item.displayStatus === "approved" && item.approver !== "—" ? `Approved by ${item.approver}` : STATUS_LABEL[item.displayStatus];
+  const approvedBy = item.displayStatus === "approved" && item.approver !== "—" ? tr("Approved by {name}", { name: item.approver }) : STATUS_LABEL[item.displayStatus];
   return {
     key: item.key,
-    title: item.title === "Work From Home" ? "Work from home" : `Work from home · ${item.title}`,
-    detail: `${item.detailSecondary} · ${approvedBy} · View details`,
+    title: item.title === "Work From Home" ? tr("Work from home") : tr("Work from home · {title}", { title: item.title }),
+    detail: tr("{secondary} · {approvedBy} · View details", { secondary: item.detailSecondary, approvedBy }),
     statusLabel: STATUS_LABEL[item.displayStatus].toUpperCase(),
     isApproved: item.displayStatus === "approved",
     createdAt: request.created_at,

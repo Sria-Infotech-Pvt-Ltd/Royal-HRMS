@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 export interface BasicPayDraft {
   tax_regime: string;
@@ -39,6 +40,7 @@ interface Props {
 // that service's own module docstring for why it's a preview, not the real
 // payroll engine.
 export default function BasicPayStep({ annualCtc, salaryStructureId, branchName, value, onChange }: Props) {
+  const t = useT();
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -77,7 +79,7 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
     return (
       <div className="mstep on">
         <div className="hint">
-          Set an Annual fixed CTC on the Employment step first — the earnings breakdown estimates from that.
+          {t("Set an Annual fixed CTC on the Employment step first — the earnings breakdown estimates from that.")}
         </div>
       </div>
     );
@@ -86,11 +88,11 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
   return (
     <div className="mstep on">
 
-      {loading && <p className="text-[12.5px]" style={{ color: "var(--on-variant)" }}>Estimating…</p>}
+      {loading && <p className="text-[12.5px]" style={{ color: "var(--on-variant)" }}>{t("Estimating…")}</p>}
 
       {breakdown && (
         <>
-          <div className="hw-section">Earnings</div>
+          <div className="hw-section">{t("Earnings")}</div>
           <table className="w-full text-[13px] mb-5" style={{ borderCollapse: "collapse" }}>
             <tbody>
               <Row label="Basic Pay" value={breakdown.basic} />
@@ -101,7 +103,7 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
             </tbody>
           </table>
 
-          <div className="hw-section">Employer contributions</div>
+          <div className="hw-section">{t("Employer contributions")}</div>
           <table className="w-full text-[13px] mb-5" style={{ borderCollapse: "collapse" }}>
             <tbody>
               <Row label="Employer PF (EPF)" value={breakdown.employer_pf} />
@@ -111,7 +113,7 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
             </tbody>
           </table>
 
-          <div className="hw-section">Statutory deductions</div>
+          <div className="hw-section">{t("Statutory deductions")}</div>
           <table className="w-full text-[13px] mb-5" style={{ borderCollapse: "collapse" }}>
             <tbody>
               <Row label="Employee PF" value={breakdown.employee_pf} />
@@ -136,21 +138,21 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
         </>
       )}
 
-      <div className="hw-section">Employee declarations</div>
+      <div className="hw-section">{t("Employee declarations")}</div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Tax regime</label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Tax regime")}</label>
           <select value={value.tax_regime} onChange={e => onChange({ ...value, tax_regime: e.target.value })}
             className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--outline-v)] text-[13px] bg-[var(--surface)] cursor-pointer">
-            <option value="new">New regime (115BAC)</option>
-            <option value="old">Old regime</option>
+            <option value="new">{t("New regime (115BAC)")}</option>
+            <option value="old">{t("Old regime")}</option>
           </select>
         </div>
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Payment method</label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Payment method")}</label>
           <select value={value.payment_method} onChange={e => onChange({ ...value, payment_method: e.target.value })}
             className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--outline-v)] text-[13px] bg-[var(--surface)] cursor-pointer">
-            {PAYMENT_METHODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {PAYMENT_METHODS.map(([v, l]) => <option key={v} value={v}>{t(l)}</option>)}
           </select>
         </div>
       </div>
@@ -159,18 +161,20 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
 }
 
 function Row({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+  const t = useT();
   return (
     <tr style={{ borderTop: "1px solid var(--outline-v)" }}>
-      <td style={{ padding: "7px 0", fontWeight: bold ? 700 : 400 }}>{label}</td>
+      <td style={{ padding: "7px 0", fontWeight: bold ? 700 : 400 }}>{t(label)}</td>
       <td style={{ padding: "7px 0", textAlign: "right", fontWeight: bold ? 700 : 400 }}>{INR(value)}</td>
     </tr>
   );
 }
 
 function SummaryRow({ label, value, formatted, bold }: { label: string; value?: number; formatted?: string; bold?: boolean }) {
+  const t = useT();
   return (
     <div className="flex justify-between text-[12.5px]" style={{ fontWeight: bold ? 700 : 400 }}>
-      <span style={{ color: bold ? "var(--on-bg)" : "var(--on-variant)" }}>{label}</span>
+      <span style={{ color: bold ? "var(--on-bg)" : "var(--on-variant)" }}>{t(label)}</span>
       <span>{formatted ?? INR(value ?? 0)}</span>
     </div>
   );

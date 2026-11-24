@@ -26,6 +26,7 @@ import { DOCUMENTS_BASE, type ApiDocument } from "../../documents/_data";
 import ExpenseFormModal from "../../expenses/_components/ExpenseFormModal";
 import ExpenseDetailModal from "../../expenses/_components/ExpenseDetailModal";
 import { CATEGORY_LABEL, STATUS_BADGE, type Expense } from "../../expenses/_components/ExpenseClaims";
+import { useT } from "@/hooks/useI18n";
 
 const RECENT_COUNT = 5;
 
@@ -46,6 +47,7 @@ function formatAmount(amount: number | string): string {
 }
 
 export default function ExpensesTab() {
+  const t = useT();
   const [showNewExpense, setShowNewExpense] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
@@ -77,12 +79,12 @@ export default function ExpensesTab() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Expenses & claims</div>
-          <div className="page-sub">Submit work expenses and follow approval or payment progress.</div>
+          <div className="page-title">{t("Expenses & claims")}</div>
+          <div className="page-sub">{t("Submit work expenses and follow approval or payment progress.")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-filled" onClick={() => setShowNewExpense(true)} suppressHydrationWarning>
-            <i className="ti ti-plus" /> New expense claim
+            <i className="ti ti-plus" /> {t("New expense claim")}
           </button>
         </div>
       </div>
@@ -99,8 +101,8 @@ export default function ExpensesTab() {
         <div className="card">
           <div className="card-header">
             <div>
-              <div className="card-title"><i className="ti ti-receipt" /> My claims</div>
-              <div className="page-sub" style={{ marginTop: 2 }}>Receipts, purpose and amount are required before submission.</div>
+              <div className="card-title"><i className="ti ti-receipt" /> {t("My claims")}</div>
+              <div className="page-sub" style={{ marginTop: 2 }}>{t("Receipts, purpose and amount are required before submission.")}</div>
             </div>
           </div>
           <div className="table-wrap">
@@ -110,19 +112,19 @@ export default function ExpensesTab() {
               </div>
             ) : claims.length === 0 ? (
               <div style={{ padding: "4px 24px 20px" }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>No claims submitted</div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{t("No claims submitted")}</div>
                 <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
-                  Your new claim will appear here and in My Requests.
+                  {t("Your new claim will appear here and in My Requests.")}
                 </div>
               </div>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th>Category</th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th style={{ textAlign: "center" }}>Status</th>
+                    <th>{t("Category")}</th>
+                    <th>{t("Date")}</th>
+                    <th>{t("Amount")}</th>
+                    <th style={{ textAlign: "center" }}>{t("Status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -132,12 +134,12 @@ export default function ExpensesTab() {
                     return (
                       <tr key={claim.expense_number} onClick={() => setSelectedExpense(claim)} style={{ cursor: "pointer" }}>
                         <td>
-                          <div style={{ fontWeight: 500 }}>{catLabel}</div>
+                          <div style={{ fontWeight: 500 }}>{t(catLabel)}</div>
                           <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{claim.title}</div>
                         </td>
                         <td>{formatDate(claim.expense_date)}</td>
                         <td style={{ fontWeight: 700 }}>{formatAmount(claim.amount)}</td>
-                        <td style={{ textAlign: "center" }}><span className={`badge ${cls}`}>{label}</span></td>
+                        <td style={{ textAlign: "center" }}><span className={`badge ${cls}`}>{t(label)}</span></td>
                       </tr>
                     );
                   })}
@@ -150,7 +152,7 @@ export default function ExpensesTab() {
         {/* Claim process */}
         <div className="card">
           <div className="card-header">
-            <div className="card-title"><i className="ti ti-list-check" /> Claim process</div>
+            <div className="card-title"><i className="ti ti-list-check" /> {t("Claim process")}</div>
           </div>
           <div style={{ padding: "16px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
             {PROCESS_STEPS.map((step, index) => {
@@ -163,19 +165,19 @@ export default function ExpensesTab() {
                     border: done ? "none" : "2px solid var(--outline-v)",
                   }} />
                   <div>
-                    <div style={{ fontWeight: 500 }}>{step.title}</div>
-                    <div style={{ fontSize: 13, color: "var(--on-variant)" }}>{step.description}</div>
+                    <div style={{ fontWeight: 500 }}>{t(step.title)}</div>
+                    <div style={{ fontSize: 13, color: "var(--on-variant)" }}>{t(step.description)}</div>
                   </div>
                 </div>
               );
             })}
             {expensePolicyDoc ? (
               <a href={expensePolicyDoc.file_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }}>
-                <i className="ti ti-file-text" /> View expense policy
+                <i className="ti ti-file-text" /> {t("View expense policy")}
               </a>
             ) : (
               <p style={{ margin: 0, fontSize: 12, color: "var(--on-variant)" }}>
-                <i className="ti ti-file-text" /> The expense policy has not been published yet.
+                <i className="ti ti-file-text" /> {t("The expense policy has not been published yet.")}
               </p>
             )}
           </div>

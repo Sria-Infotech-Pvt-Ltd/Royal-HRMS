@@ -2,6 +2,7 @@
 
 import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
+import { useT } from "@/hooks/useI18n";
 import {
   COUNTRY_OPTIONS, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
   REGISTRATION_NUMBER_CONFIG, entityComplianceHint, parseCin, parsePan,
@@ -23,6 +24,7 @@ function Chip({ label, value, error }: { label: string; value: string; error?: b
 }
 
 export default function EntityIdentityCard({ form, errors, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
+  const t = useT();
   const isIndia = form.jurisdiction === "india";
   const regConfig = isIndia ? (REGISTRATION_NUMBER_CONFIG[form.entity_type] ?? null) : null;
   // The CIN structure-decode chips below only mean anything for an actual
@@ -35,7 +37,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
   const hint = entityComplianceHint(form.jurisdiction, form.entity_type, entityLabel);
 
   return (
-    <ProfileCard icon="ti-building" title="Entity & identity" subtitle="Legal identity and statutory registration numbers." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
+    <ProfileCard icon="ti-building" title={t("Entity & identity")} subtitle={t("Legal identity and statutory registration numbers.")} collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       {hint && (
         <div style={{
           display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 14px",
@@ -49,45 +51,45 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
 
       {!isIndia && (
         <div className="field-group mb-16">
-          <label className="field-label">Country of Registration <span style={{ color: "var(--error)" }}>*</span></label>
+          <label className="field-label">{t("Country of Registration")} <span style={{ color: "var(--error)" }}>*</span></label>
           <select
             className={`field-input field-select${errors.country_of_registration ? " field-error" : ""}`}
             value={form.country_of_registration}
             disabled={!canEdit}
             onChange={e => onFieldChange("country_of_registration", e.target.value)}
           >
-            <option value="">Select…</option>
-            {COUNTRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            <option value="">{t("Select…")}</option>
+            {COUNTRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
           </select>
           {errors.country_of_registration && <div className="field-error-msg">{errors.country_of_registration}</div>}
         </div>
       )}
 
       <div className="field-group mb-16">
-        <label className="field-label">Legal Name <span style={{ color: "var(--error)" }}>*</span></label>
+        <label className="field-label">{t("Legal Name")} <span style={{ color: "var(--error)" }}>*</span></label>
         <input
           className={`field-input${errors.company_name ? " field-error" : ""}`}
           value={form.company_name}
           disabled={!canEdit}
           onChange={e => onFieldChange("company_name", e.target.value)}
-          placeholder="Registered company name"
+          placeholder={t("Registered company name")}
         />
         {errors.company_name && <div className="field-error-msg">{errors.company_name}</div>}
       </div>
 
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
-          <label className="field-label">Trade / Brand Name</label>
+          <label className="field-label">{t("Trade / Brand Name")}</label>
           <input
             className="field-input"
             value={form.trade_name}
             disabled={!canEdit}
             onChange={e => onFieldChange("trade_name", e.target.value)}
-            placeholder="DBA or brand name (optional)"
+            placeholder={t("DBA or brand name (optional)")}
           />
         </div>
         <div className="field-group">
-          <label className="field-label">Date of Incorporation</label>
+          <label className="field-label">{t("Date of Incorporation")}</label>
           <DateInput className="field-input" value={form.date_of_incorporation} disabled={!canEdit} onChange={isoDate => onFieldChange("date_of_incorporation", isoDate)} />
         </div>
       </div>
@@ -97,51 +99,51 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
           {regConfig ? (
             <div className="form-row cols-2 mb-8">
               <div className="field-group">
-                <label className="field-label">{regConfig.label} {regConfig.required && <span style={{ color: "var(--error)" }}>*</span>}</label>
+                <label className="field-label">{t(regConfig.label)} {regConfig.required && <span style={{ color: "var(--error)" }}>*</span>}</label>
                 <input
                   className={`field-input${errors.cin ? " field-error" : ""}`}
                   value={form.cin}
                   disabled={!canEdit}
                   onChange={e => onFieldChange("cin", e.target.value.toUpperCase())}
-                  placeholder={regConfig.placeholder}
+                  placeholder={t(regConfig.placeholder)}
                   maxLength={21}
                 />
                 {errors.cin && <div className="field-error-msg">{errors.cin}</div>}
               </div>
               <div className="field-group">
-                <label className="field-label">ROC Jurisdiction</label>
+                <label className="field-label">{t("ROC Jurisdiction")}</label>
                 <input
                   className="field-input"
                   value={form.roc_jurisdiction}
                   disabled={!canEdit}
                   onChange={e => onFieldChange("roc_jurisdiction", e.target.value)}
-                  placeholder="e.g. Registrar of Companies, Hyderabad"
+                  placeholder={t("e.g. Registrar of Companies, Hyderabad")}
                 />
               </div>
             </div>
           ) : (
             <div className="field-group mb-8">
-              <label className="field-label">ROC Jurisdiction</label>
+              <label className="field-label">{t("ROC Jurisdiction")}</label>
               <input
                 className="field-input"
                 value={form.roc_jurisdiction}
                 disabled={!canEdit}
                 onChange={e => onFieldChange("roc_jurisdiction", e.target.value)}
-                placeholder="e.g. Registrar of Companies, Hyderabad"
+                placeholder={t("e.g. Registrar of Companies, Hyderabad")}
               />
             </div>
           )}
           {cin && (
             <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-              <Chip label="Listing" value={cin.listing} />
-              <Chip label="State" value={cin.stateCode} />
-              <Chip label="Reg. year" value={cin.year} />
+              <Chip label={t("Listing")} value={cin.listing === "Listed" ? t("Listed") : t("Unlisted")} />
+              <Chip label={t("State")} value={cin.stateCode} />
+              <Chip label={t("Reg. year")} value={cin.year} />
             </div>
           )}
 
           <div className="form-row cols-2 mb-8">
             <div className="field-group">
-              <label className="field-label">PAN <span style={{ color: "var(--error)" }}>*</span></label>
+              <label className="field-label">{t("PAN")} <span style={{ color: "var(--error)" }}>*</span></label>
               <input
                 className={`field-input${errors.pan ? " field-error" : ""}`}
                 value={form.pan}
@@ -153,7 +155,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
               {errors.pan && <div className="field-error-msg">{errors.pan}</div>}
             </div>
             <div className="field-group">
-              <label className="field-label">TAN <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(for TDS)</span></label>
+              <label className="field-label">{t("TAN")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(for TDS)")}</span></label>
               <input
                 className={`field-input${errors.tan ? " field-error" : ""}`}
                 value={form.tan}
@@ -167,11 +169,11 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
           </div>
           {pan && (
             <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-              <Chip label="Holder (4th char)" value={`${pan.holderChar} · ${pan.holderType}`} />
+              <Chip label={t("Holder (4th char)")} value={`${pan.holderChar} · ${t(pan.holderType)}`} />
               {pan.expectedChar && (
                 <Chip
-                  label="Entity match"
-                  value={pan.holderChar === pan.expectedChar ? "✓ matches" : `✗ expected ${pan.expectedChar}`}
+                  label={t("Entity match")}
+                  value={pan.holderChar === pan.expectedChar ? t("✓ matches") : t("✗ expected {char}", { char: pan.expectedChar })}
                   error={pan.holderChar !== pan.expectedChar}
                 />
               )}
@@ -183,7 +185,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
         <>
           <div className="form-row cols-2 mb-16">
             <div className="field-group">
-              <label className="field-label">Registration / Incorp. No. <span style={{ color: "var(--error)" }}>*</span></label>
+              <label className="field-label">{t("Registration / Incorp. No.")} <span style={{ color: "var(--error)" }}>*</span></label>
               <input
                 className={`field-input${errors.registration_number ? " field-error" : ""}`}
                 value={form.registration_number}
@@ -193,7 +195,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
               {errors.registration_number && <div className="field-error-msg">{errors.registration_number}</div>}
             </div>
             <div className="field-group">
-              <label className="field-label">Registry / Authority</label>
+              <label className="field-label">{t("Registry / Authority")}</label>
               <input
                 className="field-input"
                 value={form.roc_jurisdiction}
@@ -209,7 +211,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
               value={form.ein}
               disabled={!canEdit}
               onChange={e => onFieldChange("ein", e.target.value)}
-              placeholder="Employer Identification Number"
+              placeholder={t("Employer Identification Number")}
             />
             {errors.ein && <div className="field-error-msg">{errors.ein}</div>}
           </div>
@@ -217,13 +219,13 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
       )}
 
       <div className="field-group">
-        <label className="field-label">Holding / Parent Company <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(if a subsidiary)</span></label>
+        <label className="field-label">{t("Holding / Parent Company")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(if a subsidiary)")}</span></label>
         <input
           className="field-input"
           value={form.holding_company_info}
           disabled={!canEdit}
           onChange={e => onFieldChange("holding_company_info", e.target.value)}
-          placeholder="Parent company name and CIN"
+          placeholder={t("Parent company name and CIN")}
         />
       </div>
     </ProfileCard>

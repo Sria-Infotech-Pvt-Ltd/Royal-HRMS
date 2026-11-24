@@ -52,15 +52,15 @@ export default function PayslipStatements({ payslips, currentFinancialYearLabel,
           <StatementRow
             key={p.id}
             label={fmtMonth(p.cycle_start)}
-            amountLabel={`${INR(p.net_pay)} · PDF`}
+            amountLabel={tr("{amount} · PDF", { amount: INR(p.net_pay) })}
             downloadHref={`${API_BASE}${API.payroll.payslipPdf(p.id)}`}
             payslipId={p.id}
-            disabledTitle="PDF not yet available for this payslip"
+            disabledTitle={tr("PDF not yet available for this payslip")}
           />
         ))}
         <StatementRow
-          label={`Form 16 · ${currentFinancialYearLabel}`}
-          amountLabel="Tax certificate · PDF"
+          label={tr("Form 16 · {year}", { year: currentFinancialYearLabel })}
+          amountLabel={tr("Tax certificate · PDF")}
           downloadHref={`${API_BASE}${API.payroll.form16Pdf(fyStartYear)}`}
           payslipId={null}
         />

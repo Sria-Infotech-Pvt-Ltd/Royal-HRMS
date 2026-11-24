@@ -3,20 +3,23 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { AttendanceToday, AttendancePunch } from "@/types/dashboard";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 function formatSeconds(sec: number): string {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
-  return `${h}h ${m}m`;
+  return tr("{h}h {m}m", { h, m });
 }
 
 function modeLabel(mode: string): string {
-  if (mode === "office") return "Office";
-  if (mode === "wfh")    return "WFH";
+  if (mode === "office") return tr("Office");
+  if (mode === "wfh")    return tr("WFH");
   return mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
 export default function HrAttendanceCard() {
+  const t = useT();
   const { data, loading } = useFetch<AttendanceToday>(API.attendance.today);
 
   const firstIn  = data?.punches.find((p: AttendancePunch) => p.type === "IN");
@@ -26,7 +29,7 @@ export default function HrAttendanceCard() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-clock-hour-4" /> My Attendance Today</div>
+        <div className="card-title"><i className="ti ti-clock-hour-4" /> {t("My Attendance Today")}</div>
         {!loading && data && (
           <span style={{
             display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700,
@@ -35,28 +38,28 @@ export default function HrAttendanceCard() {
             color:      isClockedIn ? "#16a34a"               : "#dc2626",
           }}>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: isClockedIn ? "#16a34a" : "#dc2626", flexShrink: 0 }} />
-            {isClockedIn ? "Punched In" : "Punched Out"}
+            {isClockedIn ? t("Punched In") : t("Punched Out")}
           </span>
         )}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : !data || data.punches.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center" }}>
           <i className="ti ti-clock-off" style={{ fontSize: 28, color: "var(--on-variant)", opacity: 0.4, display: "block", marginBottom: 8 }} />
-          <div style={{ fontSize: 13, color: "var(--on-variant)" }}>Not punched in yet</div>
+          <div style={{ fontSize: 13, color: "var(--on-variant)" }}>{t("Not punched in yet")}</div>
         </div>
       ) : (
         <div style={{ padding: "12px 20px 16px" }}>
           {/* Stat tiles */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
             {[
-              { icon: "ti-login",  label: "First Punch In",  val: firstIn?.time  ?? "—" },
-              { icon: "ti-logout", label: "Last Punch Out",  val: lastOut?.time  ?? "—" },
-              { icon: "ti-clock",  label: "Total Time",      val: data.total_seconds > 0 ? formatSeconds(data.total_seconds) : "—" },
+              { icon: "ti-login",  label: t("First Punch In"),  val: firstIn?.time  ?? "—" },
+              { icon: "ti-logout", label: t("Last Punch Out"),  val: lastOut?.time  ?? "—" },
+              { icon: "ti-clock",  label: t("Total Time"),      val: data.total_seconds > 0 ? formatSeconds(data.total_seconds) : "—" },
             ].map(item => (
               <div key={item.label} style={{ padding: "10px 12px", borderRadius: 8, background: "var(--bg-high)", textAlign: "center" }}>
                 <i className={`ti ${item.icon}`} style={{ fontSize: 18, color: "var(--primary)", display: "block", marginBottom: 4 }} />
@@ -68,7 +71,7 @@ export default function HrAttendanceCard() {
 
           {/* Punch log */}
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--on-variant)", marginBottom: 6 }}>
-            Punch Log
+            {t("Punch Log")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {data.punches.map((punch: AttendancePunch, index: number) => (
@@ -83,7 +86,7 @@ export default function HrAttendanceCard() {
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-bg)" }}>
-                    {punch.type === "IN" ? "Punched In" : "Punched Out"} · {punch.time}
+                    {punch.type === "IN" ? t("Punched In") : t("Punched Out")} · {punch.time}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--on-variant)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {punch.location}

@@ -12,6 +12,7 @@ import FaceStatusPanel from "@/components/FaceStatusPanel";
 import FaceCaptureStage from "@/components/FaceCaptureStage";
 import { FACE_FLOW_V2 } from "@/lib/faceApi/flowConfig";
 import { fillLightState } from "@/lib/faceApi/flowParams";
+import { useT } from "@/hooks/useI18n";
 
 interface FaceVerificationModalProps {
   isOpen:     boolean;
@@ -34,6 +35,7 @@ interface FaceVerificationModalProps {
 const VERIFICATION_FRAMES_TO_CAPTURE = 3;
 
 export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: FaceVerificationModalProps) {
+  const t = useT();
   const { phase, errorMessage, liveHint, lowLight, livenessProgress, modelProgress, videoRef, canvasRef, start, retry, stop } = useFaceLivenessCapture({
     // Punch In / Punch Out: a head turn is the single liveness step (registration still requires blink AND turn).
     livenessMode: "turn_only",
@@ -101,13 +103,13 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
         <div className="flex items-center justify-between px-5 py-3.5 flex-shrink-0" style={{ background: "var(--primary)" }}>
           <div className="flex items-center gap-2.5">
             <i className="ti ti-face-id text-white text-[18px]" />
-            <p className="text-[14px] font-semibold text-white leading-tight">Verify Your Identity</p>
+            <p className="text-[14px] font-semibold text-white leading-tight">{t("Verify Your Identity")}</p>
           </div>
           <button
             onClick={handleClose}
             suppressHydrationWarning
             className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/15 transition-colors"
-           aria-label="Close">
+           aria-label={t("Close")}>
             <i className="ti ti-x text-[18px]" />
           </button>
         </div>
@@ -120,7 +122,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
             />
             {fillLight && (
               <p className="text-center text-[12px] mt-3" style={{ color: "#475569" }}>
-                Low light detected — your screen is now acting as a light. Raising your screen brightness helps.
+                {t("Low light detected — your screen is now acting as a light. Raising your screen brightness helps.")}
               </p>
             )}
           </div>
@@ -128,57 +130,57 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
           {(phase === "idle" || phase === "loading_models") && (
             <FaceStatusPanel
               icon="ti-loader-2" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
-              title="Preparing face verification" message="Downloading face models (first time only)…" progress={modelProgress}
+              title={t("Preparing face verification")} message={t("Downloading face models (first time only)…")} progress={modelProgress}
             />
           )}
 
           {phase === "requesting_camera" && (
             <FaceStatusPanel
               icon="ti-camera" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
-              title="Requesting camera access" message="Please allow camera access in the browser prompt to punch in or out."
+              title={t("Requesting camera access")} message={t("Please allow camera access in the browser prompt to punch in or out.")}
             />
           )}
 
           {phase === "camera_denied" && (
             <FaceStatusPanel
               icon="ti-camera-off" iconColor="var(--error)" iconBg="rgba(239,68,68,0.08)"
-              title="Camera access denied"
-              message="Your account requires face verification to punch in or out. Allow camera access for this site in your browser's settings, then try again."
-              action={{ label: "Try Again", onClick: retry }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              title={t("Camera access denied")}
+              message={t("Your account requires face verification to punch in or out. Allow camera access for this site in your browser's settings, then try again.")}
+              action={{ label: t("Try Again"), onClick: retry }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
 
           {phase === "liveness_failed" && (
             <FaceStatusPanel
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
-              title="Couldn't confirm you're live"
-              message="We didn't detect a slight head turn in time. Make sure you're well-lit and centered, then try again."
-              action={{ label: "Try Again", onClick: retry }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              title={t("Couldn't confirm you're live")}
+              message={t("We didn't detect a slight head turn in time. Make sure you're well-lit and centered, then try again.")}
+              action={{ label: t("Try Again"), onClick: retry }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
 
           {phase === "quality_failed" && (
             <FaceStatusPanel
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
-              title="Capture wasn't clear enough"
+              title={t("Capture wasn't clear enough")}
               message={
                 errorMessage
-                ?? "We couldn't get a reliably clear capture to verify against your registered face. Try better lighting and hold steady."
+                ?? t("We couldn't get a reliably clear capture to verify against your registered face. Try better lighting and hold steady.")
               }
-              action={{ label: "Try Again", onClick: retry }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              action={{ label: t("Try Again"), onClick: retry }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
 
           {phase === "error" && (
             <FaceStatusPanel
               icon="ti-alert-circle" iconColor="var(--error)" iconBg="rgba(239,68,68,0.08)"
-              title="Something went wrong"
-              message={errorMessage ?? "Please try again."}
-              action={{ label: "Try Again", onClick: retry }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              title={t("Something went wrong")}
+              message={errorMessage ?? t("Please try again.")}
+              action={{ label: t("Try Again"), onClick: retry }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
         </div>

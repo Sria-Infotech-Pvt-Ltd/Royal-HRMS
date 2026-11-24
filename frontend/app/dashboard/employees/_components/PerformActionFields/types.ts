@@ -1,3 +1,5 @@
+import { tr } from "@/lib/i18n/tr";
+
 // Shared types for the "Perform an action" modal and its per-action-type
 // field subcomponents (kept in one place so the five field components and
 // the orchestrator all agree on the same shapes).
@@ -98,26 +100,28 @@ export function approvalRouteFor(
   // step is satisfied by raising it.
   if (requiresApproval) {
     switch (action) {
-      case "promotion":      return "Reporting manager (raises) → HR Business Partner, then Payroll Admin if a new CTC is included.";
-      case "org_assignment": return "Reporting manager (raises) → HR Business Partner.";
-      case "pay_change":     return "HR Business Partner → Payroll Admin.";
-      case "confirmation":   return "Reporting manager (raises) → HR Business Partner.";
+      case "promotion":      return tr("Reporting manager (raises) → HR Business Partner, then Payroll Admin if a new CTC is included.");
+      case "org_assignment": return tr("Reporting manager (raises) → HR Business Partner.");
+      case "pay_change":     return tr("HR Business Partner → Payroll Admin.");
+      case "confirmation":   return tr("Reporting manager (raises) → HR Business Partner.");
       default: break;
     }
   }
   switch (action) {
     case "promotion":
-      return "Requires employees.edit — applied directly by whoever has that permission (typically the reporting manager or HR); no queued approval step exists for this action yet.";
+      return tr("Requires employees.edit — applied directly by whoever has that permission (typically the reporting manager or HR); no queued approval step exists for this action yet.");
     case "org_assignment":
-      return `Requires employees.edit${reportingManagerName ? ` — currently held by ${reportingManagerName} or HR` : ""}; no queued approval step exists for this action yet.`;
+      return reportingManagerName
+        ? tr("Requires employees.edit — currently held by {name} or HR; no queued approval step exists for this action yet.", { name: reportingManagerName })
+        : tr("Requires employees.edit; no queued approval step exists for this action yet.");
     case "pay_change":
-      return "Requires payroll.edit — typically an HR Business Partner or Payroll Admin; no queued approval step exists for this action yet.";
+      return tr("Requires payroll.edit — typically an HR Business Partner or Payroll Admin; no queued approval step exists for this action yet.");
     case "confirmation":
-      return "Requires employees.confirm — HR/Admin applies this directly, with the effective date and reason recorded in the audit trail.";
+      return tr("Requires employees.confirm — HR/Admin applies this directly, with the effective date and reason recorded in the audit trail.");
     case "separation":
       return isManager
-        ? "HR, then Branch Admin (this employee is a manager, per the real separation approval chain)."
-        : "Reporting manager, then HR (the real separation approval chain for this employee)."
+        ? tr("HR, then Branch Admin (this employee is a manager, per the real separation approval chain).")
+        : tr("Reporting manager, then HR (the real separation approval chain for this employee).")
     ;
     default:
       return "";
@@ -127,14 +131,14 @@ export function approvalRouteFor(
 export function reversibilityNote(action: ActionType): { text: string; tone: "purple" | "amber" } {
   switch (action) {
     case "promotion":
-      return { tone: "purple", text: "Reversible. A correction action delimits this record and restores the previous position; the history keeps both." };
+      return { tone: "purple", text: tr("Reversible. A correction action delimits this record and restores the previous position; the history keeps both.") };
     case "org_assignment":
-      return { tone: "purple", text: "Reversible. Record a further org assignment to move the employee back." };
+      return { tone: "purple", text: tr("Reversible. Record a further org assignment to move the employee back.") };
     case "pay_change":
-      return { tone: "purple", text: "Reversible going forward, but any payroll run already processed on this record must be corrected through arrears." };
+      return { tone: "purple", text: tr("Reversible going forward, but any payroll run already processed on this record must be corrected through arrears.") };
     case "confirmation":
-      return { tone: "amber", text: "This is a one-way transition from probation to confirmed/active. Verify the employee and effective date before applying." };
+      return { tone: "amber", text: tr("This is a one-way transition from probation to confirmed/active. Verify the employee and effective date before applying.") };
     case "separation":
-      return { tone: "amber", text: "Not reversible. Undoing a separation requires a fresh Hire action and a new employee record — the original number is not reissued." };
+      return { tone: "amber", text: tr("Not reversible. Undoing a separation requires a fresh Hire action and a new employee record — the original number is not reissued.") };
   }
 }

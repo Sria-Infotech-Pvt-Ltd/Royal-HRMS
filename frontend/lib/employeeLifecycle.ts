@@ -1,3 +1,4 @@
+import { tr } from "@/lib/i18n/tr";
 import type { AccountStatus, EmploymentStage, OnboardingStage } from "@/types/employeeLifecycle";
 
 export const STAGE_LABEL: Record<EmploymentStage, string> = {
@@ -44,10 +45,10 @@ function formatShortDate(iso: string): string {
 export function lifecycleNote(
   stage: EmploymentStage | undefined, dateOfJoining: string, isLocked = false,
 ): LifecycleNote | null {
-  if (stage === "pre_joining") return { text: dateOfJoining ? `Joins ${formatShortDate(dateOfJoining)}` : "Pre-Joining", tone: "info" };
-  if (stage === "unknown") return { text: "Joining date missing — HR to correct", tone: "warn" };
-  if (stage === "terminated") return { text: "Employment ended", tone: "crit" };
-  if (isLocked) return { text: "Account locked", tone: "warn" };
+  if (stage === "pre_joining") return { text: dateOfJoining ? tr("Joins {date}", { date: formatShortDate(dateOfJoining) }) : tr("Pre-Joining"), tone: "info" };
+  if (stage === "unknown") return { text: tr("Joining date missing — HR to correct"), tone: "warn" };
+  if (stage === "terminated") return { text: tr("Employment ended"), tone: "crit" };
+  if (isLocked) return { text: tr("Account locked"), tone: "warn" };
   return null;
 }
 

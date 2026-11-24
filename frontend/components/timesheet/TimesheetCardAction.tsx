@@ -6,6 +6,7 @@
 // the signed-in person's own sheet.
 
 import Link from "next/link";
+import { useT } from "@/hooks/useI18n";
 import { getViewAsEmployee } from "@/lib/viewAs";
 import { cardActionLabel } from "@/lib/timesheet";
 import type { WeeklyTimesheetSummary } from "@/types/timesheet";
@@ -18,8 +19,9 @@ interface Props {
 }
 
 export default function TimesheetCardAction({ summary, className, onOpen }: Props) {
+  const t = useT();
   if (getViewAsEmployee()) return null;
-  const label = cardActionLabel(summary.timesheet_status);
+  const label = t(cardActionLabel(summary.timesheet_status));
   if (onOpen) return <button type="button" className={className} onClick={() => onOpen(summary.week_start)}>{label}</button>;
   return <Link className={className} href={`/dashboard/ess?tab=timesheet&week=${summary.week_start}`}>{label}</Link>;
 }

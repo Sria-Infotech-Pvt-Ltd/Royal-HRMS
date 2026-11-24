@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import type { JobTemplate, JobTemplatePayload } from "@/types/orgStructure";
 import { confirmDialog } from "@/components/DialogProvider";
 
@@ -19,6 +20,7 @@ function Spin() {
 }
 
 export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChanged }: Props) {
+  const t = useT();
   const [name, setName] = useState("");
   const [band, setBand] = useState("");
   const [adding, setAdding] = useState(false);
@@ -28,7 +30,7 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
   const [rowError, setRowError] = useState<string | null>(null);
 
   async function addTemplate() {
-    if (!name.trim()) { setAddError("Name is required."); return; }
+    if (!name.trim()) { setAddError(t("Name is required.")); return; }
     setAdding(true);
     setAddError(null);
     const payload: JobTemplatePayload = { name: name.trim(), band: band.trim().toUpperCase() };
@@ -38,7 +40,7 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
       setBand("");
       onChanged();
     } catch (err: unknown) {
-      setAddError((err as { message?: string })?.message ?? "Failed to create job template.");
+      setAddError((err as { message?: string })?.message ?? t("Failed to create job template."));
     } finally {
       setAdding(false);
     }
@@ -51,21 +53,21 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
       await clientApi.patch(API.orgStructure.jobTemplates.detail(template.id), body);
       onChanged();
     } catch (err: unknown) {
-      setRowError((err as { message?: string })?.message ?? "Failed to update job template.");
+      setRowError((err as { message?: string })?.message ?? t("Failed to update job template."));
     } finally {
       setBusyId(null);
     }
   }
 
   async function remove(template: JobTemplate) {
-    if (!(await confirmDialog(`Delete the job template "${template.name}"? This can't be undone.`))) return;
+    if (!(await confirmDialog(t("Delete the job template \"{name}\"? This can't be undone.", { name: template.name })))) return;
     setBusyId(template.id);
     setRowError(null);
     try {
       await clientApi.delete(API.orgStructure.jobTemplates.detail(template.id));
       onChanged();
     } catch (err: unknown) {
-      setRowError((err as { message?: string })?.message ?? "Failed to delete job template.");
+      setRowError((err as { message?: string })?.message ?? t("Failed to delete job template."));
     } finally {
       setBusyId(null);
     }
@@ -73,16 +75,15 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
 
   return (
     <Modal
-      title={<><i className="ti ti-briefcase" style={{ marginRight: 8 }} />Manage job templates</>}
+      title={<><i className="ti ti-briefcase" style={{ marginRight: 8 }} />{t("Manage job templates")}</>}
       onClose={onClose}
       maxWidth={560}
       size="lg"
       scrollBody
-      footer={<button className="btn btn-ghost" onClick={onClose}>Close</button>}
+      footer={<button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>}
     >
       <div style={{ fontSize: 11.5, color: "var(--outline)", marginBottom: 14 }}>
-        Reusable job titles offered when adding a position. Deactivate a template to stop offering
-        it for new positions without losing history on positions that already use it.
+        {t("Reusable job titles offered when adding a position. Deactivate a template to stop offering it for new positions without losing history on positions that already use it.")}
       </div>
 
       {canEdit && (
@@ -92,7 +93,7 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
               className={`field-input${addError ? " field-error" : ""}`}
               value={name}
               onChange={e => { setName(e.target.value); setAddError(null); }}
-              placeholder="e.g. Senior ABAP Consultant"
+              placeholder={t("e.g. Senior ABAP Consultant")}
             />
             {addError && <p className="field-error-msg">{addError}</p>}
           </div>
@@ -102,11 +103,11 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
               style={{ fontFamily: "monospace" }}
               value={band}
               onChange={e => setBand(e.target.value)}
-              placeholder="Band (L4)"
+              placeholder={t("Band (L4)")}
             />
           </div>
           <button className="btn btn-filled" onClick={addTemplate} disabled={adding} style={{ flexShrink: 0 }}>
-            {adding ? <Spin /> : <><i className="ti ti-plus" /> Add</>}
+            {adding ? <Spin /> : <><i className="ti ti-plus" /> {t("Add")}</>}
           </button>
         </div>
       )}
@@ -121,10 +122,10 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Band</th>
-              <th style={{ textAlign: "center" }}>Active</th>
-              {canEdit && <th style={{ textAlign: "center" }}>Actions</th>}
+              <th>{t("Name")}</th>
+              <th>{t("Band")}</th>
+              <th style={{ textAlign: "center" }}>{t("Active")}</th>
+              {canEdit && <th style={{ textAlign: "center" }}>{t("Actions")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -150,8 +151,8 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
                       }}
                       onClick={() => remove(j)}
                       disabled={busyId === j.id}
-                      title="Delete job template"
-                     aria-label="Delete job template">
+                      title={t("Delete job template")}
+                     aria-label={t("Delete job template")}>
                       <i className="ti ti-trash" style={{ fontSize: 13 }} />
                     </button>
                   </td>
@@ -161,7 +162,7 @@ export default function ManageJobTemplatesModal({ jobs, canEdit, onClose, onChan
             {jobs.length === 0 && (
               <tr>
                 <td colSpan={canEdit ? 4 : 3} style={{ textAlign: "center", padding: "32px 0", color: "var(--on-variant)" }}>
-                  No job templates yet.
+                  {t("No job templates yet.")}
                 </td>
               </tr>
             )}

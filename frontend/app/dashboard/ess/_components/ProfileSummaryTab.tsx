@@ -8,6 +8,7 @@
 // request flow (ProfileCorrectionModal) — no direct self-edit path, even
 // for accounts holding employees.edit_own_profile.
 
+import { tr } from "@/lib/i18n/tr";
 import { isFutureDate } from "@/lib/employeeLifecycle";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
@@ -89,8 +90,8 @@ function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Empl
 function approverName(chain: ApprovalChain | null | undefined, stage: "l1" | "l2"): string {
   const item = chain?.stages.find(entry => entry.stage === stage);
   if (!item) return "—";
-  if (item.status === "skipped") return "Not applicable";
-  return item.user?.full_name || "Not assigned";
+  if (item.status === "skipped") return tr("Not applicable");
+  return item.user?.full_name || tr("Not assigned");
 }
 
 export default function ProfileSummaryTab() {
@@ -115,7 +116,7 @@ export default function ProfileSummaryTab() {
               type="button"
               onClick={() => setShowPhotoModal(true)}
               suppressHydrationWarning
-              title="Change profile photo"
+              title={tr("Change profile photo")}
               style={{
                 position: "absolute", bottom: -2, right: -2,
                 width: 20, height: 20, borderRadius: "50%",
@@ -123,17 +124,17 @@ export default function ProfileSummaryTab() {
                 display: "flex", alignItems: "center", justifyContent: "center",
                 border: "2px solid var(--surface)", cursor: "pointer",
               }}
-             aria-label="Change profile photo">
+             aria-label={tr("Change profile photo")}>
               <i className="ti ti-camera" style={{ fontSize: 10 }} />
             </button>
           </div>
           <div>
-            <div className="page-title">My profile</div>
-            <div className="page-sub">The same employee record and layout used by Admin, with self-service permissions.</div>
+            <div className="page-title">{tr("My profile")}</div>
+            <div className="page-sub">{tr("The same employee record and layout used by Admin, with self-service permissions.")}</div>
           </div>
         </div>
         <div className="page-actions">
-          <button className="btn btn-filled" onClick={() => setShowRecord(true)}>Open full employee profile</button>
+          <button className="btn btn-filled" onClick={() => setShowRecord(true)}>{tr("Open full employee profile")}</button>
         </div>
       </div>
 
@@ -148,14 +149,14 @@ export default function ProfileSummaryTab() {
 
       {correctionSubmitted && (
         <div className="alert alert-success mb-16">
-          <i className="ti ti-circle-check" /> Correction request submitted — track it under My Requests.
+          <i className="ti ti-circle-check" /> {tr("Correction request submitted — track it under My Requests.")}
         </div>
       )}
 
       <div className="card mb-16">
         <div style={{ padding: "18px 20px 4px" }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>Profile controls</div>
-          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review your official record or update your contact details.</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{tr("Profile controls")}</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>{tr("Review your official record or update your contact details.")}</div>
         </div>
         <div className="ess-pair" style={{ padding: "12px 20px 20px", gap: 10 }}>
           <button
@@ -163,61 +164,61 @@ export default function ProfileSummaryTab() {
             onClick={() => setShowRecord(true)}
             style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
           >
-            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>View employee record</div>
-            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Personal, employment, pay, statutory, leave and audit details</div>
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>{tr("View employee record")}</div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>{tr("Personal, employment, pay, statutory, leave and audit details")}</div>
           </button>
           <button
             type="button"
             onClick={() => setShowCorrection(true)}
             style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
           >
-            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Request profile correction</div>
-            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Submit a change for HR to review and apply</div>
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>{tr("Request profile correction")}</div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>{tr("Submit a change for HR to review and apply")}</div>
           </button>
         </div>
       </div>
 
       <div className="card">
         <div style={{ padding: "18px 20px 4px" }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>My record at a glance</div>
-          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review official fields, then open the full record for all sections.</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{tr("My record at a glance")}</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>{tr("Review official fields, then open the full record for all sections.")}</div>
         </div>
         <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(200px, calc((100% - 42px) / 4)), 1fr))", gap: 14 }}>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYEE ID</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr("EMPLOYEE ID")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.employee_id ?? "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>DATE OF BIRTH</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr("DATE OF BIRTH")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{fmtDate(data?.profile?.date_of_birth)}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>DATE OF JOINING</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr("DATE OF JOINING")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{fmtDate(data?.date_of_joining ?? data?.date_joined)}</div>
             {isFutureDate(data?.date_of_joining) && (
               <div style={{ fontSize: 11, color: "var(--info)", marginTop: 4 }}>
-                Attendance, leave and expenses open from your joining date. You can complete onboarding now.
+                {tr("Attendance, leave and expenses open from your joining date. You can complete onboarding now.")}
               </div>
             )}
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK LOCATION</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr("WORK LOCATION")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.work_location || data?.branch || "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>MOBILE NUMBER</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr("MOBILE NUMBER")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.phone || "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK EMAIL</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr("WORK EMAIL")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4, wordBreak: "break-all" }}>{data?.email || "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>L1 APPROVER</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr("L1 APPROVER")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{approverName(chain, "l1")}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>L2 APPROVER (HR)</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr("L2 APPROVER (HR)")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{approverName(chain, "l2")}</div>
           </div>
         </div>
@@ -232,7 +233,7 @@ export default function ProfileSummaryTab() {
             setShowRecord(false);
             setShowCorrection(true);
           }}
-          correctionLabel="Request profile correction"
+          correctionLabel={tr("Request profile correction")}
         />
       )}
 

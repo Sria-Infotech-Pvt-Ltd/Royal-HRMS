@@ -20,6 +20,7 @@ import {
   correctionToMyItem, expenseToMyItem, fmtSubmitted, hrHelpToMyItem, leaveToMyItem, toSortableTime, wfhToMyItem,
 } from "./_data";
 import DateInput from "@/components/shared/DateInput";
+import { tr } from "@/lib/i18n/tr";
 
 type SortKey = "submittedAt" | "lastUpdated" | "status";
 const PAGE_SIZE = 10;
@@ -28,13 +29,13 @@ function RequestTypeBadge({ kind }: { kind: MyRequestKind }) {
   const meta = TYPE_META[kind];
   return (
     <span className="badge" style={{ background: meta.bg, color: meta.color, gap: 5 }}>
-      <i className={`ti ${meta.icon}`} style={{ fontSize: 12 }} /> {meta.label}
+      <i className={`ti ${meta.icon}`} style={{ fontSize: 12 }} /> {tr(meta.label)}
     </span>
   );
 }
 
 function StatusChip({ status }: { status: DisplayStatus }) {
-  return <span className={STATUS_BADGE_CLASS[status]}>{STATUS_LABEL[status]}</span>;
+  return <span className={STATUS_BADGE_CLASS[status]}>{tr(STATUS_LABEL[status])}</span>;
 }
 
 interface Props {
@@ -131,7 +132,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
       refetchLeave();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to cancel leave request.", "error");
+      showToast(msg || tr("Failed to cancel leave request."), "error");
     } finally {
       setDetailItem(null);
     }
@@ -144,27 +145,27 @@ export default function MyRequestsClient({ initialTab }: Props) {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">My Requests</div>
-          <div className="page-sub">Track every leave, expense, and attendance correction request you&rsquo;ve submitted</div>
+          <div className="page-title">{tr("My Requests")}</div>
+          <div className="page-sub">{tr("Track every leave, expense, and attendance correction request you’ve submitted")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-filled" onClick={() => setShowNewRequest(true)}>
-            <i className="ti ti-plus" /> New request
+            <i className="ti ti-plus" /> {tr("New request")}
           </button>
         </div>
       </div>
 
       <div className="tabs">
-        {REQUEST_TABS.map(t => (
+        {REQUEST_TABS.map(tab => (
           <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
             suppressHydrationWarning
-            className={`tab flex items-center gap-[7px] ${activeTab === t.key ? "active" : ""}`}
+            className={`tab flex items-center gap-[7px] ${activeTab === tab.key ? "active" : ""}`}
           >
-            <i className={`ti ${t.icon} text-[15px]`} />
-            {t.label}
-            <span className="badge badge-neutral" style={{ fontSize: 10 }}>{tabCounts[t.key]}</span>
+            <i className={`ti ${tab.icon} text-[15px]`} />
+            {tr(tab.label)}
+            <span className="badge badge-neutral" style={{ fontSize: 10 }}>{tabCounts[tab.key]}</span>
           </button>
         ))}
       </div>
@@ -179,7 +180,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
           <i className="ti ti-search" />
           <input
             type="text"
-            placeholder="Search by title or request ID…"
+            placeholder={tr("Search by title or request ID…")}
             value={search}
             onChange={e => setSearch(e.target.value)}
             suppressHydrationWarning
@@ -192,11 +193,11 @@ export default function MyRequestsClient({ initialTab }: Props) {
           onChange={e => setStatusFilter(e.target.value as "all" | DisplayStatus)}
           suppressHydrationWarning
         >
-          {STATUS_FILTERS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+          {STATUS_FILTERS.map(s => <option key={s.key} value={s.key}>{tr(s.label)}</option>)}
         </select>
-        <DateInput className="field-input" style={{ width: 150 }} value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} title="Submitted from" />
-        <span style={{ fontSize: 12, color: "var(--on-variant)" }}>to</span>
-        <DateInput className="field-input" style={{ width: 150 }} value={dateTo} onChange={isoDate => setDateTo(isoDate)} title="Submitted to" />
+        <DateInput className="field-input" style={{ width: 150 }} value={dateFrom} onChange={isoDate => setDateFrom(isoDate)} title={tr("Submitted from")} />
+        <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{tr("to")}</span>
+        <DateInput className="field-input" style={{ width: 150 }} value={dateTo} onChange={isoDate => setDateTo(isoDate)} title={tr("Submitted to")} />
       </div>
 
       <div className="card">
@@ -208,27 +209,27 @@ export default function MyRequestsClient({ initialTab }: Props) {
           ) : sorted.length === 0 ? (
             <div className="empty-state">
               <i className="ti ti-inbox" />
-              <h3>No requests found</h3>
-              <p>{allItems.length === 0 ? "You haven't submitted any requests yet." : "No requests match the selected filters."}</p>
+              <h3>{tr("No requests found")}</h3>
+              <p>{allItems.length === 0 ? tr("You haven't submitted any requests yet.") : tr("No requests match the selected filters.")}</p>
             </div>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th>Request ID</th>
-                  <th>Request Type</th>
-                  <th>Title</th>
+                  <th>{tr("Request ID")}</th>
+                  <th>{tr("Request Type")}</th>
+                  <th>{tr("Title")}</th>
                   <th style={{ cursor: "pointer" }} onClick={() => handleSort("submittedAt")}>
-                    Submitted Date <i className={`ti ${sortIcon("submittedAt")}`} />
+                    {tr("Submitted Date")} <i className={`ti ${sortIcon("submittedAt")}`} />
                   </th>
                   <th style={{ cursor: "pointer" }} onClick={() => handleSort("status")}>
-                    Status <i className={`ti ${sortIcon("status")}`} />
+                    {tr("Status")} <i className={`ti ${sortIcon("status")}`} />
                   </th>
-                  <th>Approver</th>
+                  <th>{tr("Approver")}</th>
                   <th style={{ cursor: "pointer" }} onClick={() => handleSort("lastUpdated")}>
-                    Last Updated <i className={`ti ${sortIcon("lastUpdated")}`} />
+                    {tr("Last Updated")} <i className={`ti ${sortIcon("lastUpdated")}`} />
                   </th>
-                  <th style={{ textAlign: "right" }}>Action</th>
+                  <th style={{ textAlign: "right" }}>{tr("Action")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -246,7 +247,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
                     <td>{fmtSubmitted(item.lastUpdated)}</td>
                     <td style={{ textAlign: "right" }} onClick={e => e.stopPropagation()}>
                       <button className="btn btn-ghost btn-sm" onClick={() => setDetailItem(item)} suppressHydrationWarning>
-                        <i className="ti ti-eye" /> View
+                        <i className="ti ti-eye" /> {tr("View")}
                       </button>
                     </td>
                   </tr>
@@ -259,14 +260,14 @@ export default function MyRequestsClient({ initialTab }: Props) {
         {sorted.length > 0 && totalPages > 1 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
             <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sorted.length)} of {sorted.length}
+              {tr("Showing {from}–{to} of {total}", { from: (page - 1) * PAGE_SIZE + 1, to: Math.min(page * PAGE_SIZE, sorted.length), total: sorted.length })}
             </span>
             <div style={{ display: "flex", gap: 6 }}>
               <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
-                <i className="ti ti-chevron-left" /> Prev
+                <i className="ti ti-chevron-left" /> {tr("Prev")}
               </button>
               <button className="btn btn-ghost btn-sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
-                Next <i className="ti ti-chevron-right" />
+                {tr("Next")} <i className="ti ti-chevron-right" />
               </button>
             </div>
           </div>
@@ -308,7 +309,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
           onClose={() => setShowNewRequest(false)}
           onSubmitted={() => {
             setShowNewRequest(false);
-            showToast("Your request was submitted.", "success");
+            showToast(tr("Your request was submitted."), "success");
             refetchHrHelp();
           }}
         />

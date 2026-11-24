@@ -3,6 +3,7 @@
 // The Basic pay dialog's three wage tables (Earnings / Employer contributions / Statutory deductions) and the
 // totals under them — presentational; the amounts come from lib/payBreakup.ts.
 
+import { useT } from "@/hooks/useI18n";
 import type { PayBreakup, PayLine, OverrideKey } from "@/lib/payBreakup";
 
 const inr = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
@@ -15,16 +16,17 @@ function Group({ title, badge, badgeClass, lines, editable, onChange }: {
   editable: boolean;
   onChange: (key: OverrideKey, value: string) => void;
 }) {
+  const t = useT();
   if (lines.length === 0) return null;
 
   return (
     <>
-      <div className="sechead" style={{ marginTop: 10 }}>{title} <span className={`own ${badgeClass}`}>{badge}</span></div>
-      <div className="wt-h"><div>CODE</div><div>DESCRIPTION</div><div>AMOUNT (₹)</div><div>BASIS</div><div /></div>
+      <div className="sechead" style={{ marginTop: 10 }}>{t(title)} <span className={`own ${badgeClass}`}>{t(badge)}</span></div>
+      <div className="wt-h"><div>{t("CODE")}</div><div>{t("DESCRIPTION")}</div><div>{t("AMOUNT (₹)")}</div><div>{t("BASIS")}</div><div /></div>
       {lines.map(line => (
         <div className="wt-r" key={line.code}>
           <div className="wt-code">{line.code}</div>
-          <div><div className="wt-name">{line.name}</div></div>
+          <div><div className="wt-name">{t(line.name)}</div></div>
           <div>
             <input
               className="finput pw"
@@ -33,11 +35,11 @@ function Group({ title, badge, badgeClass, lines, editable, onChange }: {
               value={line.amount}
               disabled={!line.editable || !editable}
               onChange={event => { if (line.key) onChange(line.key, event.target.value); }}
-              aria-label={`${line.name} amount`}
+              aria-label={t("{name} amount", { name: t(line.name) })}
             />
           </div>
           <div className="wt-inval">{line.note}</div>
-          <div>{line.editable ? <span className="own hr">HR</span> : <span className="tag">AUTO</span>}</div>
+          <div>{line.editable ? <span className="own hr">{t("HR")}</span> : <span className="tag">{t("AUTO")}</span>}</div>
         </div>
       ))}
     </>
@@ -54,6 +56,7 @@ export default function PayBreakupTables({ breakup, annualCostToCompany, editabl
   visibleLineCodes: readonly string[];
   onChange: (key: OverrideKey, value: string) => void;
 }) {
+  const t = useT();
   const visibleLines = (lines: PayLine[]) =>
     lines.filter(line => line.structureComponent || visibleLineCodes.includes(line.code));
 
@@ -63,16 +66,16 @@ export default function PayBreakupTables({ breakup, annualCostToCompany, editabl
       <Group title="EMPLOYER CONTRIBUTIONS" badge="STATUTORY" badgeClass="adm" lines={visibleLines(breakup.employer)} editable={editable} onChange={onChange} />
       <Group title="STATUTORY DEDUCTIONS" badge="STATUTORY" badgeClass="adm" lines={visibleLines(breakup.deductions)} editable={editable} onChange={onChange} />
       <div className="divider" style={{ margin: "10px 0" }} />
-      <div className="paytot"><span>Monthly gross — paid to the employee</span><b>{inr(breakup.gross)}</b></div>
-      <div className="paytot"><span>Employer contributions — on top of gross</span><b>{inr(breakup.employerTotal)}</b></div>
-      <div className="paytot"><span>Monthly cost to company</span><b>{inr(breakup.monthlyCtc)}</b></div>
-      <div className="paytot"><span>Annual cost to company</span><b>{inr(annualCostToCompany)}</b></div>
-      <div className="paytot"><span>Statutory deductions</span><b>−{inr(breakup.deductionTotal)}</b></div>
-      <div className="paytot"><span>Net take-home before income tax</span><b>{inr(breakup.net)}</b></div>
+      <div className="paytot"><span>{t("Monthly gross — paid to the employee")}</span><b>{inr(breakup.gross)}</b></div>
+      <div className="paytot"><span>{t("Employer contributions — on top of gross")}</span><b>{inr(breakup.employerTotal)}</b></div>
+      <div className="paytot"><span>{t("Monthly cost to company")}</span><b>{inr(breakup.monthlyCtc)}</b></div>
+      <div className="paytot"><span>{t("Annual cost to company")}</span><b>{inr(annualCostToCompany)}</b></div>
+      <div className="paytot"><span>{t("Statutory deductions")}</span><b>−{inr(breakup.deductionTotal)}</b></div>
+      <div className="paytot"><span>{t("Net take-home before income tax")}</span><b>{inr(breakup.net)}</b></div>
       {hasRecord && (
         <div className={`paytot${variance !== 0 ? " warn" : ""}`}>
-          <span>Variance vs annual CTC on record</span>
-          <b>{variance === 0 ? "Matches" : `${variance > 0 ? "+" : "−"}${inr(Math.abs(variance))}`}</b>
+          <span>{t("Variance vs annual CTC on record")}</span>
+          <b>{variance === 0 ? t("Matches") : `${variance > 0 ? "+" : "−"}${inr(Math.abs(variance))}`}</b>
         </div>
       )}
     </>

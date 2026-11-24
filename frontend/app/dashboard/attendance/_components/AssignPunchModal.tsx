@@ -8,6 +8,7 @@ import { useToast } from "@/components/ToastProvider";
 import SearchableSelect from "@/components/SearchableSelect";
 import Modal from "@/components/Modal";
 import type { InvalidPunch } from "@/types/attendance";
+import { useT } from "@/hooks/useI18n";
 
 interface HrUser {
   id:          string;
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function AssignPunchModal({ punch, onClose, onAssigned }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const hrListUrl = punch.branch && punch.branch !== "—"
     ? `${API.employees.hrList}?branch=${encodeURIComponent(punch.branch)}`
@@ -32,15 +34,15 @@ export default function AssignPunchModal({ punch, onClose, onAssigned }: Props) 
   const [error, setError]           = useState<string | null>(null);
 
   async function handleSubmit() {
-    if (!assignedTo) { setError("Please select an HR user."); return; }
+    if (!assignedTo) { setError(t("Please select an HR user.")); return; }
     setSubmitting(true);
     setError(null);
     try {
       await clientApi.post(API.attendance.invalidPunchAssign(punch.id), { assigned_to: assignedTo });
-      showToast("Invalid punch assigned.", "success");
+      showToast(t("Invalid punch assigned."), "success");
       onAssigned();
     } catch (err: unknown) {
-      const message = (err as { message?: string })?.message ?? "Failed to assign invalid punch.";
+      const message = (err as { message?: string })?.message ?? t("Failed to assign invalid punch.");
       setError(message);
       showToast(message, "error");
     } finally {
@@ -53,16 +55,16 @@ export default function AssignPunchModal({ punch, onClose, onAssigned }: Props) 
       title={
         <>
           <i className="ti ti-user-check" style={{ marginRight: 8, color: "var(--primary)" }} />
-          Assign Invalid Punch
+          {t("Assign Invalid Punch")}
         </>
       }
       onClose={onClose}
       maxWidth={420}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? <><i className="ti ti-loader-2" /> Assigning…</> : "Assign"}
+            {submitting ? <><i className="ti ti-loader-2" /> {t("Assigning…")}</> : t("Assign")}
           </button>
         </>
       }
@@ -72,16 +74,16 @@ export default function AssignPunchModal({ punch, onClose, onAssigned }: Props) 
           )}
 
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 12 }}>
-            Device: {punch.device_id} · {punch.raw_time}
+            {t("Device: {device} · {time}", { device: punch.device_id, time: punch.raw_time })}
           </div>
 
           <div className="field-group">
-            <label className="field-label">Assign to HR user</label>
+            <label className="field-label">{t("Assign to HR user")}</label>
             <SearchableSelect
               inputClassName="field-input"
               value={assignedTo}
               onChange={setAssignedTo}
-              placeholder="Select HR user…"
+              placeholder={t("Select HR user…")}
               options={(hrUsers ?? []).map(u => ({ value: u.id, label: `${u.full_name} (${u.employee_id})` }))}
             />
           </div>

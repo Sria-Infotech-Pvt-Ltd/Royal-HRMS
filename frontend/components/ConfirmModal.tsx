@@ -2,6 +2,7 @@
 
 import { useId, useRef } from "react";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   title:        string;
@@ -21,6 +22,7 @@ interface Props {
  * here so every module reuses the same component instead of each hand-
  * rolling its own confirm dialog. */
 export default function ConfirmModal({ title, body, confirmLabel, danger, saving, onConfirm, onCancel }: Props) {
+  const t = useT();
   const btnCls = danger ? "btn-danger" : "btn-filled";
   // A click's target is resolved at mouseup, not mousedown — selecting the
   // body text and releasing past the modal's edge would otherwise land on
@@ -47,7 +49,7 @@ export default function ConfirmModal({ title, body, confirmLabel, danger, saving
             <i className={`ti ${danger ? "ti-alert-triangle" : "ti-help-circle"}`} style={{ marginRight: 8 }} />
             {title}
           </div>
-          <button className="modal-close" aria-label="Close" onClick={onCancel} suppressHydrationWarning>
+          <button className="modal-close" aria-label={t("Close")} onClick={onCancel} suppressHydrationWarning>
             <i className="ti ti-x" />
           </button>
         </div>
@@ -58,10 +60,10 @@ export default function ConfirmModal({ title, body, confirmLabel, danger, saving
 
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onCancel} disabled={saving} suppressHydrationWarning>
-            Go Back
+            {t("Go Back")}
           </button>
           <button className={`btn ${btnCls}`} onClick={onConfirm} disabled={saving} suppressHydrationWarning>
-            {saving ? <><i className="ti ti-loader-2 spin" /> Working…</> : confirmLabel}
+            {saving ? <><i className="ti ti-loader-2 spin" /> {t("Working…")}</> : confirmLabel}
           </button>
         </div>
       </div>

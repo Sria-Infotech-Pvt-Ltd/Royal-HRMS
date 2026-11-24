@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
@@ -31,6 +32,7 @@ const fmt = (n: number | string) =>
   `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
 export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
+  const t = useT();
   const { data: payslipPage, loading, refetch } =
     useFetch<PagedResponse<EmployeePayslip>>(API.payroll.cyclePayslips(cycleId));
   const { data: cycle } = useFetch<PayrollCycle>(API.payroll.cycle(cycleId));
@@ -53,7 +55,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
       refetch();
     } catch (error: unknown) {
       const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? "Failed to dispatch payslips.";
+        ?? t("Failed to dispatch payslips.");
       setErr(msg);
     } finally {
       setDispatching(false);
@@ -69,15 +71,15 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
               <i className="ti ti-file-invoice" style={{ fontSize: 18, color: "var(--primary)" }} />
             </div>
             <div>
-              <div className="card-title">Dispatch Payslips</div>
+              <div className="card-title">{t("Dispatch Payslips")}</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                {payslips.length} employees · Net: <strong style={{ color: "var(--success)" }}>{fmt(totalNet)}</strong>
+                {t("{count} employees · Net:", { count: payslips.length })} <strong style={{ color: "var(--success)" }}>{fmt(totalNet)}</strong>
               </div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {cycleDispatched ? (
-              <span className="badge badge-success"><i className="ti ti-check" /> Dispatched</span>
+              <span className="badge badge-success"><i className="ti ti-check" /> {t("Dispatched")}</span>
             ) : (
               <button
                 className="btn btn-filled btn-sm"
@@ -85,11 +87,11 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
                 disabled={dispatching || payslips.length === 0}
               >
                 {dispatching
-                  ? <><i className="ti ti-loader-2 animate-spin" /> Dispatching…</>
-                  : <><i className="ti ti-send" /> Dispatch All</>}
+                  ? <><i className="ti ti-loader-2 animate-spin" /> {t("Dispatching…")}</>
+                  : <><i className="ti ti-send" /> {t("Dispatch All")}</>}
               </button>
             )}
-            <button className="btn btn-ghost btn-sm" onClick={refetch} aria-label="Refresh"><i className="ti ti-refresh" /></button>
+            <button className="btn btn-ghost btn-sm" onClick={refetch} aria-label={t("Refresh")}><i className="ti ti-refresh" /></button>
           </div>
         </div>
 
@@ -103,7 +105,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
         {cycleDispatched && (
           <div className="alert alert-success" style={{ margin: "0", borderRadius: 0 }}>
             <i className="ti ti-circle-check" />
-            <span>All payslips dispatched. Employees have {cycle?.query_window_closes_at ? `until ${formatDate(cycle.query_window_closes_at)}` : "the configured window"} to raise queries.</span>
+            <span>{cycle?.query_window_closes_at ? t("All payslips dispatched. Employees have until {date} to raise queries.", { date: formatDate(cycle.query_window_closes_at) }) : t("All payslips dispatched. Employees have the configured window to raise queries.")}</span>
           </div>
         )}
 
@@ -116,12 +118,12 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
             <table>
               <thead>
                 <tr>
-                  <th>Employee</th>
-                  <th style={{ textAlign: "right" }}>Gross</th>
-                  <th style={{ textAlign: "right" }}>Deductions</th>
-                  <th style={{ textAlign: "right" }}>Net Salary</th>
-                  <th>Status</th>
-                  <th>Sent At</th>
+                  <th>{t("Employee")}</th>
+                  <th style={{ textAlign: "right" }}>{t("Gross")}</th>
+                  <th style={{ textAlign: "right" }}>{t("Deductions")}</th>
+                  <th style={{ textAlign: "right" }}>{t("Net Salary")}</th>
+                  <th>{t("Status")}</th>
+                  <th>{t("Sent At")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -145,7 +147,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
                       <td style={{ textAlign: "right", fontWeight: 700, color: "var(--success)" }}>{fmt(p.net_pay)}</td>
                       <td>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${style.bg} ${style.text}`}>
-                          {style.label}
+                          {t(style.label)}
                         </span>
                       </td>
                       <td style={{ fontSize: 11, color: "var(--on-variant)" }}>
@@ -160,7 +162,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
               {payslips.length > 0 && (
                 <tfoot>
                   <tr style={{ background: "var(--bg-low)", borderTop: "2px solid var(--outline-v)" }}>
-                    <td style={{ fontWeight: 700 }}>Total ({payslips.length} employees)</td>
+                    <td style={{ fontWeight: 700 }}>{t("Total ({count} employees)", { count: payslips.length })}</td>
                     <td style={{ textAlign: "right", fontWeight: 700 }}>{fmt(payslips.reduce((s, p) => s + Number(p.gross_earnings), 0))}</td>
                     <td style={{ textAlign: "right", fontWeight: 700, color: "var(--error)" }}>{fmt(payslips.reduce((s, p) => s + Number(p.total_deductions), 0))}</td>
                     <td style={{ textAlign: "right", fontWeight: 800, color: "var(--success)", fontSize: 15 }}>{fmt(totalNet)}</td>
@@ -172,30 +174,32 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
 
             {payslips.length === 0 && (
               <div style={{ padding: "32px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-                No payslips found for this cycle.
+                {t("No payslips found for this cycle.")}
               </div>
             )}
           </div>
         )}
 
         <div style={{ padding: "16px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
+          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> {t("Back")}</button>
           <button
             className="btn btn-filled"
             onClick={onNext}
             disabled={!cycleDispatched}
             style={{ opacity: cycleDispatched ? 1 : 0.5 }}
           >
-            Continue to Mark as Paid <i className="ti ti-arrow-right" />
+            {t("Continue to Mark as Paid")} <i className="ti ti-arrow-right" />
           </button>
         </div>
       </div>
 
       {showConfirm && (
         <ConfirmModal
-          title="Dispatch payslips?"
-          body={`This will email payslips to all ${payslips.length} employee${payslips.length !== 1 ? "s" : ""} in this cycle (total net pay ${fmt(totalNet)}). Employees will be able to view and query them immediately. This cannot be undone.`}
-          confirmLabel="Dispatch All"
+          title={t("Dispatch payslips?")}
+          body={payslips.length === 1
+            ? t("This will email payslips to all {count} employee in this cycle (total net pay {amount}). Employees will be able to view and query them immediately. This cannot be undone.", { count: payslips.length, amount: fmt(totalNet) })
+            : t("This will email payslips to all {count} employees in this cycle (total net pay {amount}). Employees will be able to view and query them immediately. This cannot be undone.", { count: payslips.length, amount: fmt(totalNet) })}
+          confirmLabel={t("Dispatch All")}
           saving={dispatching}
           onConfirm={dispatch}
           onCancel={() => setShowConfirm(false)}

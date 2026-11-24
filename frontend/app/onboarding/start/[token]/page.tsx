@@ -5,8 +5,10 @@
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useOnboardingLink } from "@/hooks/useOnboardingLink";
+import { useT } from "@/hooks/useI18n";
 
 export default function OnboardingStartPage() {
+  const t = useT();
   const router = useRouter();
   const params = useParams<{ token: string }>();
   const { state, message } = useOnboardingLink(params.token);
@@ -20,11 +22,11 @@ export default function OnboardingStartPage() {
       <div style={{ maxWidth: 440, textAlign: "center" }}>
         {state === "refused" ? (
           <>
-            <h1 style={{ fontSize: 20, marginBottom: 8 }}>This link can&apos;t be used</h1>
+            <h1 style={{ fontSize: 20, marginBottom: 8 }}>{t("This link can't be used")}</h1>
             <p role="alert" style={{ color: "var(--muted, #555)" }}>{message}</p>
           </>
         ) : (
-          <p>Opening your onboarding…</p>
+          <p>{t("Opening your onboarding…")}</p>
         )}
       </div>
     </main>

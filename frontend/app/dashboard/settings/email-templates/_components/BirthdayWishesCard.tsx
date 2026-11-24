@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 interface BirthdaySettingsForm {
   is_enabled:                     boolean;
@@ -29,6 +30,7 @@ const EMPTY_BIRTHDAY: BirthdaySettingsForm = {
 };
 
 export default function BirthdayWishesCard({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
+  const t = useT();
   const [open,    setOpen]    = useState(false);
   const [form,    setForm]    = useState<BirthdaySettingsForm>(EMPTY_BIRTHDAY);
   const [base,    setBase]    = useState<BirthdaySettingsForm>(EMPTY_BIRTHDAY);
@@ -52,9 +54,9 @@ export default function BirthdayWishesCard({ showToast }: { showToast: (msg: str
       setForm(updated);
       setBase(updated);
       setOpen(false);
-      showToast("Birthday wishes settings updated");
+      showToast(t("Birthday wishes settings updated"));
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Failed to save birthday settings", false);
+      showToast((err as { message?: string }).message ?? t("Failed to save birthday settings"), false);
     } finally {
       setSaving(false);
     }
@@ -70,14 +72,14 @@ export default function BirthdayWishesCard({ showToast }: { showToast: (msg: str
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--outline-v)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <i className="ti ti-cake" style={{ fontSize: 16, color: "var(--primary)" }} />
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Automatic Birthday Wishes</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{t("Automatic Birthday Wishes")}</span>
           <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 4, color: form.is_enabled ? "var(--success)" : "var(--on-variant)" }}>
-            {form.is_enabled ? "Enabled" : "Disabled"}
+            {form.is_enabled ? t("Enabled") : t("Disabled")}
           </span>
         </div>
         {!open && (
           <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} suppressHydrationWarning>
-            <i className="ti ti-pencil" style={{ fontSize: 13 }} /> Edit
+            <i className="ti ti-pencil" style={{ fontSize: 13 }} /> {t("Edit")}
           </button>
         )}
       </div>
@@ -85,11 +87,11 @@ export default function BirthdayWishesCard({ showToast }: { showToast: (msg: str
       {!open && (
         <div style={{ padding: "16px 18px", fontSize: 12, color: "var(--on-variant)", display: "flex", flexDirection: "column", gap: 6 }}>
           <span>
-            Dashboard banner and notification copy shown to the employee, their team, and their manager on someone&apos;s birthday.
-            The birthday <em>email</em> subject/body is edited below, in the Wish template.
+            {t("Dashboard banner and notification copy shown to the employee, their team, and their manager on someone's birthday.")}{" "}
+            {t("The birthday")} <em>{t("email")}</em> {t("subject/body is edited below, in the Wish template.")}
           </span>
           <a href="/dashboard/settings/audit?module=birthday" style={{ color: "var(--primary)", fontWeight: 500 }}>
-            <i className="ti ti-history" /> View birthday email delivery logs — Audit Log →
+            <i className="ti ti-history" /> {t("View birthday email delivery logs — Audit Log →")}
           </a>
         </div>
       )}
@@ -103,15 +105,15 @@ export default function BirthdayWishesCard({ showToast }: { showToast: (msg: str
                 checked={form.is_enabled}
                 onChange={e => setForm(f => ({ ...f, is_enabled: e.target.checked }))}
               />
-              <span>Enable automatic birthday wishes</span>
+              <span>{t("Enable automatic birthday wishes")}</span>
             </label>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-              When off, no birthday email, dashboard banner, or notification is sent to anyone.
+              {t("When off, no birthday email, dashboard banner, or notification is sent to anyone.")}
             </div>
           </div>
 
           <div>
-            <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>Dashboard birthday banner message</label>
+            <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>{t("Dashboard birthday banner message")}</label>
             <textarea
               className="field-input"
               rows={2}
@@ -119,12 +121,12 @@ export default function BirthdayWishesCard({ showToast }: { showToast: (msg: str
               onChange={e => setForm(f => ({ ...f, banner_message_template: e.target.value }))}
             />
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-              Shown under &quot;Happy Birthday, [Name]!&quot; on every employee&apos;s dashboard, company-wide, whenever it&apos;s someone&apos;s birthday.
+              {t("Shown under \"Happy Birthday, [Name]!\" on every employee's dashboard, company-wide, whenever it's someone's birthday.")}
             </div>
           </div>
 
           <div>
-            <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>Employee in-app notification text</label>
+            <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>{t("Employee in-app notification text")}</label>
             <textarea
               className="field-input"
               rows={2}
@@ -134,7 +136,7 @@ export default function BirthdayWishesCard({ showToast }: { showToast: (msg: str
           </div>
 
           <div>
-            <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>Teammate notification / card text</label>
+            <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>{t("Teammate notification / card text")}</label>
             <textarea
               className="field-input"
               rows={2}
@@ -142,12 +144,12 @@ export default function BirthdayWishesCard({ showToast }: { showToast: (msg: str
               onChange={e => setForm(f => ({ ...f, team_notification_template: e.target.value }))}
             />
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-              Use <code>{"{employee_name}"}</code> as a placeholder — shown to teammates sharing the same reporting manager.
+              {t("Use")} <code>{"{employee_name}"}</code> {t("as a placeholder — shown to teammates sharing the same reporting manager.")}
             </div>
           </div>
 
           <div>
-            <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>Manager notification / card text</label>
+            <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>{t("Manager notification / card text")}</label>
             <textarea
               className="field-input"
               rows={2}
@@ -155,14 +157,14 @@ export default function BirthdayWishesCard({ showToast }: { showToast: (msg: str
               onChange={e => setForm(f => ({ ...f, manager_notification_template: e.target.value }))}
             />
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-              Use <code>{"{employee_name}"}</code> as a placeholder — shown to the employee&apos;s reporting manager.
+              {t("Use")} <code>{"{employee_name}"}</code> {t("as a placeholder — shown to the employee's reporting manager.")}
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="btn btn-ghost btn-sm" onClick={cancel} disabled={saving} suppressHydrationWarning>Cancel</button>
+            <button className="btn btn-ghost btn-sm" onClick={cancel} disabled={saving} suppressHydrationWarning>{t("Cancel")}</button>
             <button className="btn btn-filled btn-sm" onClick={save} disabled={saving} suppressHydrationWarning>
-              {saving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</> : "Save Birthday Settings"}
+              {saving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</> : t("Save Birthday Settings")}
             </button>
           </div>
         </div>

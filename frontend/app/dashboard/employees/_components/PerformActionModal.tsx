@@ -10,6 +10,8 @@
 // see each action's submit() below for exactly which one).
 
 import { useEffect, useMemo, useState } from "react";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDateSlash } from "@/lib/formatDate";
@@ -58,6 +60,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
   onApplied: () => void;
   initialActionType?: ActionType;
 }) {
+  const t = useT();
   const [actionType, setActionType] = useState<ActionType | "">(initialActionType ?? "");
   const [reason, setReason] = useState("");
   const [effectiveFrom, setEffectiveFrom] = useState(today());
@@ -108,7 +111,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
   );
 
   const separationTypeOptions: FieldOption[] = useMemo(
-    () => (separationTypes ?? []).map(t => ({ value: t.value, label: t.label })),
+    () => (separationTypes ?? []).map(option => ({ value: option.value, label: option.label })),
     [separationTypes],
   );
 
@@ -141,24 +144,24 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
     const rows: FieldDiffRow[] = [];
     if (actionType === "promotion") {
       const selected = positionOptions.find(p => p.value === positionId);
-      rows.push({ key: "position", label: "Position", before: employee.designation || "—", after: selected ? selected.label : null });
-      if (annualCtc) rows.push({ key: "annual_ctc", label: "Annual CTC", before: "—", after: `₹${Number(annualCtc).toLocaleString("en-IN")}` });
+      rows.push({ key: "position", label: tr("Position"), before: employee.designation || "—", after: selected ? selected.label : null });
+      if (annualCtc) rows.push({ key: "annual_ctc", label: tr("Annual CTC"), before: "—", after: `₹${Number(annualCtc).toLocaleString("en-IN")}` });
     }
     if (actionType === "org_assignment") {
       const selectedMgr = managerOptions.find(m => m.value === managerId);
-      rows.push({ key: "reporting_manager", label: "Reporting manager", before: reportingManagerDisplay(currentManagerName, employee.noManagerByDesign), after: selectedMgr ? selectedMgr.label : null });
-      rows.push({ key: "work_location", label: "Work location", before: detail?.work_location || "—", after: workLocation ? workLocation : null });
+      rows.push({ key: "reporting_manager", label: tr("Reporting manager"), before: reportingManagerDisplay(currentManagerName, employee.noManagerByDesign), after: selectedMgr ? selectedMgr.label : null });
+      rows.push({ key: "work_location", label: tr("Work location"), before: detail?.work_location || "—", after: workLocation ? workLocation : null });
     }
     if (actionType === "pay_change") {
-      rows.push({ key: "annual_ctc", label: "Annual CTC", before: "—", after: annualCtc ? `₹${Number(annualCtc).toLocaleString("en-IN")}` : null });
+      rows.push({ key: "annual_ctc", label: tr("Annual CTC"), before: "—", after: annualCtc ? `₹${Number(annualCtc).toLocaleString("en-IN")}` : null });
     }
     if (actionType === "confirmation") {
-      rows.push({ key: "employment_status", label: "Employee status", before: currentStatusLabel, after: "Confirmed" });
+      rows.push({ key: "employment_status", label: tr("Employee status"), before: tr(currentStatusLabel), after: tr("Confirmed") });
     }
     if (actionType === "separation") {
-      rows.push({ key: "employment_status", label: "Employee status", before: "Active", after: "Notice Period" });
-      rows.push({ key: "notice_period_start", label: "Notice period starts", before: "Not set", after: effectiveFrom ? DATE_FMT(effectiveFrom) : null });
-      rows.push({ key: "last_working_day", label: "Last working day", before: "Not set", after: lastWorkingDay ? DATE_FMT(lastWorkingDay) : null });
+      rows.push({ key: "employment_status", label: tr("Employee status"), before: tr("Active"), after: tr("Notice Period") });
+      rows.push({ key: "notice_period_start", label: tr("Notice period starts"), before: tr("Not set"), after: effectiveFrom ? DATE_FMT(effectiveFrom) : null });
+      rows.push({ key: "last_working_day", label: tr("Last working day"), before: tr("Not set"), after: lastWorkingDay ? DATE_FMT(lastWorkingDay) : null });
     }
     return rows;
   }, [actionType, positionId, positionOptions, annualCtc, managerId, managerOptions, workLocation, detail, employee, currentStatusLabel, lastWorkingDay, effectiveFrom, currentManagerName]);
@@ -169,28 +172,28 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
   const directoryStatus = directoryStatusLabel(employee);
 
   const notChangedRows: { label: string; value: string }[] = [
-    { key: "position", label: "Position", value: employee.designation || "—" },
-    { key: "org_unit", label: "Org unit", value: orgUnitLabel },
-    { key: "work_location", label: "Work location", value: detail?.work_location || employee.location || "—" },
-    { key: "reporting_manager", label: "Reporting manager", value: reportingManagerDisplay(currentManagerName, employee.noManagerByDesign) },
-    { key: "employment_status", label: "Status", value: directoryStatus },
-    { key: "record_range", label: "Current record", value: currentRecord ? `${DATE_FMT(currentRecord.effective_from)} → ${DATE_FMT(currentRecord.effective_to)}` : "—" },
+    { key: "position", label: t("Position"), value: employee.designation || "—" },
+    { key: "org_unit", label: t("Org unit"), value: orgUnitLabel },
+    { key: "work_location", label: t("Work location"), value: detail?.work_location || employee.location || "—" },
+    { key: "reporting_manager", label: t("Reporting manager"), value: reportingManagerDisplay(currentManagerName, employee.noManagerByDesign) },
+    { key: "employment_status", label: t("Status"), value: t(directoryStatus) },
+    { key: "record_range", label: t("Current record"), value: currentRecord ? `${DATE_FMT(currentRecord.effective_from)} → ${DATE_FMT(currentRecord.effective_to)}` : "—" },
   ].filter(r => r.key === "record_range" || r.key === "position" || !changedFieldKeys.includes(r.key)).map(r => ({ label: r.label, value: r.value }));
 
   const route = actionType ? approvalRouteFor(actionType, currentManagerName, false, raisesRequest) : "";
   const reversibility = actionType ? reversibilityNote(actionType) : null;
 
   function validate(): string {
-    if (!actionType) return "Select an action type.";
-    if (!reason && actionType !== "separation") return "Select a reason.";
-    if (!effectiveFrom) return "Effective from is required.";
-    if (actionType === "promotion" && !positionId) return "Select a position.";
-    if (actionType === "pay_change" && !annualCtc) return "Annual CTC is required.";
-    if (actionType === "confirmation" && currentStatusLabel === "Confirmed") return "This employee is already confirmed.";
+    if (!actionType) return t("Select an action type.");
+    if (!reason && actionType !== "separation") return t("Select a reason.");
+    if (!effectiveFrom) return t("Effective from is required.");
+    if (actionType === "promotion" && !positionId) return t("Select a position.");
+    if (actionType === "pay_change" && !annualCtc) return t("Annual CTC is required.");
+    if (actionType === "confirmation" && currentStatusLabel === "Confirmed") return t("This employee is already confirmed.");
     if (actionType === "separation") {
-      if (!separationType) return "Select a separation type.";
-      if (!lastWorkingDay) return "Last working day is required.";
-      if (!separationConfirmed) return "Confirm the authorisation checkbox before applying.";
+      if (!separationType) return t("Select a separation type.");
+      if (!lastWorkingDay) return t("Last working day is required.");
+      if (!separationConfirmed) return t("Confirm the authorisation checkbox before applying.");
     }
     return "";
   }
@@ -211,7 +214,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
           reporting_manager_id: managerId || undefined,
           work_location: workLocation || undefined,
         });
-        showToast(`${ACTION_LABELS[actionType as ActionType]} sent for approval.`, "success");
+        showToast(t("{action} sent for approval.", { action: t(ACTION_LABELS[actionType as ActionType]) }), "success");
       } else if (actionType === "promotion") {
         await clientApi.put(API.employees.detail(employee.code), {
           position: positionId, effective_date: effectiveFrom, reason,
@@ -246,7 +249,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
       onClose();
     } catch (error: unknown) {
       const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(msg ?? "Failed to apply this action. Please try again.");
+      setErr(msg ?? t("Failed to apply this action. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -254,22 +257,26 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
 
   const applyDisabled = saving || (actionType === "separation" && !separationConfirmed);
 
+  const footParams = { end: dayBefore(effectiveFrom) === "—" ? "—" : DATE_FMT(dayBefore(effectiveFrom)), start: DATE_FMT(effectiveFrom) };
   const footNote = effectiveFrom
-    ? `${raisesRequest ? "If approved, the current" : "Current"} record will be delimited to ${dayBefore(effectiveFrom) === "—" ? "—" : DATE_FMT(dayBefore(effectiveFrom))}; the new record runs ${DATE_FMT(effectiveFrom)} → 31/12/9999.`
+    ? (raisesRequest
+      ? t("If approved, the current record will be delimited to {end}; the new record runs {start} → 31/12/9999.", footParams)
+      : t("Current record will be delimited to {end}; the new record runs {start} → 31/12/9999.", footParams))
     : "";
+  const subtitleParams = { name: fullName(employee), code: employee.code, from: currentRecord ? DATE_FMT(currentRecord.effective_from) : "", to: currentRecord ? DATE_FMT(currentRecord.effective_to) : "" };
 
   return (
     <RefModal
-      title="Perform an" accent="action"
-      subtitle={`${fullName(employee)} · ${employee.code} — current record runs ${currentRecord ? `${DATE_FMT(currentRecord.effective_from)} to ${DATE_FMT(currentRecord.effective_to)}` : "— to 31/12/9999"}.`}
+      title={t("Perform an")} accent={t("action")}
+      subtitle={currentRecord ? t("{name} · {code} — current record runs {from} to {to}.", subtitleParams) : t("{name} · {code} — current record runs — to 31/12/9999.", subtitleParams)}
       onClose={onClose}
       closeDisabled={saving}
       note={footNote}
       actions={
         <>
-          <button onClick={onClose} disabled={saving} className="rvbtn ghost" type="button">Cancel</button>
+          <button onClick={onClose} disabled={saving} className="rvbtn ghost" type="button">{t("Cancel")}</button>
           <button onClick={submit} disabled={applyDisabled} className="rvbtn pri" type="button">
-            {saving ? (raisesRequest ? "Sending…" : "Applying…") : (raisesRequest ? "Raise for approval" : "Apply action")}
+            {saving ? (raisesRequest ? t("Sending…") : t("Applying…")) : (raisesRequest ? t("Raise for approval") : t("Apply action"))}
           </button>
         </>
       }
@@ -281,31 +288,31 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
           </div>
         )}
 
-        <div className="sechead">ACTION</div>
+        <div className="sechead">{t("ACTION")}</div>
         <div className="g3">
           <div className="f">
-            <label>Action type <span className="req">*</span></label>
+            <label>{t("Action type")} <span className="req">*</span></label>
             <select value={actionType} onChange={e => setActionType(e.target.value as ActionType)} className="finput" style={{ cursor: "pointer" }}>
-              <option value="">Select an action type</option>
-              <option value="promotion">Promotion</option>
-              <option value="org_assignment">Org assignment</option>
-              <option value="pay_change">Pay change</option>
-              <option value="confirmation">Confirmation</option>
-              <option value="separation">Separation</option>
+              <option value="">{t("Select an action type")}</option>
+              <option value="promotion">{t("Promotion")}</option>
+              <option value="org_assignment">{t("Org assignment")}</option>
+              <option value="pay_change">{t("Pay change")}</option>
+              <option value="confirmation">{t("Confirmation")}</option>
+              <option value="separation">{t("Separation")}</option>
             </select>
           </div>
           {actionType !== "separation" && (
             <ReasonSelect reason={reason} setReason={setReason} options={reasonOptions} actionChosen={!!actionType} />
           )}
           <div className="f">
-            <label>Effective from <span className="req">*</span></label>
+            <label>{t("Effective from")} <span className="req">*</span></label>
             <DateInput value={effectiveFrom} onChange={isoDate => setEffectiveFrom(isoDate)} className="finput" />
           </div>
         </div>
 
         <div className="divider" />
-        <div className="sechead">{actionType ? `FIELDS THIS ${ACTION_LABELS[actionType].toUpperCase()} MAY CHANGE` : "FIELDS THIS ACTION MAY CHANGE"}</div>
-        {!actionType && <div className="hint">Choose an action above and the fields it may change will appear here.</div>}
+        <div className="sechead">{actionType ? t("FIELDS THIS {action} MAY CHANGE", { action: t(ACTION_LABELS[actionType]).toUpperCase() }) : t("FIELDS THIS ACTION MAY CHANGE")}</div>
+        {!actionType && <div className="hint">{t("Choose an action above and the fields it may change will appear here.")}</div>}
 
         {actionType && (
           <>
@@ -325,9 +332,9 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
               <>
                 <SeparationFields
                   separationType={separationType} setSeparationType={setSeparationType} typeOptions={separationTypeOptions}
-                  lastWorkingDay={lastWorkingDay} setLastWorkingDay={setLastWorkingDay} resultingStatusLabel="Notice Period"
+                  lastWorkingDay={lastWorkingDay} setLastWorkingDay={setLastWorkingDay} resultingStatusLabel={t("Notice Period")}
                 />
-                <p className="hint">Reason for this separation is captured in the full Separation module after this record is filed (real reason list already used there).</p>
+                <p className="hint">{t("Reason for this separation is captured in the full Separation module after this record is filed (real reason list already used there).")}</p>
               </>
             )}
 
@@ -336,7 +343,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
               actionType={actionType}
               diffRows={diffRows}
               rows={notChangedRows}
-              route={route}
+              route={t(route)}
               effectiveFromLabel={DATE_FMT(effectiveFrom)}
               raisedByName={currentUser?.name ?? "—"}
               raisedByRole={currentUser?.designation || "—"}
@@ -353,7 +360,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
         {!actionType && <EmployeeDetailsCard employee={employee} rows={notChangedRows} />}
 
         {units.length === 0 && actionType === "promotion" && (
-          <p className="hint">Loading org structure…</p>
+          <p className="hint">{t("Loading org structure…")}</p>
         )}
     </RefModal>
   );

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   href: string;
@@ -13,13 +14,14 @@ interface Props {
 // Makes a whole dashboard card a link: click or Enter/Space opens the page it summarises. A div (not an <a> or <button>)
 // because the cards hold their own headings, charts and, sometimes, buttons.
 export default function LinkCard({ href, label, children }: Props) {
+  const t = useT();
   const router = useRouter();
   const open = () => router.push(href);
   return (
     <div
       role="link"
       tabIndex={0}
-      aria-label={label}
+      aria-label={t(label)}
       className="wf-linkcard"
       onClick={open}
       onKeyDown={event => {

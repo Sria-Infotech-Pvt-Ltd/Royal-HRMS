@@ -39,7 +39,7 @@ export default function RecentPunchesCard() {
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13.5 }}>{row.date} · {row.location}</div>
                 <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                  {row.clockIn ? `In ${row.clockIn}` : tr("No in-punch")}
+                  {row.clockIn ? tr("In {time}", { time: row.clockIn }) : tr("No in-punch")}
                   {row.clockOut ? tr(" · Out {clockOut}", { clockOut: row.clockOut }) : ` · ${row.source}`}
                 </div>
               </div>

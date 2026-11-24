@@ -10,6 +10,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import type { PaginatedResponse } from "@/types/attendance";
+import { useT } from "@/hooks/useI18n";
 
 interface HrHelpRequest {
   id: string;
@@ -25,13 +26,14 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export default function GrowthFeedbackRequestsCard() {
+  const t = useT();
   const { data, loading } = useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=50&mine=1`);
   const requests = (data?.results ?? []).filter(r => r.topic === "feedback_request");
 
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-message-heart" /> Feedback requests</div>
+        <div className="card-title"><i className="ti ti-message-heart" /> {t("Feedback requests")}</div>
       </div>
       {loading ? (
         <div style={{ padding: "4px 20px 20px" }}>
@@ -39,9 +41,9 @@ export default function GrowthFeedbackRequestsCard() {
         </div>
       ) : requests.length === 0 ? (
         <div style={{ padding: "4px 20px 20px" }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>No feedback requests</div>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{t("No feedback requests")}</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
-            Ask a manager or colleague for focused feedback.
+            {t("Ask a manager or colleague for focused feedback.")}
           </div>
         </div>
       ) : (
@@ -58,7 +60,7 @@ export default function GrowthFeedbackRequestsCard() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{r.message}</div>
                 <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                  Requested {formatDate(r.created_at)}
+                  {t("Requested {date}", { date: formatDate(r.created_at) })}
                 </div>
               </div>
               <span className={`badge ${STATUS_BADGE[r.status] ?? "badge-neutral"}`}>{r.status_display}</span>

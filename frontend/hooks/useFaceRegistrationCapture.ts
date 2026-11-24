@@ -4,6 +4,7 @@
 // captured, submits it for HR approval. All the camera/detection/liveness
 // engine lives in useFaceLivenessCapture — this hook only owns the
 // submit/submitted/error states layered on top of a successful capture.
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -62,7 +63,7 @@ export function useFaceRegistrationCapture(): UseFaceRegistrationCapture {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         (err as { message?: string })?.message ??
-        "Failed to submit registration. Please try again.";
+        tr("Failed to submit registration. Please try again.");
       setSubmitError(msg);
       setSubmitPhase("error");
     }

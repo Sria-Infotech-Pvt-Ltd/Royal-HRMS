@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { useT } from "@/hooks/useI18n";
 
 export interface HireDocument {
   id: string;
@@ -35,6 +36,7 @@ interface Props {
  * places shows up as already-uploaded everywhere else, with no separate
  * state to keep in sync. */
 export default function DocUploadButton({ documentType, label, existing, uploading, onUpload, onDelete, entryRef }: Props) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -51,7 +53,7 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
       // neighbouring column. The filename is the only part that shrinks (ellipsis).
       <div className="flex items-center" style={{ fontSize: 12, flexWrap: "wrap", gap: 6, minWidth: 0, maxWidth: "100%" }}>
         <div className="flex items-center gap-2" style={{ flex: "1 1 120px", minWidth: 0 }}>
-          <span className="badge badge-success" style={{ flexShrink: 0, whiteSpace: "nowrap" }}><i className="ti ti-circle-check" /> Uploaded</span>
+          <span className="badge badge-success" style={{ flexShrink: 0, whiteSpace: "nowrap" }}><i className="ti ti-circle-check" /> {t("Uploaded")}</span>
           <span
             style={{ color: "var(--on-variant)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
             title={existing.file_name}
@@ -65,7 +67,7 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
         {existing.file_url && (
           <a
             href={existing.file_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm"
-            title={`View ${label}`} aria-label={`View ${label}`}
+            title={t("View {label}", { label })} aria-label={t("View {label}", { label })}
           >
             <i className="ti ti-eye" aria-hidden="true" />
           </a>
@@ -75,8 +77,8 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
           onClick={() => inputRef.current?.click()}
           className="btn btn-ghost btn-sm"
           disabled={uploading}
-          title={`Replace ${label}`}
-          aria-label={`Replace ${label}`}
+          title={t("Replace {label}", { label })}
+          aria-label={t("Replace {label}", { label })}
           aria-busy={uploading}
         >
           <i className={`ti ${uploading ? "ti-loader-2 animate-spin" : "ti-replace"}`} aria-hidden="true" />
@@ -88,8 +90,8 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
             className="btn btn-ghost btn-sm"
             style={{ color: "var(--error)" }}
             disabled={uploading}
-            title={`Remove ${label}`}
-           aria-label="Delete">
+            title={t("Remove {label}", { label })}
+           aria-label={t("Delete")}>
             <i className="ti ti-trash" />
           </button>
         )}
@@ -107,7 +109,7 @@ export default function DocUploadButton({ documentType, label, existing, uploadi
         className="btn btn-ghost btn-sm"
         disabled={uploading}
       >
-        {uploading ? <><i className="ti ti-loader-2 animate-spin" /> Uploading…</> : <><i className="ti ti-upload" /> Upload {label}</>}
+        {uploading ? <><i className="ti ti-loader-2 animate-spin" /> {t("Uploading…")}</> : <><i className="ti ti-upload" /> {t("Upload {label}", { label })}</>}
       </button>
       <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={handleFile} />
     </div>

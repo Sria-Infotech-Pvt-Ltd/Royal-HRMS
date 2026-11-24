@@ -1,6 +1,7 @@
 // Pure helpers behind the HR dashboard (/dashboard/hr): every number shown there is derived here from the counts the
 // existing workflow APIs return, so nothing on the screen is typed in by hand. A count that has no data source is
 // represented as null and shown as a dash.
+import { tr } from "@/lib/i18n/tr";
 import type { KindCount } from "@/lib/approvalOverview";
 
 export interface PendingRequestRow {
@@ -27,13 +28,13 @@ const pendingOf = (team: KindCount[], kind: KindCount["kind"]) => team.find(coun
 export function pendingRequestRows({ team, face }: PendingInput): PendingRequestRow[] {
   const rows: PendingRequestRow[] = [];
   const kinds = team ?? [];
-  if (face !== null) rows.push({ key: "face", label: "Face Registration", sub: "Employees awaiting approval", count: face });
-  if (hasKind(kinds, "leave")) rows.push({ key: "leave", label: "Leave Requests", sub: "L1/L2 approvals pending", count: pendingOf(kinds, "leave") });
-  if (hasKind(kinds, "wfh")) rows.push({ key: "wfh", label: "Work From Home", sub: "WFH requests for approval", count: pendingOf(kinds, "wfh") });
-  if (hasKind(kinds, "expense")) rows.push({ key: "expense", label: "Expense Requests", sub: "Claims awaiting review", count: pendingOf(kinds, "expense") });
+  if (face !== null) rows.push({ key: "face", label: tr("Face Registration"), sub: tr("Employees awaiting approval"), count: face });
+  if (hasKind(kinds, "leave")) rows.push({ key: "leave", label: tr("Leave Requests"), sub: tr("L1/L2 approvals pending"), count: pendingOf(kinds, "leave") });
+  if (hasKind(kinds, "wfh")) rows.push({ key: "wfh", label: tr("Work From Home"), sub: tr("WFH requests for approval"), count: pendingOf(kinds, "wfh") });
+  if (hasKind(kinds, "expense")) rows.push({ key: "expense", label: tr("Expense Requests"), sub: tr("Claims awaiting review"), count: pendingOf(kinds, "expense") });
   if (hasKind(kinds, "attendance_correction") || hasKind(kinds, "separation")) {
     rows.push({
-      key: "other", label: "Other Requests", sub: "Regularization, separation",
+      key: "other", label: tr("Other Requests"), sub: tr("Regularization, separation"),
       count: pendingOf(kinds, "attendance_correction") + pendingOf(kinds, "separation"),
     });
   }
@@ -50,7 +51,7 @@ export function pendingApprovalsForMe({ team, face }: PendingInput): number {
 }
 
 export function greetingFor(hour: number): string {
-  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  return hour < 12 ? tr("Good morning") : hour < 17 ? tr("Good afternoon") : tr("Good evening");
 }
 
 export function initialsOf(name: string): string {
@@ -60,12 +61,12 @@ export function initialsOf(name: string): string {
 /** "10 minutes ago", "1 hour ago", "2 days ago". `now` is passed in so the result is testable. */
 export function relativeTime(iso: string, now: Date): string {
   const minutes = Math.max(0, Math.floor((now.getTime() - new Date(iso).getTime()) / 60000));
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  if (minutes < 1) return tr("just now");
+  if (minutes < 60) return (minutes === 1 ? tr("{count} minute ago", { count: minutes }) : tr("{count} minutes ago", { count: minutes }));
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (hours < 24) return (hours === 1 ? tr("{count} hour ago", { count: hours }) : tr("{count} hours ago", { count: hours }));
   const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  return (days === 1 ? tr("{count} day ago", { count: days }) : tr("{count} days ago", { count: days }));
 }
 
 /** A count for display: a real number, or a dash when the source has no value (never a made-up figure). */

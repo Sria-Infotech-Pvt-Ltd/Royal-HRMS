@@ -12,6 +12,7 @@ import { useState } from "react";
 import RequestModal from "@/components/RequestModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 export const FEEDBACK_REQUEST_TOPIC = "feedback_request";
 
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function GrowthFeedbackRequestModal({ cycleName, onClose, onSubmitted }: Props) {
+  const t = useT();
   const cycleOptions = [...(cycleName ? [cycleName] : []), ...FIXED_CYCLE_OPTIONS];
   const [reviewCycle, setReviewCycle] = useState(cycleOptions[0]);
   const [feedbackFrom, setFeedbackFrom] = useState("");
@@ -36,8 +38,8 @@ export default function GrowthFeedbackRequestModal({ cycleName, onClose, onSubmi
 
   async function handleSubmit() {
     setError(null);
-    if (!feedbackFrom.trim()) { setError("Please enter who you'd like feedback from."); return; }
-    if (topic.trim().length < 10) { setError("Please describe what feedback would help you in at least 10 characters."); return; }
+    if (!feedbackFrom.trim()) { setError(t("Please enter who you'd like feedback from.")); return; }
+    if (topic.trim().length < 10) { setError(t("Please describe what feedback would help you in at least 10 characters.")); return; }
     setSubmitting(true);
     try {
       const message = `Review cycle: ${reviewCycle}. Feedback from: ${feedbackFrom.trim()}. Topic/goal: ${topic.trim()}`;
@@ -45,7 +47,7 @@ export default function GrowthFeedbackRequestModal({ cycleName, onClose, onSubmi
       onSubmitted();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg ?? "Failed to submit request. Please try again.");
+      setError(msg ?? t("Failed to submit request. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -53,7 +55,7 @@ export default function GrowthFeedbackRequestModal({ cycleName, onClose, onSubmi
 
   return (
     <RequestModal
-      title={<><i className="ti ti-message-heart" /> Feedback request</>}
+      title={<><i className="ti ti-message-heart" /> {t("Feedback request")}</>}
       onClose={onClose}
       onSubmit={handleSubmit}
       submitting={submitting}
@@ -61,29 +63,29 @@ export default function GrowthFeedbackRequestModal({ cycleName, onClose, onSubmi
     >
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
-          <label className="field-label">Review cycle</label>
+          <label className="field-label">{t("Review cycle")}</label>
           <select className="field-input field-select" value={reviewCycle} onChange={e => setReviewCycle(e.target.value)}>
-            {cycleOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            {cycleOptions.map(opt => <option key={opt} value={opt}>{t(opt)}</option>)}
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">Feedback from</label>
+          <label className="field-label">{t("Feedback from")}</label>
           <input
             className="field-input"
             value={feedbackFrom}
             onChange={e => setFeedbackFrom(e.target.value)}
-            placeholder="Manager or colleague"
+            placeholder={t("Manager or colleague")}
           />
         </div>
       </div>
       <div className="field-group">
-        <label className="field-label">Topic / goal</label>
+        <label className="field-label">{t("Topic / goal")}</label>
         <textarea
           className="field-input"
           rows={3}
           value={topic}
           onChange={e => setTopic(e.target.value)}
-          placeholder="What feedback would help you?"
+          placeholder={t("What feedback would help you?")}
         />
       </div>
     </RequestModal>

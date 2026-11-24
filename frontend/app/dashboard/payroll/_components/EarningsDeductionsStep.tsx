@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -19,6 +20,7 @@ const fmt = (n: number | string) =>
   `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
 export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Props) {
+  const t = useT();
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed]   = useState(false);
   const [processErr, setProcessErr] = useState<string | null>(null);
@@ -86,7 +88,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
       refetch();
     } catch (error: unknown) {
       const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? "Failed to process payroll. Check that the cycle is approved.";
+        ?? t("Failed to process payroll. Check that the cycle is approved.");
       setProcessErr(msg);
     } finally {
       setProcessing(false);
@@ -105,9 +107,9 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
         <div className="card">
           <div className="card-body" style={{ textAlign: "center", padding: "40px 20px" }}>
             <i className="ti ti-calculator" style={{ fontSize: 44, color: "var(--primary)", display: "block", marginBottom: 12 }} />
-            <h3 style={{ marginBottom: 8, color: "var(--on-bg)" }}>Compute Payroll</h3>
+            <h3 style={{ marginBottom: 8, color: "var(--on-bg)" }}>{t("Compute Payroll")}</h3>
             <p style={{ color: "var(--on-variant)", marginBottom: 20, maxWidth: 440, margin: "0 auto 20px" }}>
-              This will calculate salaries for all eligible employees using their CTC, salary structure, and statutory rules for each branch.
+              {t("This will calculate salaries for all eligible employees using their CTC, salary structure, and statutory rules for each branch.")}
             </p>
 
             {eligible.length > 0 && (
@@ -115,10 +117,10 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid var(--outline-v)" }}>
                   <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                     <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
-                    Select All
+                    {t("Select All")}
                   </label>
                   <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                    Selected: {selectedCount} of {eligible.length} employees
+                    {t("Selected: {selected} of {total} employees", { selected: selectedCount, total: eligible.length })}
                   </span>
                 </div>
                 <div style={{ maxHeight: 220, overflowY: "auto" }}>
@@ -150,7 +152,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
             {eligible.length > 0 && selectedCount === 0 && (
               <div className="alert alert-warn" style={{ marginBottom: 16, textAlign: "left" }}>
                 <i className="ti ti-alert-triangle" />
-                <span>Select at least one employee to process.</span>
+                <span>{t("Select at least one employee to process.")}</span>
               </div>
             )}
 
@@ -165,8 +167,8 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
               style={{ minWidth: 180 }}
             >
               {processing
-                ? <><i className="ti ti-loader-2 animate-spin" /> Computing…</>
-                : <><i className="ti ti-calculator" /> Compute Salaries</>}
+                ? <><i className="ti ti-loader-2 animate-spin" /> {t("Computing…")}</>
+                : <><i className="ti ti-calculator" /> {t("Compute Salaries")}</>}
             </button>
           </div>
         </div>
@@ -179,8 +181,10 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
             <div className="alert alert-warn" style={{ alignItems: "flex-start" }}>
               <i className="ti ti-alert-triangle" />
               <span>
-                {skipped.length} employee{skipped.length > 1 ? "s were" : " was"} skipped — no salary structure or CTC configured: {skipped.join(", ")}.
-                Set up their salary in Employees → Salary tab, then reprocess to include them.
+                {skipped.length > 1
+                  ? t("{count} employees were skipped — no salary structure or CTC configured: {names}.", { count: skipped.length, names: skipped.join(", ") })
+                  : t("{count} employee was skipped — no salary structure or CTC configured: {names}.", { count: skipped.length, names: skipped.join(", ") })}{" "}
+                {t("Set up their salary in Employees → Salary tab, then reprocess to include them.")}
               </span>
             </div>
           )}
@@ -188,34 +192,34 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
           {/* Summary row */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
             <div className="stat-card">
-              <div className="stat-label">Total Gross</div>
+              <div className="stat-label">{t("Total Gross")}</div>
               <div className="stat-value" style={{ color: "var(--primary)" }}>{fmt(totalGross)}</div>
-              <div className="stat-sub">{payslips.length} employees</div>
+              <div className="stat-sub">{t("{count} employees", { count: payslips.length })}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Total Deductions</div>
+              <div className="stat-label">{t("Total Deductions")}</div>
               <div className="stat-value" style={{ color: "var(--error)" }}>{fmt(totalDed)}</div>
-              <div className="stat-sub">PF + ESI + PT + LWF</div>
+              <div className="stat-sub">{t("PF + ESI + PT + LWF")}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Net Payable</div>
+              <div className="stat-label">{t("Net Payable")}</div>
               <div className="stat-value" style={{ color: "var(--success)" }}>{fmt(totalNet)}</div>
-              <div className="stat-sub">Gross − Deductions</div>
+              <div className="stat-sub">{t("Gross − Deductions")}</div>
             </div>
           </div>
 
           {/* Earnings table */}
           <div className="card">
             <div className="card-header">
-              <div className="card-title"><i className="ti ti-cash" /> Earnings Breakdown</div>
+              <div className="card-title"><i className="ti ti-cash" /> {t("Earnings Breakdown")}</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn btn-outline btn-sm" onClick={() => setShowRecomputeConfirm(true)} disabled={processing}>
                   {processing
-                    ? <><i className="ti ti-loader-2 animate-spin" /> Recomputing…</>
-                    : <><i className="ti ti-calculator" /> Recompute</>}
+                    ? <><i className="ti ti-loader-2 animate-spin" /> {t("Recomputing…")}</>
+                    : <><i className="ti ti-calculator" /> {t("Recompute")}</>}
                 </button>
                 <button className="btn btn-outline btn-sm" onClick={refetch} disabled={processing}>
-                  <i className="ti ti-refresh" /> Refresh
+                  <i className="ti ti-refresh" /> {t("Refresh")}
                 </button>
               </div>
             </div>
@@ -236,14 +240,14 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                 <table>
                   <thead>
                     <tr>
-                      <th>Employee</th>
-                      <th style={{ textAlign: "right" }}>Basic</th>
-                      <th style={{ textAlign: "right" }}>HRA</th>
-                      <th style={{ textAlign: "right" }}>Spl. Allow.</th>
-                      <th style={{ textAlign: "right" }}>LOP Days</th>
-                      <th style={{ textAlign: "right", color: "var(--success)" }}>Gross</th>
-                      <th style={{ textAlign: "right", color: "var(--error)" }}>Deductions</th>
-                      <th style={{ textAlign: "right", color: "var(--success)" }}>Net Pay</th>
+                      <th>{t("Employee")}</th>
+                      <th style={{ textAlign: "right" }}>{t("Basic")}</th>
+                      <th style={{ textAlign: "right" }}>{t("HRA")}</th>
+                      <th style={{ textAlign: "right" }}>{t("Spl. Allow.")}</th>
+                      <th style={{ textAlign: "right" }}>{t("LOP Days")}</th>
+                      <th style={{ textAlign: "right", color: "var(--success)" }}>{t("Gross")}</th>
+                      <th style={{ textAlign: "right", color: "var(--error)" }}>{t("Deductions")}</th>
+                      <th style={{ textAlign: "right", color: "var(--success)" }}>{t("Net Pay")}</th>
                       <th />
                     </tr>
                   </thead>
@@ -288,13 +292,13 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, padding: "16px 20px" }}>
                                   {/* Deduction detail */}
                                   <div>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Statutory Deductions</div>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>{t("Statutory Deductions")}</div>
                                     {[
-                                      ["PF (Employee)", p.pf_employee],
-                                      ["ESI (Employee)", p.esi_employee],
-                                      ["Professional Tax", p.pt_deduction],
-                                      ["LWF (Employee)", p.lwf_employee],
-                                      ["LOP Deduction", p.lop_deduction],
+                                      [t("PF (Employee)"), p.pf_employee],
+                                      [t("ESI (Employee)"), p.esi_employee],
+                                      [t("Professional Tax"), p.pt_deduction],
+                                      [t("LWF (Employee)"), p.lwf_employee],
+                                      [t("LOP Deduction"), p.lop_deduction],
                                     ].map(([label, val]) => Number(val) > 0 && (
                                       <div key={label as string} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13 }}>
                                         <span style={{ color: "var(--on-variant)" }}>- {label}</span>
@@ -304,11 +308,11 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                                   </div>
                                   {/* Employer contributions */}
                                   <div style={{ paddingLeft: 20, borderLeft: "1px solid var(--outline-v)" }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Employer Contributions</div>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>{t("Employer Contributions")}</div>
                                     {[
-                                      ["PF (Employer)", p.pf_employer],
-                                      ["ESI (Employer)", p.esi_employer],
-                                      ["LWF (Employer)", p.lwf_employer],
+                                      [t("PF (Employer)"), p.pf_employer],
+                                      [t("ESI (Employer)"), p.esi_employer],
+                                      [t("LWF (Employer)"), p.lwf_employer],
                                     ].map(([label, val]) => Number(val) > 0 && (
                                       <div key={label as string} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13 }}>
                                         <span style={{ color: "var(--on-variant)" }}>{label}</span>
@@ -316,7 +320,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                                       </div>
                                     ))}
                                     <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(23,144,90,0.06)", borderRadius: "var(--radius)" }}>
-                                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Net Pay Payable</div>
+                                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Net Pay Payable")}</div>
                                       <div style={{ fontWeight: 800, fontSize: 18, color: "var(--success)" }}>{fmt(p.net_pay)}</div>
                                     </div>
                                   </div>
@@ -329,7 +333,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                     })}
                     {payslips.length > 0 && (
                       <tr style={{ background: "var(--bg-low)" }}>
-                        <td style={{ fontWeight: 700 }}>Total</td>
+                        <td style={{ fontWeight: 700 }}>{t("Total")}</td>
                         <td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(payslips.reduce((s, p) => s + Number(p.basic), 0))}</td>
                         <td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(payslips.reduce((s, p) => s + Number(p.hra), 0))}</td>
                         <td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(payslips.reduce((s, p) => s + Number(p.special_allowance), 0))}</td>
@@ -345,16 +349,16 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
 
                 {payslips.length === 0 && !loading && (
                   <div style={{ padding: "32px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-                    No payslips found. Employees may be missing CTC or salary structure.
+                    {t("No payslips found. Employees may be missing CTC or salary structure.")}
                   </div>
                 )}
               </div>
             )}
 
             <div style={{ padding: "14px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
+              <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> {t("Back")}</button>
               <button className="btn btn-filled" onClick={onNext} disabled={payslips.length === 0}>
-                Continue <i className="ti ti-arrow-right" />
+                {t("Continue")} <i className="ti ti-arrow-right" />
               </button>
             </div>
           </div>
@@ -363,15 +367,17 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
 
       {!showResults && (
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
-          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
+          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> {t("Back")}</button>
         </div>
       )}
 
       {showRecomputeConfirm && (
         <ConfirmModal
-          title="Recompute payroll?"
-          body={`This recalculates salaries for all ${payslips.length} employee${payslips.length !== 1 ? "s" : ""} in this cycle from scratch, overwriting the current figures — including any manual bonus or reimbursement adjustments already made on these payslips. This cannot be undone.`}
-          confirmLabel="Recompute"
+          title={t("Recompute payroll?")}
+          body={payslips.length === 1
+            ? t("This recalculates salaries for all {count} employee in this cycle from scratch, overwriting the current figures — including any manual bonus or reimbursement adjustments already made on these payslips. This cannot be undone.", { count: payslips.length })
+            : t("This recalculates salaries for all {count} employees in this cycle from scratch, overwriting the current figures — including any manual bonus or reimbursement adjustments already made on these payslips. This cannot be undone.", { count: payslips.length })}
+          confirmLabel={t("Recompute")}
           danger
           saving={processing}
           onConfirm={runProcess}

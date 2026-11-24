@@ -4,6 +4,7 @@
 // people the server allows to (employees.view_workspace); everyone else sees nothing.
 
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 import { viewWorkspacePath } from "@/lib/viewAs";
 
@@ -14,13 +15,14 @@ interface Props {
 }
 
 export default function ViewWorkspaceButton({ employeeUuid, className, style }: Props) {
+  const t = useT();
   const router = useRouter();
   const canView = usePermission("employees.view_workspace");
   if (!canView || !employeeUuid) return null;
 
   return (
     <button type="button" className={className} style={style} onClick={() => router.push(viewWorkspacePath(employeeUuid))} suppressHydrationWarning>
-      <i className="ti ti-eye text-[14px]" /> View workspace
+      <i className="ti ti-eye text-[14px]" /> {t("View workspace")}
     </button>
   );
 }

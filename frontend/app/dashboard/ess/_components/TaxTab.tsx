@@ -12,6 +12,7 @@
 // proof-submission deadline field exists on PayrollSettings or anywhere else
 // in payroll config.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
@@ -96,18 +97,18 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Tax &amp; declarations</div>
-          <div className="page-sub">Review your tax information and submit declarations for payroll review.</div>
+          <div className="page-title">{tr("Tax & declarations")}</div>
+          <div className="page-sub">{tr("Review your tax information and submit declarations for payroll review.")}</div>
         </div>
         <div className="page-actions">
           <button
             className="btn btn-filled"
             onClick={() => setShowNewDeclaration(true)}
             disabled={isLocked}
-            title={isLocked ? "This financial year's declaration is already approved and can no longer be changed." : undefined}
+            title={isLocked ? tr("This financial year's declaration is already approved and can no longer be changed.") : undefined}
             suppressHydrationWarning
           >
-            <i className={`ti ${hasStarted ? "ti-edit" : "ti-plus"}`} /> {hasStarted ? "Edit declaration" : "Declare investments"}
+            <i className={`ti ${hasStarted ? "ti-edit" : "ti-plus"}`} /> {hasStarted ? tr("Edit declaration") : tr("Declare investments")}
           </button>
         </div>
       </div>
@@ -116,26 +117,26 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
 
       <div className="stats-grid" style={{ marginBottom: 20 }}>
         <div className="stat-card">
-          <div className="stat-label">Financial Year</div>
+          <div className="stat-label">{tr("Financial Year")}</div>
           <div className="stat-value">{mine?.financial_year ?? "—"}</div>
           <div className="stat-sub">
             {fyConfig ? fyCaption(fyConfig.financial_year_start_month, mine?.financial_year_start ?? 0) : ""}
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Current Regime</div>
-          <div className="stat-value">{mine ? (mine.tax_regime === "new" ? "New" : "Old") : "—"}</div>
-          <div className="stat-sub">changes require payroll approval</div>
+          <div className="stat-label">{tr("Current Regime")}</div>
+          <div className="stat-value">{mine ? (mine.tax_regime === "new" ? tr("New") : tr("Old")) : "—"}</div>
+          <div className="stat-sub">{tr("changes require payroll approval")}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">YTD TDS</div>
+          <div className="stat-label">{tr("YTD TDS")}</div>
           <div className="stat-value">{ytdTds !== null ? formatInr(Math.round(ytdTds)) : "—"}</div>
-          <div className="stat-sub">Sum of income tax deducted this financial year&apos;s payslips</div>
+          <div className="stat-sub">{tr("Sum of income tax deducted this financial year's payslips")}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Proof Window</div>
+          <div className="stat-label">{tr("Proof Window")}</div>
           <div className="stat-value">—</div>
-          <div className="stat-sub">No submission deadline is configured</div>
+          <div className="stat-sub">{tr("No submission deadline is configured")}</div>
         </div>
       </div>
 
@@ -145,14 +146,14 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-folder" /> Tax documents</div>
+          <div className="card-title"><i className="ti ti-folder" /> {tr("Tax documents")}</div>
         </div>
         <div style={{ padding: "4px 24px 8px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 600 }}>Form 16 · FY {prevFyLabel}</div>
+              <div style={{ fontWeight: 600 }}>{tr("Form 16 · FY {year}", { year: prevFyLabel })}</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                {hasPrevFyPayslip ? "Annual tax certificate · PDF" : "Form 16 will be available after the financial year closes."}
+                {hasPrevFyPayslip ? tr("Annual tax certificate · PDF") : tr("Form 16 will be available after the financial year closes.")}
               </div>
             </div>
             {hasPrevFyPayslip && (
@@ -160,16 +161,16 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
                 href={`${API_BASE}${API.payroll.form16Pdf(prevFyStartYear)}`}
                 className="btn btn-ghost btn-sm"
               >
-                <i className="ti ti-download" /> Download
+                <i className="ti ti-download" /> {tr("Download")}
               </a>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 600 }}>Other tax documents</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Upload anything else under Documents → Tax proof.</div>
+              <div style={{ fontWeight: 600 }}>{tr("Other tax documents")}</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{tr("Upload anything else under Documents → Tax proof.")}</div>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={onNavigateToDocuments} aria-label="Next">
+            <button className="btn btn-ghost btn-sm" onClick={onNavigateToDocuments} aria-label={tr("Next")}>
               <i className="ti ti-chevron-right" />
             </button>
           </div>

@@ -10,6 +10,7 @@ import { Branch, Candidate, InterviewMode, MODE_LABELS, RECRUITMENT_API } from "
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   candidate: Candidate;
@@ -24,6 +25,7 @@ const MODE_OPTIONS: InterviewMode[] = ["in_person", "video_call", "phone"];
 const todayStr = todayDateString();
 
 export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Props) {
+  const t = useT();
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
   const effectiveBranch = getEffectiveBranch(user);
@@ -65,15 +67,15 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
     const trimmedName = name.trim();
     const trimmedPosition = positionApplied.trim();
     if (!trimmedName || !trimmedPosition) {
-      setError("Name and position are required.");
+      setError(t("Name and position are required."));
       return;
     }
     if (!NAME_RE.test(trimmedName)) {
-      setError("Full name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters.");
+      setError(t("Full name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters."));
       return;
     }
     if (!POSITION_RE.test(trimmedPosition)) {
-      setError("Position applied can only contain letters, spaces, and & / . - — no numbers or other special characters.");
+      setError(t("Position applied can only contain letters, spaces, and & / . - — no numbers or other special characters."));
       return;
     }
     // Only unrestricted users actually pick a branch here — everyone else's
@@ -82,13 +84,13 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
     // a legitimate submission whenever the best-effort name-match above
     // hasn't resolved `branch` yet (branches list still loading, etc.).
     if (unrestricted && !branch) {
-      setError("Please select a Company Code.");
+      setError(t("Please select a Company Code."));
       return;
     }
     const formattedDate     = interviewDate ? interviewDate.slice(0, 10) : "";
     const originalDate      = candidate.interview_date ? candidate.interview_date.slice(0, 10) : "";
     if (formattedDate && formattedDate < todayStr && formattedDate !== originalDate) {
-      setError("Interview date cannot be in the past.");
+      setError(t("Interview date cannot be in the past."));
       return;
     }
     setSaving(true);
@@ -123,7 +125,7 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
       });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Failed to save changes.";
+        ?.response?.data?.message ?? t("Failed to save changes.");
       setError(msg);
     } finally {
       setSaving(false);
@@ -134,7 +136,7 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
     <Modal
       title={
         <div>
-          <div className="modal-title">Edit Interview Details</div>
+          <div className="modal-title">{t("Edit Interview Details")}</div>
           <p style={{ fontSize: 12, color: "var(--on-variant)", margin: "2px 0 0" }}>{candidate.email}</p>
         </div>
       }
@@ -143,10 +145,10 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose} suppressHydrationWarning>
-            Cancel
+            {t("Cancel")}
           </button>
           <button className="btn btn-filled" onClick={handleSave} disabled={saving || !branch || !name.trim() || !positionApplied.trim()} suppressHydrationWarning>
-            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-device-floppy" /> Save Changes</>}
+            {saving ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : <><i className="ti ti-device-floppy" /> {t("Save Changes")}</>}
           </button>
         </>
       }
@@ -159,21 +161,21 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
 
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Full Name *</label>
+              <label className="field-label">{t("Full Name *")}</label>
               <input className="field-input" value={name} onChange={e => setName(sanitizeName(e.target.value))} suppressHydrationWarning />
             </div>
             <div className="field-group">
-              <label className="field-label">Position Applied *</label>
+              <label className="field-label">{t("Position Applied *")}</label>
               <input className="field-input" value={positionApplied} onChange={e => setPositionApplied(sanitizePosition(e.target.value))} suppressHydrationWarning />
             </div>
           </div>
 
           <div className="field-group mb-16">
-            <label className="field-label">Company Code <span style={{ color: "var(--error)" }}>*</span></label>
+            <label className="field-label">{t("Company Code")} <span style={{ color: "var(--error)" }}>*</span></label>
             {unrestricted ? (
               <SearchableSelect
                 value={branch} onChange={setBranch}
-                placeholder="Select Company Code"
+                placeholder={t("Select Company Code")}
                 options={branches.map(b => ({ value: String(b.id), label: `${b.branch_name} (${b.branch_code})` }))}
                 inputClassName="field-input"
               />
@@ -184,16 +186,16 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
 
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Interview Date</label>
+              <label className="field-label">{t("Interview Date")}</label>
               <DateInput className="field-input" min={todayStr} value={interviewDate.slice(0, 10)} onChange={isoDate => setInterviewDate(isoDate)} />
               {interviewDate && !candidate.interview_date && (
                 <p style={{ fontSize: 11, color: "var(--info, #0284c7)", marginTop: 5, display: "flex", alignItems: "center", gap: 5 }}>
-                  <i className="ti ti-mail" /> An interview invitation email will be sent to the candidate.
+                  <i className="ti ti-mail" /> {t("An interview invitation email will be sent to the candidate.")}
                 </p>
               )}
             </div>
             <div className="field-group">
-              <label className="field-label">Interview Time</label>
+              <label className="field-label">{t("Interview Time")}</label>
               <input type="time" className="field-input"
                 value={interviewTime}
                 onChange={e => setInterviewTime(e.target.value)}
@@ -203,17 +205,17 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
 
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Interview Mode</label>
+              <label className="field-label">{t("Interview Mode")}</label>
               <select className="field-input field-select" value={interviewMode}
                 onChange={e => setInterviewMode(e.target.value as InterviewMode)} suppressHydrationWarning>
                 {MODE_OPTIONS.map(m => (
-                  <option key={m} value={m}>{MODE_LABELS[m]}</option>
+                  <option key={m} value={m}>{t(MODE_LABELS[m])}</option>
                 ))}
               </select>
             </div>
             {interviewMode === "video_call" && (
               <div className="field-group">
-                <label className="field-label">Meeting Link</label>
+                <label className="field-label">{t("Meeting Link")}</label>
                 <input type="url" className="field-input" placeholder="https://meet.google.com/..."
                   value={meetingLink}
                   onChange={e => setMeetingLink(e.target.value)}
@@ -223,10 +225,10 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
           </div>
 
           <div className="field-group">
-            <label className="field-label">Interviewer</label>
+            <label className="field-label">{t("Interviewer")}</label>
             <SearchableSelect
               value={interviewer} onChange={setInterviewer}
-              placeholder="— Select interviewer —"
+              placeholder={t("— Select interviewer —")}
               options={employees.map(e => ({ value: e.uuid, label: `${e.full_name} (${e.id})` }))}
               inputClassName="field-input"
             />

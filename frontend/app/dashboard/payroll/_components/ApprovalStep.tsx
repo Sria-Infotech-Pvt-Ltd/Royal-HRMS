@@ -1,6 +1,7 @@
 "use client";
 
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import { formatDateTime } from "@/lib/formatDate";
 import type { PayrollCycle, PayrollSettings, ManagerApprovalStatus } from "@/types/payroll";
@@ -19,6 +20,7 @@ function fmt(dateStr: string | null | undefined) {
 }
 
 export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Props) {
+  const t = useT();
   const { data: cycle, loading: cycleLoading, refetch: refetchCycle } =
     useFetch<PayrollCycle>(API.payroll.cycle(cycleId));
 
@@ -44,7 +46,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
     return (
       <div className="card" style={{ padding: "40px", textAlign: "center", color: "var(--on-variant)" }}>
         <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 28 }} />
-        <div style={{ marginTop: 8 }}>Loading approval status…</div>
+        <div style={{ marginTop: 8 }}>{t("Loading approval status…")}</div>
       </div>
     );
   }
@@ -52,13 +54,13 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-user-check" /> Attendance Approval Gate</div>
+        <div className="card-title"><i className="ti ti-user-check" /> {t("Attendance Approval Gate")}</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {isApproved
-            ? <span className="badge badge-success"><i className="ti ti-check" /> Approved</span>
-            : <span className="badge badge-warn"><i className="ti ti-clock" /> Pending</span>}
-          <span className="badge badge-info">{isL1L2 ? "L1 + L2 required" : "L1 only"}</span>
-          <button className="btn btn-ghost btn-sm" onClick={refetchAll} title="Refresh status" aria-label="Refresh status">
+            ? <span className="badge badge-success"><i className="ti ti-check" /> {t("Approved")}</span>
+            : <span className="badge badge-warn"><i className="ti ti-clock" /> {t("Pending")}</span>}
+          <span className="badge badge-info">{isL1L2 ? t("L1 + L2 required") : t("L1 only")}</span>
+          <button className="btn btn-ghost btn-sm" onClick={refetchAll} title={t("Refresh status")} aria-label={t("Refresh status")}>
             <i className="ti ti-refresh" />
           </button>
         </div>
@@ -69,7 +71,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
         {isApproved && (
           <div className="alert alert-success" style={{ marginBottom: 20 }}>
             <i className="ti ti-circle-check" />
-            <span>All approvals complete. You can now proceed to compute payroll.</span>
+            <span>{t("All approvals complete. You can now proceed to compute payroll.")}</span>
           </div>
         )}
 
@@ -88,9 +90,9 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
                   : <span style={{ fontWeight: 700 }}>1</span>}
               </div>
               <div>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>Manager Approval (L1)</div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{t("Manager Approval (L1)")}</div>
                 <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  Each manager must sign off on their team&apos;s attendance
+                  {t("Each manager must sign off on their team's attendance")}
                 </div>
               </div>
             </div>
@@ -99,7 +101,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
                 <span style={{ color: isL1Done ? "var(--success)" : approvedCount > 0 ? "var(--warn)" : "var(--on-variant)" }}>
                   {approvedCount}
                 </span>
-                <span style={{ color: "var(--on-variant)" }}> / {totalCount} approved</span>
+                <span style={{ color: "var(--on-variant)" }}>{t(" / {total} approved", { total: totalCount })}</span>
               </div>
             )}
           </div>
@@ -126,18 +128,18 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
             }}>
               <div style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 10 }}>
                 <i className="ti ti-info-circle" style={{ marginRight: 6 }} />
-                No managers with team management rights are configured — HR can approve directly.
+                {t("No managers with team management rights are configured — HR can approve directly.")}
               </div>
               {isL1Done ? (
                 <div style={{ fontSize: 12, color: "var(--success)" }}>
                   <i className="ti ti-circle-check" style={{ marginRight: 6 }} />
-                  Approved by <strong>{cycle?.l1_approver_name}</strong> on {fmt(cycle?.attendance_l1_approved_at)}
+                  {t("Approved by")} <strong>{cycle?.l1_approver_name}</strong> {t("on {date}", { date: fmt(cycle?.attendance_l1_approved_at) ?? "" })}
                 </div>
               ) : (
                 <div style={{ fontSize: 13, color: "var(--on-variant)" }}>
                   <i className="ti ti-info-circle" style={{ marginRight: 6 }} />
-                  Approval happens on the Team Approvals page, not here — go to{" "}
-                  <strong>HR Ops → Approvals → Attendance Approval</strong> to sign off.
+                  {t("Approval happens on the Team Approvals page, not here — go to")}{" "}
+                  <strong>{t("HR Ops → Approvals → Attendance Approval")}</strong> {t("to sign off.")}
                 </div>
               )}
             </div>
@@ -170,7 +172,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontWeight: 600, fontSize: 13 }}>{row.manager_name}</span>
                         <span className={isApprovedRow ? "badge badge-success" : "badge badge-neutral"}>
-                          {isApprovedRow ? "Approved" : "Pending"}
+                          {isApprovedRow ? t("Approved") : t("Pending")}
                         </span>
                       </div>
                       {isApprovedRow && (
@@ -193,8 +195,8 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
                 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>
                     <i className="ti ti-user-check" style={{ marginRight: 6 }} />
-                    Your sign-off is required — approve it from{" "}
-                    <strong>HR Ops → Approvals → Attendance Approval</strong>.
+                    {t("Your sign-off is required — approve it from")}{" "}
+                    <strong>{t("HR Ops → Approvals → Attendance Approval")}</strong>.
                   </div>
                 </div>
               )}
@@ -202,7 +204,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
               {!myRowPending && !isL1Done && !allMgrsApproved && (
                 <div className="alert alert-info" style={{ marginTop: 4 }}>
                   <i className="ti ti-info-circle" />
-                  <span>Waiting for other managers to approve. Refresh to check latest status.</span>
+                  <span>{t("Waiting for other managers to approve. Refresh to check latest status.")}</span>
                 </div>
               )}
             </div>
@@ -230,10 +232,10 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
               </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14, color: isL1Done ? "var(--on-bg)" : "var(--on-variant)" }}>
-                  HR Approval (L2)
+                  {t("HR Approval (L2)")}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  HR verifies and signs off — unlocks payroll processing
+                  {t("HR verifies and signs off — unlocks payroll processing")}
                 </div>
               </div>
             </div>
@@ -247,26 +249,26 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
               {isL2Done ? (
                 <div style={{ fontSize: 12, color: "var(--success)" }}>
                   <i className="ti ti-circle-check" style={{ marginRight: 6 }} />
-                  Approved by <strong>{cycle?.l2_approver_name}</strong> on {fmt(cycle?.attendance_l2_approved_at)}
+                  {t("Approved by")} <strong>{cycle?.l2_approver_name}</strong> {t("on {date}", { date: fmt(cycle?.attendance_l2_approved_at) ?? "" })}
                 </div>
               ) : !isL1Done ? (
                 <div style={{ fontSize: 13, color: "var(--on-variant)" }}>
                   <i className="ti ti-lock" style={{ marginRight: 6 }} />
                   {noManagersSeeded
-                    ? "Waiting for HR/Admin to complete the L1 step directly — no managers are configured for this cycle."
-                    : "Waiting for all managers (L1) to approve first"}
+                    ? t("Waiting for HR/Admin to complete the L1 step directly — no managers are configured for this cycle.")
+                    : t("Waiting for all managers (L1) to approve first")}
                 </div>
               ) : (
                 <>
                   <div style={{ fontSize: 13, marginBottom: 12 }}>
-                    All {totalCount > 0 ? totalCount : ""} manager(s) have approved.
-                    HR sign-off is the final step before payroll can be processed.
+                    {t("All {count} manager(s) have approved.", { count: totalCount > 0 ? totalCount : "" })}{" "}
+                    {t("HR sign-off is the final step before payroll can be processed.")}
                   </div>
                   <div className="alert alert-info" style={{ marginTop: 0 }}>
                     <i className="ti ti-info-circle" />
                     <span>
-                      Waiting for HR to sign off from{" "}
-                      <strong>HR Ops → Approvals → Attendance Approval</strong> — not done here.
+                      {t("Waiting for HR to sign off from")}{" "}
+                      <strong>{t("HR Ops → Approvals → Attendance Approval")}</strong> {t("— not done here.")}
                     </span>
                   </div>
                 </>
@@ -281,19 +283,19 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
         <div>
           {cycle && (
             <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              Cycle: {formatDate(cycle.cycle_start)} → {formatDate(cycle.cycle_end)} · Pay date: {formatDate(cycle.pay_date)}
+              {t("Cycle: {start} → {end} · Pay date: {pay}", { start: formatDate(cycle.cycle_start), end: formatDate(cycle.cycle_end), pay: formatDate(cycle.pay_date) })}
             </span>
           )}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
+          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> {t("Back")}</button>
           <button
             className="btn btn-filled"
             onClick={onNext}
             disabled={!isApproved}
             style={{ opacity: isApproved ? 1 : 0.5 }}
           >
-            Continue <i className="ti ti-arrow-right" />
+            {t("Continue")} <i className="ti ti-arrow-right" />
           </button>
         </div>
       </div>

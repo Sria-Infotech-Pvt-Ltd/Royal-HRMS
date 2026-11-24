@@ -16,6 +16,7 @@ import GrowthReviewTimeline from "./GrowthReviewTimeline";
 import { AppraisalActivityEntry } from "./AppraisalActivityHistory";
 import FeedbackRequestModal from "./FeedbackRequestModal";
 import FeedbackRequestsCard from "./FeedbackRequestsCard";
+import { useT } from "@/hooks/useI18n";
 
 interface ApiReview {
   cycle_name: string;
@@ -38,6 +39,7 @@ function cycleOpenedDate(review: ApiReview | null | undefined): string | null {
 }
 
 export default function GrowthTab({ onNavigateToAppraisals }: Props) {
+  const t = useT();
   const { data: goals, loading, error, refetch } = useFetch<GrowthGoal[]>(API.performance.myGoals);
   const { data: review } = useFetch<ApiReview>(API.performance.myReview);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -59,14 +61,14 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
 
       <div className="card mb-16">
         <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div className="card-title"><i className="ti ti-heart-handshake" /> Growth &amp; feedback</div>
+          <div className="card-title"><i className="ti ti-heart-handshake" /> {t("Growth & feedback")}</div>
           <button className="btn btn-ghost btn-sm" type="button" onClick={() => setShowFeedbackModal(true)}>
-            Request feedback
+            {t("Request feedback")}
           </button>
         </div>
         <div style={{ padding: "0 20px 16px" }}>
           <p style={{ margin: 0, fontSize: 12.5, color: "var(--on-variant)" }}>
-            See your goals, review cycle and career conversations.
+            {t("See your goals, review cycle and career conversations.")}
           </p>
         </div>
       </div>
@@ -89,12 +91,12 @@ export default function GrowthTab({ onNavigateToAppraisals }: Props) {
         ) : (
           <div className="card">
             <div className="card-header">
-              <div className="card-title"><i className="ti ti-timeline" /> Review timeline</div>
+              <div className="card-title"><i className="ti ti-timeline" /> {t("Review timeline")}</div>
             </div>
             <div className="empty-state">
               <i className="ti ti-timeline" />
-              <h3>No active review cycle</h3>
-              <p>Your timeline will appear when HR opens a cycle.</p>
+              <h3>{t("No active review cycle")}</h3>
+              <p>{t("Your timeline will appear when HR opens a cycle.")}</p>
             </div>
           </div>
         )}

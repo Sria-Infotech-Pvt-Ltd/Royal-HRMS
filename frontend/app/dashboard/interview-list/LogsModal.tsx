@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
 import { Candidate, CandidateLog, LogType, RECRUITMENT_API, fmtDateTime, initials } from "./_data";
+import { useT } from "@/hooks/useI18n";
 
 const LOG_ICON: Record<LogType, string> = {
   success: "ti-check",
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function LogsModal({ candidate, onClose }: Props) {
+  const t = useT();
   const [logs,    setLogs]    = useState<CandidateLog[]>(candidate.logs || []);
   const [loading, setLoading] = useState(!candidate.logs);
 
@@ -37,10 +39,10 @@ export function LogsModal({ candidate, onClose }: Props) {
 
   return (
     <Modal
-      title={<>Activity Log — {candidate.name}</>}
+      title={t("Activity Log — {name}", { name: candidate.name })}
       onClose={onClose}
       maxWidth={480}
-      footer={<button className="btn btn-ghost" onClick={onClose}>Close</button>}
+      footer={<button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>}
     >
       <div className="flex-row mb-16 pb-4 border-b border-[var(--outline-v)]">
         <Avatar name={candidate.name} size={40} />
@@ -54,7 +56,7 @@ export function LogsModal({ candidate, onClose }: Props) {
       {loading ? (
         <div className="text-center py-6"><i className="ti ti-loader-2 spin text-2xl" /></div>
       ) : logs.length === 0 ? (
-        <p className="text-center text-[var(--on-variant)]">No activity yet.</p>
+        <p className="text-center text-[var(--on-variant)]">{t("No activity yet.")}</p>
       ) : (
         <div className="timeline">
           {logs.map(l => (

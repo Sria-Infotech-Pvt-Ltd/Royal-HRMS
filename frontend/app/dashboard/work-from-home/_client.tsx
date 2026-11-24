@@ -1,28 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import RequestWfhForm from "./_components/RequestWfhForm";
 import MyWfhRequestsList from "./_components/MyWfhRequestsList";
 
 type TabId = "request" | "my-requests";
 
 export default function WorkFromHomeClient() {
+  const t = useT();
   const [active, setActive] = useState<TabId>("request");
   // Bumping this forces MyWfhRequestsList to refetch after a new request is
   // submitted, without threading a refetch callback through two components.
   const [refreshKey, setRefreshKey] = useState(0);
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: "request",     label: "Request Work From Home" },
-    { id: "my-requests", label: "My Requests" },
+    { id: "request",     label: t("Request Work From Home") },
+    { id: "my-requests", label: t("My Requests") },
   ];
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Work From Home</div>
-          <div className="page-sub">Request a date range to work remotely and track your requests</div>
+          <div className="page-title">{t("Work From Home")}</div>
+          <div className="page-sub">{t("Request a date range to work remotely and track your requests")}</div>
         </div>
       </div>
 

@@ -4,6 +4,7 @@
 // whole row opens the day's detail. Employee, Time and Status can be sorted.
 
 import type { AttendanceRow } from "@/types/attendance";
+import { useT } from "@/hooks/useI18n";
 import { PALETTE, statusColour, tint } from "./attendancePalette";
 import { isBlank, nextSort, summariseTimes, type SortKey, type SortState } from "./attendanceView";
 
@@ -22,14 +23,15 @@ interface Props {
 }
 
 function SortHeader({ label, sortKey, sort, onSortChange }: { label: string; sortKey: SortKey; sort: SortState; onSortChange: (sort: SortState) => void }) {
+  const t = useT();
   const active = sort.by === sortKey;
   return (
     <th aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
       <button
-        type="button" onClick={() => onSortChange(nextSort(sort, sortKey))} aria-label={`Sort by ${label}`}
+        type="button" onClick={() => onSortChange(nextSort(sort, sortKey))} aria-label={t("Sort by {label}", { label })}
         style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit", textTransform: "inherit", letterSpacing: "inherit" }}
       >
-        {label}
+        {t(label)}
         <i className={`ti ${active ? (sort.dir === "asc" ? "ti-arrow-up" : "ti-arrow-down") : "ti-arrows-sort"}`} aria-hidden="true" style={{ fontSize: 12, opacity: active ? 1 : 0.4 }} />
       </button>
     </th>
@@ -37,37 +39,39 @@ function SortHeader({ label, sortKey, sort, onSortChange }: { label: string; sor
 }
 
 function TimeCell({ row }: { row: AttendanceRow }) {
+  const t = useT();
   const times = summariseTimes(row.clock_in, row.clock_out);
-  if (times.kind === "none") return <span style={{ color: "var(--outline)", fontSize: 12.5 }}>No punch</span>;
+  if (times.kind === "none") return <span style={{ color: "var(--outline)", fontSize: 12.5 }}>{t("No punch")}</span>;
   return (
     <span style={MONO}>
-      <span style={{ color: row.is_late ? PALETTE.late : "var(--on-bg)", fontWeight: row.is_late ? 700 : 400 }} title={row.is_late ? "Arrived late" : undefined}>{times.clockIn}</span>
+      <span style={{ color: row.is_late ? PALETTE.late : "var(--on-bg)", fontWeight: row.is_late ? 700 : 400 }} title={row.is_late ? t("Arrived late") : undefined}>{times.clockIn}</span>
       <span aria-hidden="true" style={{ color: "var(--outline)", margin: "0 6px" }}>→</span>
-      <span style={{ color: times.clockOut === "—" ? "var(--outline)" : "var(--on-bg)" }}>{times.clockOut === "—" ? "still in" : times.clockOut}</span>
+      <span style={{ color: times.clockOut === "—" ? "var(--outline)" : "var(--on-bg)" }}>{times.clockOut === "—" ? t("still in") : times.clockOut}</span>
     </span>
   );
 }
 
 export default function AttendanceTable({ rows, loading, sort, onSortChange, onOpen }: Props) {
+  const t = useT();
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
             <SortHeader label="Employee" sortKey="name" sort={sort} onSortChange={onSortChange} />
-            <th>Department</th>
+            <th>{t("Department")}</th>
             <SortHeader label="Time" sortKey="clock_in" sort={sort} onSortChange={onSortChange} />
-            <th>Hours</th>
+            <th>{t("Hours")}</th>
             <SortHeader label="Status" sortKey="status" sort={sort} onSortChange={onSortChange} />
-            <th aria-label="Open" />
+            <th aria-label={t("Open")} />
           </tr>
         </thead>
         <tbody>
-          {loading && <tr><td colSpan={6} style={{ textAlign: "center", padding: 28, color: "var(--on-variant)" }}>Loading…</td></tr>}
-          {!loading && rows.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 28, color: "var(--on-variant)" }}>No attendance records for this filter.</td></tr>}
+          {loading && <tr><td colSpan={6} style={{ textAlign: "center", padding: 28, color: "var(--on-variant)" }}>{t("Loading…")}</td></tr>}
+          {!loading && rows.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 28, color: "var(--on-variant)" }}>{t("No attendance records for this filter.")}</td></tr>}
           {rows.map((row, index) => (
             <tr
-              key={`${row.record_id ?? row.employee_id ?? "row"}-${index}`} tabIndex={0} aria-label={`Open ${row.name}`} style={{ cursor: "pointer" }}
+              key={`${row.record_id ?? row.employee_id ?? "row"}-${index}`} tabIndex={0} aria-label={t("Open {name}", { name: row.name })} style={{ cursor: "pointer" }}
               onClick={() => onOpen(row)} onKeyDown={event => { if (event.key === "Enter") onOpen(row); }}
             >
               <td>
@@ -88,7 +92,7 @@ export default function AttendanceTable({ rows, loading, sort, onSortChange, onO
                 {isBlank(row.total_hours) ? <span style={{ color: "var(--outline)" }}>—</span> : (
                   <span style={MONO}>
                     {row.total_hours}
-                    {!isBlank(row.ot) && <span title="Overtime" style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 999, background: tint(PALETTE.present, 0.14), color: PALETTE.present }}>+{row.ot} OT</span>}
+                    {!isBlank(row.ot) && <span title={t("Overtime")} style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 999, background: tint(PALETTE.present, 0.14), color: PALETTE.present }}>{t("+{ot} OT", { ot: row.ot })}</span>}
                   </span>
                 )}
               </td>

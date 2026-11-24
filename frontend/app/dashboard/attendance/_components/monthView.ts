@@ -1,5 +1,6 @@
 // Pure helpers and shared types for the Employee Month View. No React.
 
+import { tr } from "@/lib/i18n/tr";
 import { PALETTE, tint } from "./attendancePalette";
 
 export interface EmployeeOption {
@@ -174,7 +175,7 @@ export function barSegments(days: DayRecord[], todayISO: string): BarSegment[] {
 /** "09:05 – 18:10", "09:05 – still in", or "" when there is no clock-in. */
 export function timeRangeLabel(day: Pick<DayRecord, "clock_in" | "clock_out">): string {
   if (!day.clock_in) return "";
-  return `${day.clock_in} – ${day.clock_out ?? "still in"}`;
+  return `${day.clock_in} – ${day.clock_out ?? tr("still in")}`;
 }
 
 /** The day shown in the side panel when nobody has picked one: today if it is in this month, else the latest day with a record, else the 1st. */
@@ -186,18 +187,17 @@ export function defaultSelectedDate(days: DayRecord[], todayISO: string): string
 
 /** One plain sentence about a day, for the side panel. `status` is the effective status (see effectiveStatus). */
 export function daySentence(day: Pick<DayRecord, "total_hours">, status: string): string {
-  const hours = day.total_hours > 0 ? ` ${day.total_hours}h worked.` : "";
   switch (status) {
-    case "present": return day.total_hours > 0 ? `Present, ${day.total_hours}h worked.` : "Present.";
-    case "late": return `Arrived late.${hours}`;
-    case "half_day": return `Half day.${hours}`;
-    case "on_leave": return "On approved leave.";
-    case "absent": return "Marked absent.";
-    case "incomplete": return "Clocked in but never clocked out.";
-    case "weekly_off": return "Week off.";
-    case "holiday": return "Public holiday.";
-    case "no_record": return "Nothing is recorded for this day yet.";
-    default: return "This day has not happened yet.";
+    case "present": return day.total_hours > 0 ? tr("Present, {hours}h worked.", { hours: day.total_hours }) : tr("Present.");
+    case "late": return day.total_hours > 0 ? tr("Arrived late. {hours}h worked.", { hours: day.total_hours }) : tr("Arrived late.");
+    case "half_day": return day.total_hours > 0 ? tr("Half day. {hours}h worked.", { hours: day.total_hours }) : tr("Half day.");
+    case "on_leave": return tr("On approved leave.");
+    case "absent": return tr("Marked absent.");
+    case "incomplete": return tr("Clocked in but never clocked out.");
+    case "weekly_off": return tr("Week off.");
+    case "holiday": return tr("Public holiday.");
+    case "no_record": return tr("Nothing is recorded for this day yet.");
+    default: return tr("This day has not happened yet.");
   }
 }
 

@@ -40,7 +40,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
 export default function PayslipHero({
   slip, bankName, bankMasked, pfNumber, gross, deductions, paidDays, totalDays, net, payDateLabel,
 }: Props) {
-  const creditedParts = [`Credited on ${payDateLabel}`, bankName, bankMasked !== "—" ? `A/c ${bankMasked}` : null]
+  const creditedParts = [tr("Credited on {date}", { date: payDateLabel }), bankName, bankMasked !== "—" ? tr("A/c {number}", { number: bankMasked }) : null]
     .filter(Boolean);
 
   return (
@@ -54,10 +54,10 @@ export default function PayslipHero({
       </div>
 
       <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:min-w-[280px]">
-        <StatTile label="Gross earnings" value={INR(gross)} />
-        <StatTile label="Total deductions" value={INR(deductions)} />
-        <StatTile label="Paid days" value={`${paidDays}/${totalDays}`} />
-        <StatTile label="PF number" value={pfNumber || "—"} />
+        <StatTile label={tr("Gross earnings")} value={INR(gross)} />
+        <StatTile label={tr("Total deductions")} value={INR(deductions)} />
+        <StatTile label={tr("Paid days")} value={`${paidDays}/${totalDays}`} />
+        <StatTile label={tr("PF number")} value={pfNumber || "—"} />
       </div>
     </div>
   );

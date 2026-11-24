@@ -1,6 +1,7 @@
 // Pure helpers for the Onboarding Approvals page: no component state, safe to import anywhere.
 
 import type { QueueCounts, QueueStatus } from "@/types/onboardingQueue";
+import { tr } from "@/lib/i18n/tr";
 
 /** How each queue status reads on screen. Anything else the server might send shows as a neutral "Pending". */
 export const STATUS_META: Record<QueueStatus, { label: string; badge: string; icon: string }> = {
@@ -25,10 +26,10 @@ export interface ApprovalCardSpec { key: "" | QueueStatus; label: string; value:
 /** The summary cards: everyone, those waiting for review, those sent back, and those already approved. */
 export function buildApprovalCards(counts: QueueCounts): ApprovalCardSpec[] {
   return [
-    { key: "",          label: "All submissions", value: counts.total,     icon: "ti-users",   tone: "si-primary", sub: counts.total === 0 ? "No submissions yet" : "Everyone who used the onboarding wizard" },
-    { key: "submitted", label: "Awaiting review", value: counts.submitted, icon: "ti-eye",     tone: "si-warn",    sub: counts.submitted === 0 ? "Nothing waiting for you" : "Waiting for your review" },
-    { key: "rejected",  label: "Needs revision",  value: counts.rejected,  icon: "ti-refresh", tone: "si-error",   sub: counts.rejected === 0 ? "Nobody sent back" : "Waiting for the employee to resubmit" },
-    { key: "approved",  label: "Approved",        value: counts.approved,  icon: "ti-check",   tone: "si-success", sub: counts.approved === 0 ? "None approved yet" : "Completed, now on the employee list" },
+    { key: "",          label: "All submissions", value: counts.total,     icon: "ti-users",   tone: "si-primary", sub: counts.total === 0 ? tr("No submissions yet") : tr("Everyone who used the onboarding wizard") },
+    { key: "submitted", label: "Awaiting review", value: counts.submitted, icon: "ti-eye",     tone: "si-warn",    sub: counts.submitted === 0 ? tr("Nothing waiting for you") : tr("Waiting for your review") },
+    { key: "rejected",  label: "Needs revision",  value: counts.rejected,  icon: "ti-refresh", tone: "si-error",   sub: counts.rejected === 0 ? tr("Nobody sent back") : tr("Waiting for the employee to resubmit") },
+    { key: "approved",  label: "Approved",        value: counts.approved,  icon: "ti-check",   tone: "si-success", sub: counts.approved === 0 ? tr("None approved yet") : tr("Completed, now on the employee list") },
   ];
 }
 
@@ -36,5 +37,5 @@ export function buildApprovalCards(counts: QueueCounts): ApprovalCardSpec[] {
 export function rangeLabel(page: number, pageSize: number, shown: number, matching: number): string | null {
   if (matching <= 0 || shown <= 0) return null;
   const first = (page - 1) * pageSize + 1;
-  return `Showing ${first}–${first + shown - 1} of ${matching}`;
+  return tr("Showing {from}–{to} of {total}", { from: first, to: first + shown - 1, total: matching });
 }

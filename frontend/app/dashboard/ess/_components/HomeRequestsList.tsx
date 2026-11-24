@@ -50,7 +50,7 @@ export default function HomeRequestsList({ items, onViewAll }: Props) {
                   </div>
                   <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{fmtSubmitted(item.submittedAt)}</div>
                 </div>
-                <span className={STATUS_BADGE_CLASS[status]} style={{ flexShrink: 0 }}>{STATUS_LABEL[status]}</span>
+                <span className={STATUS_BADGE_CLASS[status]} style={{ flexShrink: 0 }}>{tr(STATUS_LABEL[status])}</span>
               </div>
             );
           })}

@@ -9,6 +9,8 @@
 // StepIndicator has always enforced for this wizard, just carried over
 // rather than loosened.
 
+import { useT } from "@/hooks/useI18n";
+
 export interface OnboardingStepDef {
   label: string;
   shortLabel: string;
@@ -23,6 +25,7 @@ interface Props {
 }
 
 export default function OnboardingSidebar({ steps, currentStep, highestSaved, onStepClick }: Props) {
+  const t = useT();
   return (
     <div className="wiz-nav">
       {steps.map((step, i) => {
@@ -42,8 +45,8 @@ export default function OnboardingSidebar({ steps, currentStep, highestSaved, on
               {isDone ? <i className="ti ti-check" style={{ fontSize: 13 }} /> : i + 1}
             </div>
             <div style={{ minWidth: 0 }}>
-              <div className="t1">{step.shortLabel}</div>
-              <div className="t2">{isDone ? "Done" : isActive ? "In progress" : `Step ${i + 1}`}</div>
+              <div className="t1">{t(step.shortLabel)}</div>
+              <div className="t2">{isDone ? t("Done") : isActive ? t("In progress") : t("Step {number}", { number: i + 1 })}</div>
             </div>
           </button>
         );

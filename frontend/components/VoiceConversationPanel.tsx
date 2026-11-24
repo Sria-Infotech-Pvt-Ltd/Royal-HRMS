@@ -5,6 +5,7 @@ import type { VoiceHistoryEntry, VoicePanelPhase, VoiceResultStatus } from "@/ho
 import VoiceInputControls from "@/components/VoiceInputControls";
 import QuickActionChips from "@/components/QuickActionChips";
 import { voiceLockoutNotice } from "@/lib/voiceLockout";
+import { useT } from "@/hooks/useI18n";
 
 // Static placeholder shown only in the "greeting" phase, before any command
 // has been typed or spoken yet — never sent through speak() (see
@@ -13,8 +14,6 @@ import { voiceLockoutNotice } from "@/lib/voiceLockout";
 // the backend's "greeting" voice intent (registry/intents_en.yaml, matched
 // when the user actually says "hi"/"hello"/"good morning" etc.) — this
 // string is pure frontend UI and never reaches /api/voice/parse/.
-const GREETING_MESSAGE = "Hi, how can I help you?";
-
 const BOT_AVATAR_SRC = "/bot.png";
 
 function BotAvatar({ size = 24 }: { size?: number }) {
@@ -127,6 +126,7 @@ export default function VoiceConversationPanel({
   onStartListening, onStopListening, onSubmitText, onClose,
   isMuted, onToggleMute, isListeningForInterruption, history, lockoutSecondsRemaining = 0,
 }: VoiceConversationPanelProps) {
+  const t = useT();
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // Keep the latest turn in view as history/phase/message change — a chat
@@ -154,13 +154,13 @@ export default function VoiceConversationPanel({
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <BotAvatar size={20} />
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)" }}>
-            Voice Assistant
+            {t("Voice Assistant")}
           </span>
           {isListeningForInterruption && (
             <span
               data-testid="voice-panel-barge-in-indicator"
-              title="Listening for interruption — speak to cut in"
-              aria-label="Listening for interruption — speak to cut in"
+              title={t("Listening for interruption — speak to cut in")}
+              aria-label={t("Listening for interruption — speak to cut in")}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 4,
                 fontSize: 10, color: "var(--primary)",
@@ -176,8 +176,8 @@ export default function VoiceConversationPanel({
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           <button
             onClick={onToggleMute}
-            title={isMuted ? "Unmute spoken responses" : "Mute spoken responses"}
-            aria-label={isMuted ? "Unmute spoken responses" : "Mute spoken responses"}
+            title={isMuted ? t("Unmute spoken responses") : t("Mute spoken responses")}
+            aria-label={isMuted ? t("Unmute spoken responses") : t("Mute spoken responses")}
             aria-pressed={isMuted}
             data-testid="voice-panel-mute-toggle"
             suppressHydrationWarning
@@ -191,8 +191,8 @@ export default function VoiceConversationPanel({
           </button>
           <button
             onClick={onClose}
-            aria-label="Close voice assistant"
-            title="Close"
+            aria-label={t("Close voice assistant")}
+            title={t("Close")}
             data-testid="voice-panel-close"
             style={{
               width: 22, height: 22, borderRadius: 6, border: "none", background: "transparent",
@@ -237,7 +237,7 @@ export default function VoiceConversationPanel({
                 the same conversation, not a separate splash screen. */}
             {history.length === 0 && (
               <div data-testid="voice-panel-greeting" style={{ fontSize: 13, lineHeight: 1.5, color: "var(--on-bg)" }}>
-                {GREETING_MESSAGE}
+                {t("Hi, how can I help you?")}
               </div>
             )}
             <QuickActionChips onPick={onSubmitText} />
@@ -268,7 +268,7 @@ export default function VoiceConversationPanel({
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--on-variant)" }}>
               <i className="ti ti-loader-2" style={{ fontSize: 15, animation: "spin 1s linear infinite" }} />
-              Processing…
+              {t("Processing…")}
             </div>
           </>
         ) : (

@@ -6,6 +6,7 @@
 // mode="self" (see EmployeeDrawer.tsx). Split into its own file purely to
 // keep EmployeeDrawer.tsx under this codebase's ~300-line guideline.
 
+import { useT } from "@/hooks/useI18n";
 import { useLeaveBalances } from "@/hooks/useEmployeeDashboard";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -41,6 +42,7 @@ interface AdminBalanceRow {
 /** Another employee's balances (admin/manager view) — the server scopes who
     may see whom; omit `employeeCode` for the signed-in user's own card. */
 export default function EmployeeDrawerLeaveCard({ employeeCode }: { employeeCode?: string }) {
+  const t = useT();
   const own = useLeaveBalances();
   const { data: fyConfig } = useFetch<{ financial_year_start_month: string }>(API.settings.financialYear);
   const other = useFetch<AdminBalanceRow[]>(employeeCode ? `${API.leave.balance}?employee_id=${encodeURIComponent(employeeCode)}` : null);
@@ -72,23 +74,23 @@ export default function EmployeeDrawerLeaveCard({ employeeCode }: { employeeCode
     });
 
   return (
-    <SectionCard title={`Leave${yearLabel ? ` · ${yearLabel}` : ""}`} list={leaveBalances.length > 0}>
+    <SectionCard title={yearLabel ? t("Leave · {year}", { year: yearLabel }) : t("Leave")} list={leaveBalances.length > 0}>
       {leaveData === null && (employeeCode ? other.loading : own.loading) ? (
-        <p className="hint">Loading…</p>
+        <p className="hint">{t("Loading…")}</p>
       ) : leaveBalances.length === 0 ? (
         <p className="hint">
-          {employeeCode ? "No leave balances have been credited for this employee yet." : "No leave balances found. Contact HR to credit your leave."}
+          {employeeCode ? t("No leave balances have been credited for this employee yet.") : t("No leave balances found. Contact HR to credit your leave.")}
         </p>
       ) : (
         <>
           {leaveBalances.map(b => (
             <Row
               key={b.leave_type}
-              label={`Balance — ${LEAVE_LABEL[b.leave_type] ?? b.leave_type}`}
-              value={`${b.remaining} of ${b.total_days} days`}
+              label={t("Balance — {label}", { label: LEAVE_LABEL[b.leave_type] ? t(LEAVE_LABEL[b.leave_type]) : b.leave_type })}
+              value={t("{remaining} of {total} days", { remaining: b.remaining, total: b.total_days })}
             />
           ))}
-          <Row label="Loss of pay" value={`${leaveData?.lop_days ?? 0} days`} />
+          <Row label={t("Loss of pay")} value={t("{count} days", { count: leaveData?.lop_days ?? 0 })} />
         </>
       )}
     </SectionCard>

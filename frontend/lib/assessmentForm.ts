@@ -4,6 +4,7 @@
 //   max_attempts    ""  = use the global setting   "0" = unlimited   "N" = N attempts
 //   time_limit_mins ""  = use the global setting                     "N" = N minutes
 
+import { tr } from "@/lib/i18n/tr"
 import type { AssessmentForm } from "@/app/dashboard/assessments/_types"
 
 export type AttemptsMode = "global" | "unlimited" | "limited"
@@ -40,13 +41,13 @@ const isWholeNumber = (value: string) => /^\d+$/.test(value.trim())
 
 export function validateAssessmentForm(form: Pick<AssessmentForm, "title" | "pass_percentage" | "max_attempts" | "time_limit_mins">): FormErrors {
   const errors: FormErrors = {}
-  if (!form.title.trim()) errors.title = "Give the assessment a title."
+  if (!form.title.trim()) errors.title = tr("Give the assessment a title.")
   const pass = Number(form.pass_percentage)
-  if (!isWholeNumber(form.pass_percentage) || pass < 1 || pass > 100) errors.pass = "Enter a pass mark between 1 and 100."
-  if (form.max_attempts.trim() !== "" && !isWholeNumber(form.max_attempts)) errors.attempts = "Attempts must be a whole number."
-  if (attemptsMode(form.max_attempts) === "limited" && Number(form.max_attempts) < 1) errors.attempts = "Allow at least 1 attempt."
+  if (!isWholeNumber(form.pass_percentage) || pass < 1 || pass > 100) errors.pass = tr("Enter a pass mark between 1 and 100.")
+  if (form.max_attempts.trim() !== "" && !isWholeNumber(form.max_attempts)) errors.attempts = tr("Attempts must be a whole number.")
+  if (attemptsMode(form.max_attempts) === "limited" && Number(form.max_attempts) < 1) errors.attempts = tr("Allow at least 1 attempt.")
   if (form.time_limit_mins.trim() !== "" && (!isWholeNumber(form.time_limit_mins) || Number(form.time_limit_mins) < 1)) {
-    errors.time = "Enter the time limit in whole minutes, at least 1."
+    errors.time = tr("Enter the time limit in whole minutes, at least 1.")
   }
   return errors
 }
@@ -57,13 +58,13 @@ export interface GlobalDefaults { maxAttempts: number | null | undefined; timeLi
 
 /** "Unlimited attempts", "3 attempts", ... for the global default shown next to the "use global" choice. */
 export function describeAttempts(count: number | null | undefined): string {
-  if (count == null) return "not set"
-  if (count === 0) return "unlimited attempts"
-  return `${count} attempt${count !== 1 ? "s" : ""}`
+  if (count == null) return tr("not set")
+  if (count === 0) return tr("unlimited attempts")
+  return count !== 1 ? tr("{count} attempts", { count }) : tr("{count} attempt", { count })
 }
 
 export function describeTime(minutes: number | null | undefined): string {
-  return minutes && minutes > 0 ? `${minutes} min` : "no time limit"
+  return minutes && minutes > 0 ? tr("{minutes} min", { minutes }) : tr("no time limit")
 }
 
 /** One line of what the form currently says, e.g. "70% to pass · 3 attempts (global) · 30 min". */
@@ -71,9 +72,9 @@ export function rulesSummary(form: Pick<AssessmentForm, "pass_percentage" | "max
   const attempts = attemptsMode(form.max_attempts)
   const time = timeMode(form.time_limit_mins)
   return [
-    `${form.pass_percentage || "—"}% to pass`,
-    attempts === "global" ? `${describeAttempts(defaults.maxAttempts)} (global)` : attempts === "unlimited" ? "Unlimited attempts" : describeAttempts(Number(form.max_attempts)),
-    time === "global" ? `${describeTime(defaults.timeLimitMins)} (global)` : `${form.time_limit_mins} min`,
+    tr("{percent}% to pass", { percent: form.pass_percentage || "—" }),
+    attempts === "global" ? tr("{value} (global)", { value: describeAttempts(defaults.maxAttempts) }) : attempts === "unlimited" ? tr("Unlimited attempts") : describeAttempts(Number(form.max_attempts)),
+    time === "global" ? tr("{value} (global)", { value: describeTime(defaults.timeLimitMins) }) : tr("{minutes} min", { minutes: form.time_limit_mins }),
   ]
 }
 

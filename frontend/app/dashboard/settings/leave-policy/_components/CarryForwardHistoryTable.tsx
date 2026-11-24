@@ -1,6 +1,7 @@
 "use client";
 
 import type { CarryForwardHistoryResponse } from "@/types/leave";
+import { useT } from "@/hooks/useI18n";
 import { formatDateTime } from "@/lib/formatDate";
 
 interface Props {
@@ -16,24 +17,25 @@ function fmtDateTime(iso: string): string {
 }
 
 export default function CarryForwardHistoryTable({ history, loading, page, onPageChange }: Props) {
+  const t = useT();
   const results    = history?.results ?? [];
   const totalPages = history?.total_pages ?? 1;
 
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-history" /> Carry Forward History</div>
+        <div className="card-title"><i className="ti ti-history" /> {t("Carry Forward History")}</div>
       </div>
 
       {loading ? (
         <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> &nbsp;Loading history…
+          <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> &nbsp;{t("Loading history…")}
         </div>
       ) : results.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-history-toggle" />
-          <h3>No history yet</h3>
-          <p>No carry-forward runs have been executed yet.</p>
+          <h3>{t("No history yet")}</h3>
+          <p>{t("No carry-forward runs have been executed yet.")}</p>
         </div>
       ) : (
         <>
@@ -41,13 +43,13 @@ export default function CarryForwardHistoryTable({ history, loading, page, onPag
             <table>
               <thead>
                 <tr>
-                  <th>Period</th>
-                  <th>Executed By</th>
-                  <th style={{ textAlign: "center" }}>Processed</th>
-                  <th style={{ textAlign: "center" }}>Skipped</th>
-                  <th style={{ textAlign: "center" }}>Failed</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
-                  <th>Date</th>
+                  <th>{t("Period")}</th>
+                  <th>{t("Executed By")}</th>
+                  <th style={{ textAlign: "center" }}>{t("Processed")}</th>
+                  <th style={{ textAlign: "center" }}>{t("Skipped")}</th>
+                  <th style={{ textAlign: "center" }}>{t("Failed")}</th>
+                  <th style={{ textAlign: "center" }}>{t("Status")}</th>
+                  <th>{t("Date")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -60,8 +62,8 @@ export default function CarryForwardHistoryTable({ history, loading, page, onPag
                     <td style={{ textAlign: "center", fontWeight: 600, color: log.total_failed > 0 ? "var(--error)" : "var(--on-variant)" }}>{log.total_failed}</td>
                     <td style={{ textAlign: "center" }}>
                       {log.is_completed
-                        ? <span className="badge badge-success">Completed</span>
-                        : <span className="badge badge-warn">Incomplete</span>}
+                        ? <span className="badge badge-success">{t("Completed")}</span>
+                        : <span className="badge badge-warn">{t("Incomplete")}</span>}
                     </td>
                     <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtDateTime(log.created_at)}</td>
                   </tr>
@@ -72,13 +74,13 @@ export default function CarryForwardHistoryTable({ history, loading, page, onPag
 
           {totalPages > 1 && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
-              <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {page} of {totalPages}</span>
+              <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("Page {page} of {totalPages}", { page, totalPages })}</span>
               <div style={{ display: "flex", gap: 6 }}>
                 <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => onPageChange(Math.max(page - 1, 1))}>
-                  <i className="ti ti-chevron-left" /> Prev
+                  <i className="ti ti-chevron-left" /> {t("Prev")}
                 </button>
                 <button className="btn btn-ghost btn-sm" disabled={page >= totalPages} onClick={() => onPageChange(Math.min(page + 1, totalPages))}>
-                  Next <i className="ti ti-chevron-right" />
+                  {t("Next")} <i className="ti ti-chevron-right" />
                 </button>
               </div>
             </div>

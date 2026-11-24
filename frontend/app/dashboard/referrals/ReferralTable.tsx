@@ -2,6 +2,7 @@
 
 import { Candidate, fmtDate, initials } from "@/app/dashboard/interview-list/_data";
 import { STATUS_META } from "./_data";
+import { useT } from "@/hooks/useI18n";
 
 export default function ReferralTable({
   candidates, loading, error, search, onSearch,
@@ -12,6 +13,7 @@ export default function ReferralTable({
   search: string;
   onSearch: (v: string) => void;
 }) {
+  const t = useT();
   const filtered = search
     ? candidates.filter(c =>
         `${c.name} ${c.position_applied} ${c.referral_by_name}`
@@ -22,11 +24,11 @@ export default function ReferralTable({
     <>
       <div className="card-header">
         <span className="card-title">
-          <i className="ti ti-users" /> {filtered.length} Referral{filtered.length !== 1 ? "s" : ""}
+          <i className="ti ti-users" /> {filtered.length === 1 ? t("{count} Referral", { count: filtered.length }) : t("{count} Referrals", { count: filtered.length })}
         </span>
         <div className="search-bar">
           <i className="ti ti-search" />
-          <input placeholder="Search by name, position…" value={search}
+          <input placeholder={t("Search by name, position…")} value={search}
             onChange={e => onSearch(e.target.value)} suppressHydrationWarning />
         </div>
       </div>
@@ -43,15 +45,15 @@ export default function ReferralTable({
         ) : filtered.length === 0 ? (
           <div className="empty-state">
             <i className="ti ti-user-plus" />
-            <h3>No referrals found</h3>
-            <p>Try adjusting your search or submit a new referral.</p>
+            <h3>{t("No referrals found")}</h3>
+            <p>{t("Try adjusting your search or submit a new referral.")}</p>
           </div>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Candidate</th><th>Position</th><th>Company Code</th>
-                <th>Referred By</th><th>Status</th><th>Referred On</th>
+                <th>{t("Candidate")}</th><th>{t("Position")}</th><th>{t("Company Code")}</th>
+                <th>{t("Referred By")}</th><th>{t("Status")}</th><th>{t("Referred On")}</th>
               </tr>
             </thead>
             <tbody>
@@ -84,7 +86,7 @@ export default function ReferralTable({
                   </td>
                   <td>
                     <span className={`badge ${STATUS_META[c.status]?.cls ?? "badge-neutral"}`}>
-                      {STATUS_META[c.status]?.label ?? c.status}
+                      {STATUS_META[c.status]?.label ? t(STATUS_META[c.status].label) : c.status}
                     </span>
                   </td>
                   <td className="text-xs">{fmtDate(c.created_at)}</td>

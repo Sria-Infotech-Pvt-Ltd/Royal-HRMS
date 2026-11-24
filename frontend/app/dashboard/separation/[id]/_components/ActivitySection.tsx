@@ -2,6 +2,7 @@
 
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import type { SeparationActivityItem, SeparationRequest } from "@/types/separation";
 import { fmtDateTime } from "../../_workflow";
 
@@ -23,13 +24,14 @@ function groupByRole(activities: SeparationActivityItem[]) {
 }
 
 function RoleGroup({ label, icon, items }: { label: string; icon: string; items: SeparationActivityItem[] }) {
+  const t = useT();
   if (items.length === 0) return null;
   const rows = [...items].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-variant)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-        <i className={`ti ${icon}`} /> {label}
+        <i className={`ti ${icon}`} /> {t(label)}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {rows.map(entry => (
@@ -46,6 +48,7 @@ function RoleGroup({ label, icon, items }: { label: string; icon: string; items:
 }
 
 export default function ActivitySection({ r }: { r: SeparationRequest }) {
+  const t = useT();
   const { data: activities, loading } = useFetch<SeparationActivityItem[]>(API.separation.activities(r.id));
   const groups = groupByRole(activities ?? []);
   const hasAny = groups.some(g => g.items.length > 0);
@@ -53,13 +56,13 @@ export default function ActivitySection({ r }: { r: SeparationRequest }) {
   return (
     <div className="card mb-16">
       <div className="card-header">
-        <span className="card-title"><i className="ti ti-history" /> Activity</span>
+        <span className="card-title"><i className="ti ti-history" /> {t("Activity")}</span>
       </div>
       <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         {loading ? (
-          <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}><i className="ti ti-loader-2 spin" /> Loading…</p>
+          <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}><i className="ti ti-loader-2 spin" /> {t("Loading…")}</p>
         ) : !hasAny ? (
-          <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>No activity recorded yet.</p>
+          <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>{t("No activity recorded yet.")}</p>
         ) : (
           groups.map(g => <RoleGroup key={g.role} label={g.label} icon={g.icon} items={g.items} />)
         )}

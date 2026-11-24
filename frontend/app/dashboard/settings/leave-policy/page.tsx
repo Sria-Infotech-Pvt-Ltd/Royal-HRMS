@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/components/ToastProvider";
 import PolicyTab from "./_components/PolicyTab";
@@ -14,38 +15,38 @@ import AttendancePageTabs from "@/app/dashboard/attendance/_components/Attendanc
 type Tab = "types" | "policies" | "credit" | "carryForward";
 
 
-const BASE_TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: "types",    icon: "ti-beach",      label: "Leave Types"  },
-  { id: "policies", icon: "ti-settings-2", label: "Leave Policy" },
-  { id: "credit",   icon: "ti-coin",       label: "Credit Rules" },
-];
-
 export default function LeavePolicyPage() {
+  const t = useT();
   const router = useRouter();
   const { showToast } = useToast();
   const [tab, setTab] = useState<Tab>("types");
   const [showImportModal, setShowImportModal] = useState(false);
 
   const isLeaveAdmin = usePermission("leave.edit");
+  const BASE_TABS: { id: Tab; icon: string; label: string }[] = [
+    { id: "types",    icon: "ti-beach",      label: t("Leave Types")  },
+    { id: "policies", icon: "ti-settings-2", label: t("Leave Policy") },
+    { id: "credit",   icon: "ti-coin",       label: t("Credit Rules") },
+  ];
   const TABS = isLeaveAdmin
-    ? [...BASE_TABS, { id: "carryForward" as Tab, icon: "ti-repeat", label: "Carry Forward" }]
+    ? [...BASE_TABS, { id: "carryForward" as Tab, icon: "ti-repeat", label: t("Carry Forward") }]
     : BASE_TABS;
 
   return (
     <>
       <div className="page-header">
         <div>
-          <div className="page-title">Leave Management</div>
-          <div className="page-sub">Configure leave types, entitlements and balance crediting</div>
+          <div className="page-title">{t("Leave Management")}</div>
+          <div className="page-sub">{t("Configure leave types, entitlements and balance crediting")}</div>
         </div>
         <div className="page-actions">
           {isLeaveAdmin && (
             <button className="btn btn-ghost" onClick={() => setShowImportModal(true)}>
-              <i className="ti ti-file-upload" /> Import Opening Balances
+              <i className="ti ti-file-upload" /> {t("Import Opening Balances")}
             </button>
           )}
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
         </div>
       </div>
@@ -60,7 +61,7 @@ export default function LeavePolicyPage() {
       {showImportModal && (
         <OpeningBalanceImportModal
           onClose={() => setShowImportModal(false)}
-          onSuccess={() => showToast("Opening leave balances imported.", "success")}
+          onSuccess={() => showToast(t("Opening leave balances imported."), "success")}
         />
       )}
     </>

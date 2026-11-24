@@ -6,6 +6,7 @@ import FieldError from "@/components/shared/FieldError";
 import CountrySelect from "@/components/CountrySelect";
 import DateInput from "@/components/shared/DateInput";
 import { useIfscLookup } from "@/hooks/useIfscLookup";
+import { useT } from "@/hooks/useI18n";
 
 export interface StatutoryDraft {
   pan_number: string; aadhaar_number: string; name_as_per_aadhar: string; passport_number: string; passport_expiry: string;
@@ -24,11 +25,12 @@ export const EMPTY_STATUTORY: StatutoryDraft = {
 };
 
 function Toggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT();
   return (
     <div className="seg">
       {["true", "false"].map(v => (
         <button key={v} type="button" onClick={() => onChange(v)} aria-pressed={value === v}>
-          {v === "true" ? "Yes" : "No"}
+          {v === "true" ? t("Yes") : t("No")}
         </button>
       ))}
     </div>
@@ -52,6 +54,7 @@ interface Props {
 }
 
 export default function StatutoryAccountsStep({ value, onChange, documents, uploading = null, docError = "", onUploadDoc, onDeleteDoc, errors = {}, savedUanMasked }: Props) {
+  const t = useT();
   /** Marks a field's wrapper so the wizard can find it, and so it shows red while it has a message. */
   const mark = (field: string) => ({ className: "f hw-field", "data-hw-field": field, "data-hw-invalid": errors[field] ? ("true" as const) : undefined });
   // The newest form values. A change is merged into THESE, never into the `value` this render happened to receive: the IFSC lookup
@@ -74,7 +77,7 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
     if (!onUploadDoc || !onDeleteDoc) return null;
     return (
       <div style={{ marginTop: 6 }}>
-        <DocUploadButton documentType={documentType} label={label} existing={docFor(documentType)}
+        <DocUploadButton documentType={documentType} label={t(label)} existing={docFor(documentType)}
           uploading={uploading === documentType} onUpload={onUploadDoc} onDelete={onDeleteDoc} />
       </div>
     );
@@ -120,120 +123,120 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
   return (
     <div className="mstep on">
       <div className="note warn" style={{ marginBottom: 16 }}>
-        <b>Handled as sensitive data</b>
-        Government IDs and bank details are stored encrypted, masked in the UI by default, and every reveal is written to the audit log.
+        <b>{t("Handled as sensitive data")}</b>
+        {t("Government IDs and bank details are stored encrypted, masked in the UI by default, and every reveal is written to the audit log.")}
       </div>
 
       {docError && <div ref={errorRef} className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{docError}</div></div>}
 
-      <div className="sechead">GOVERNMENT IDS</div>
+      <div className="sechead">{t("GOVERNMENT IDS")}</div>
       <div className="g3">
         <div {...mark("pan_number")}>
-          <label>PAN <span className="req">*</span></label>
+          <label>{t("PAN")} <span className="req">*</span></label>
           <input value={value.pan_number} onChange={e => set("pan_number", e.target.value.toUpperCase())} placeholder="ABCDE1234F" maxLength={10} className="finput" />
           <FieldError message={errors.pan_number} />
           {renderDocSlot("pan_card", "PAN card")}
         </div>
         <div {...mark("aadhaar_number")}>
-          <label>Aadhaar <span className="req">*</span></label>
+          <label>{t("Aadhaar")} <span className="req">*</span></label>
           <input value={value.aadhaar_number} onChange={e => set("aadhaar_number", e.target.value.replace(/\D/g, ""))} placeholder="123456789012" maxLength={12} className="finput" />
           <FieldError message={errors.aadhaar_number} />
           {renderDocSlot("aadhaar_card", "Aadhaar card")}
         </div>
         <div className="f">
-          <label>Name as per Aadhaar</label>
-          <input value={value.name_as_per_aadhar} onChange={e => set("name_as_per_aadhar", e.target.value)} placeholder="As printed on the Aadhaar card" className="finput" />
+          <label>{t("Name as per Aadhaar")}</label>
+          <input value={value.name_as_per_aadhar} onChange={e => set("name_as_per_aadhar", e.target.value)} placeholder={t("As printed on the Aadhaar card")} className="finput" />
         </div>
         <div className="f">
-          <label>Passport</label>
-          <input value={value.passport_number} onChange={e => set("passport_number", e.target.value)} placeholder="Optional" className="finput" />
+          <label>{t("Passport")}</label>
+          <input value={value.passport_number} onChange={e => set("passport_number", e.target.value)} placeholder={t("Optional")} className="finput" />
           {renderDocSlot("passport_photo", "passport")}
         </div>
         <div className="f">
-          <label>Passport issue date</label>
+          <label>{t("Passport issue date")}</label>
           <DateInput value={value.passport_issue_date} onChange={iso => set("passport_issue_date", iso)} disabled={!value.passport_number} className="finput" />
         </div>
         <div className="f">
-          <label>Passport expiry</label>
+          <label>{t("Passport expiry")}</label>
           <DateInput value={value.passport_expiry} onChange={iso => set("passport_expiry", iso)} disabled={!value.passport_number} className="finput" />
           {value.passport_issue_date && value.passport_expiry && value.passport_expiry <= value.passport_issue_date && (
-            <div className="hint" style={{ color: "var(--error)" }}>Expiry must be after the issue date.</div>
+            <div className="hint" style={{ color: "var(--error)" }}>{t("Expiry must be after the issue date.")}</div>
           )}
         </div>
         <div className="f">
-          <label>Place of issue</label>
-          <input value={value.passport_place_of_issue} onChange={e => set("passport_place_of_issue", e.target.value)} placeholder="e.g. Hyderabad" disabled={!value.passport_number} className="finput" />
+          <label>{t("Place of issue")}</label>
+          <input value={value.passport_place_of_issue} onChange={e => set("passport_place_of_issue", e.target.value)} placeholder={t("e.g. Hyderabad")} disabled={!value.passport_number} className="finput" />
         </div>
         <div className="f">
-          <label>Country of issue</label>
+          <label>{t("Country of issue")}</label>
           <CountrySelect value={value.passport_country_of_issue} onChange={v => set("passport_country_of_issue", v)}
-            mode="name" placeholder="Select country" />
+            mode="name" placeholder={t("Select country")} />
         </div>
       </div>
 
       <div className="divider" />
-      <div className="sechead">PROVIDENT FUND</div>
+      <div className="sechead">{t("PROVIDENT FUND")}</div>
       <div className="togline" style={{ marginBottom: 14 }}>
-        <span>Covered under PF</span>
+        <span>{t("Covered under PF")}</span>
         <Toggle value={value.pf_covered} onChange={v => set("pf_covered", v)} />
       </div>
       <div className="g3">
         <div className="f">
-          <label>UAN</label>
-          <input value={value.uan_number} onChange={e => set("uan_number", e.target.value.replace(/\D/g, ""))} placeholder="12 digits, if available" maxLength={12} className="finput" />
+          <label>{t("UAN")}</label>
+          <input value={value.uan_number} onChange={e => set("uan_number", e.target.value.replace(/\D/g, ""))} placeholder={t("12 digits, if available")} maxLength={12} className="finput" />
           {value.uan_number && value.uan_number.length !== 12 ? (
-            <div className="hint" style={{ color: "var(--error)" }}>UAN must be 12 digits</div>
+            <div className="hint" style={{ color: "var(--error)" }}>{t("UAN must be 12 digits")}</div>
           ) : (
             <div className="hint">
               {savedUanMasked
-                ? `On file: ${savedUanMasked}. Leave blank to keep it, or type a new 12-digit UAN to replace it.`
-                : "Leave blank for a first job — EPFO will allot one."}
+                ? t("On file: {masked}. Leave blank to keep it, or type a new 12-digit UAN to replace it.", { masked: savedUanMasked })
+                : t("Leave blank for a first job — EPFO will allot one.")}
             </div>
           )}
         </div>
       </div>
 
       <div className="divider" />
-      <div className="sechead">ESI</div>
+      <div className="sechead">{t("ESI")}</div>
       <div className="togline" style={{ marginBottom: 14 }}>
-        <span>Covered under ESI</span>
+        <span>{t("Covered under ESI")}</span>
         <Toggle value={value.esi_covered} onChange={v => set("esi_covered", v)} />
       </div>
       {value.esi_covered === "true" && (
         <div className="g3">
           <div className="f">
-            <label>ESI number</label>
-            <input value={value.esi_number} onChange={e => set("esi_number", e.target.value.replace(/\D/g, ""))} placeholder="10 digits, if available" maxLength={10} className="finput" />
+            <label>{t("ESI number")}</label>
+            <input value={value.esi_number} onChange={e => set("esi_number", e.target.value.replace(/\D/g, ""))} placeholder={t("10 digits, if available")} maxLength={10} className="finput" />
           </div>
         </div>
       )}
 
       <div className="divider" />
-      <div className="sechead">BANK ACCOUNT</div>
+      <div className="sechead">{t("BANK ACCOUNT")}</div>
       <div className="g3">
         <div {...mark("account_holder_name")}>
-          <label>Account holder name <span className="req">*</span></label>
-          <input value={value.account_holder_name} onChange={e => set("account_holder_name", e.target.value)} placeholder="Should match the PAN name" className="finput" />
+          <label>{t("Account holder name")} <span className="req">*</span></label>
+          <input value={value.account_holder_name} onChange={e => set("account_holder_name", e.target.value)} placeholder={t("Should match the PAN name")} className="finput" />
           <FieldError message={errors.account_holder_name} />
         </div>
         <div {...mark("account_number")}>
-          <label>Account number <span className="req">*</span></label>
+          <label>{t("Account number")} <span className="req">*</span></label>
           <input value={value.account_number} onChange={e => set("account_number", e.target.value.replace(/\D/g, ""))} className="finput" />
           <FieldError message={errors.account_number} />
         </div>
         <div className="f">
-          <label>Account type</label>
+          <label>{t("Account type")}</label>
           <select value={value.account_type} onChange={e => set("account_type", e.target.value)} className="finput">
-            <option value="savings">Savings</option>
-            <option value="current">Current</option>
+            <option value="savings">{t("Savings")}</option>
+            <option value="current">{t("Current")}</option>
           </select>
         </div>
         <div {...mark("ifsc_code")}>
-          <label>IFSC code <span className="req">*</span></label>
+          <label>{t("IFSC code")} <span className="req">*</span></label>
           <input value={value.ifsc_code} onChange={e => setIfsc(e.target.value)} placeholder="HDFC0001234" maxLength={11} className="finput" />
           <FieldError message={errors.ifsc_code} />
-          {ifscStatus === "checking" && <div className="hint">Looking up bank…</div>}
-          {ifscStatus === "found" && <div className="hint" style={{ color: "var(--success, #16a34a)" }}>Bank and branch found — filled in below.</div>}
+          {ifscStatus === "checking" && <div className="hint">{t("Looking up bank…")}</div>}
+          {ifscStatus === "found" && <div className="hint" style={{ color: "var(--success, #16a34a)" }}>{t("Bank and branch found — filled in below.")}</div>}
           {ifscStatus === "not_found" && (
             // Deliberately NOT var(--error)/red — a valid-format code that
             // just isn't in this lookup dataset used to render identically
@@ -244,17 +247,17 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
             // whether this lookup found a match) — only the convenience
             // auto-fill didn't have data for this specific branch.
             <div className="hint" style={{ color: "var(--warn, #b45309)" }}>
-              Couldn&apos;t auto-fill bank details for this code — it&apos;s still accepted, just enter the bank name/branch manually below.
+              {t("Couldn't auto-fill bank details for this code — it's still accepted, just enter the bank name/branch manually below.")}
             </div>
           )}
         </div>
         <div className="f">
-          <label>Bank name</label>
-          <input value={value.bank_name} onChange={e => set("bank_name", e.target.value)} placeholder="e.g. HDFC Bank" className="finput" />
+          <label>{t("Bank name")}</label>
+          <input value={value.bank_name} onChange={e => set("bank_name", e.target.value)} placeholder={t("e.g. HDFC Bank")} className="finput" />
         </div>
         <div className="f">
-          <label>Branch / address</label>
-          <input value={value.bank_branch_address} onChange={e => set("bank_branch_address", e.target.value)} placeholder="Auto-filled from IFSC, or enter manually" className="finput" />
+          <label>{t("Branch / address")}</label>
+          <input value={value.bank_branch_address} onChange={e => set("bank_branch_address", e.target.value)} placeholder={t("Auto-filled from IFSC, or enter manually")} className="finput" />
         </div>
       </div>
     </div>

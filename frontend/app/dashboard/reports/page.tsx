@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { usePermission } from "@/hooks/usePermission";
 import { useReportCatalog } from "@/hooks/useReports";
 import ReportCard from "./_components/ReportCard";
+import { useT } from "@/hooks/useI18n";
 
 const OTHER_SCREENS = [
   { id: "audit", route: "/dashboard/settings/audit", permission: "audit.view", icon: "ti-history", label: "Audit Log", desc: "Every recorded action." },
@@ -18,6 +19,7 @@ const OTHER_SCREENS = [
 
 export default function ReportsPage() {
   const router = useRouter();
+  const t = useT();
   const catalog = useReportCatalog();
   const allowed: Record<string, boolean> = {
     audit: usePermission("audit.view"), leave: usePermission("leave.view"),
@@ -30,19 +32,18 @@ export default function ReportsPage() {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div>
-        <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>Dashboard / Reports</div>
-        <h1 style={{ margin: 0, fontSize: 24 }}>Reports</h1>
+        <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>{t("Dashboard / Reports")}</div>
+        <h1 style={{ margin: 0, fontSize: 24 }}>{t("Reports")}</h1>
         <p style={{ margin: "6px 0 0", color: "var(--on-variant)" }}>
-          Generate a report, download it, or email it to a colleague. You only see reports you are allowed to run, and each one
-          contains only the people and records you are allowed to see.
+          {t("Generate a report, download it, or email it to a colleague. You only see reports you are allowed to run, and each one contains only the people and records you are allowed to see.")}
         </p>
       </div>
 
-      {catalog.loading && <p>Loading reports…</p>}
+      {catalog.loading && <p>{t("Loading reports…")}</p>}
       {catalog.error && <p role="alert" style={{ color: "var(--error)" }}>{catalog.error}</p>}
       {!catalog.loading && !catalog.error && reports.length === 0 && (
-        <div className="empty-state"><i className="ti ti-chart-bar" /><h3>No reports are available to you</h3>
-          <p>Reports appear here when your role gives you access to the data they cover.</p></div>
+        <div className="empty-state"><i className="ti ti-chart-bar" /><h3>{t("No reports are available to you")}</h3>
+          <p>{t("Reports appear here when your role gives you access to the data they cover.")}</p></div>
       )}
 
       <div className="rp-grid">
@@ -51,11 +52,11 @@ export default function ReportsPage() {
 
       {otherScreens.length > 0 && (
         <section>
-          <h2 style={{ fontSize: 15, margin: "8px 0" }}>Other report screens</h2>
+          <h2 style={{ fontSize: 15, margin: "8px 0" }}>{t("Other report screens")}</h2>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {otherScreens.map(screen => (
-              <button key={screen.id} type="button" className="btn btn-outline" onClick={() => router.push(screen.route)} title={screen.desc}>
-                <i className={`ti ${screen.icon}`} /> {screen.label}
+              <button key={screen.id} type="button" className="btn btn-outline" onClick={() => router.push(screen.route)} title={t(screen.desc)}>
+                <i className={`ti ${screen.icon}`} /> {t(screen.label)}
               </button>
             ))}
           </div>

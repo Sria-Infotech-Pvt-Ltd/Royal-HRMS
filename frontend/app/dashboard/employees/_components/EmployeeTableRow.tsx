@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import { canResendOnboardingEmail, directoryStatusLabel, fullName, initials, personAvatarTint, reportingManagerDisplay, type DirectoryStatusLabel, type Employee } from "../_data";
 import type { StatusPillTone } from "@/components/employees/StatusPill";
 import Avatar from "./Avatar";
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEdit, toggling, onOpen, onToggleStatus, onActionApplied }: Props) {
+  const t = useT();
   const router = useRouter();
   const rowStatus = directoryStatusLabel(e);
   const lifecycle = lifecycleNote(e.employmentStage, e.dateOfJoining, e.accountLocked === true);
@@ -92,7 +94,7 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
           <Avatar text={initials(e.firstName, e.lastName)} size={32} color={tint.bg} textColor={tint.text} shape="square" className="av" photoUrl={e.photoUrl} />
         </div>
         <div className="min-w-0">
-          <div className="n truncate">{fullName(e)}{e.hasEditDraft && <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold align-middle" style={{ background: "var(--amber-bg, #fef3c7)", color: "var(--amber-ink, #92400e)" }} title="You have unsaved draft changes for this employee">Draft</span>}</div>
+          <div className="n truncate">{fullName(e)}{e.hasEditDraft && <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold align-middle" style={{ background: "var(--amber-bg, #fef3c7)", color: "var(--amber-ink, #92400e)" }} title={t("You have unsaved draft changes for this employee")}>{t("Draft")}</span>}</div>
           <div className="i truncate">{e.code}</div>
         </div>
       </div>
@@ -111,42 +113,42 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
           <div onClick={ev => ev.stopPropagation()}>
             {canManageOnboarding ? (
               <button
-                type="button" onClick={() => setIsHistoryOpen(true)} aria-label={`Onboarding history for ${fullName(e)}`}
-                title="Onboarding history, and resend the invitation email"
+                type="button" onClick={() => setIsHistoryOpen(true)} aria-label={t("Onboarding history for {name}", { name: fullName(e) })}
+                title={t("Onboarding history, and resend the invitation email")}
                 style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}
               >
-                <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+                <StatusPill label={t(rowStatus)} tone={STATUS_TONE[rowStatus]} />
               </button>
             ) : (
-              <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+              <StatusPill label={t(rowStatus)} tone={STATUS_TONE[rowStatus]} />
             )}
             {/* Always there for someone who is still onboarding, whether the email was sent, opened, expired or failed. Without
                 the permission it is shown but switched off, with the reason, instead of silently missing. */}
             <button
-              type="button" disabled={!canManageOnboarding} onClick={() => setIsHistoryOpen(true)} aria-label={`Resend invite to ${fullName(e)}`}
-              title={canManageOnboarding ? "Send this person a fresh onboarding email" : "You need permission to manage onboarding invites (Employees: reset password and edit)."}
+              type="button" disabled={!canManageOnboarding} onClick={() => setIsHistoryOpen(true)} aria-label={t("Resend invite to {name}", { name: fullName(e) })}
+              title={canManageOnboarding ? t("Send this person a fresh onboarding email") : t("You need permission to manage onboarding invites (Employees: reset password and edit).")}
               style={{ display: "block", marginTop: 3, padding: 0, border: 0, background: "none", fontSize: 11.5, fontWeight: 700, color: canManageOnboarding ? "var(--primary)" : "var(--faint)", cursor: canManageOnboarding ? "pointer" : "not-allowed" }}
             >
-              <i className="ti ti-mail-forward" aria-hidden="true" /> Resend invite
+              <i className="ti ti-mail-forward" aria-hidden="true" /> {t("Resend invite")}
             </button>
             {isHistoryOpen && canManageOnboarding && (
               <OnboardingHistoryModal employeeUuid={e.uuid} employeeName={fullName(e)} onClose={() => setIsHistoryOpen(false)} onChanged={onActionApplied} />
             )}
           </div>
         ) : (
-          <StatusPill label={rowStatus} tone={STATUS_TONE[rowStatus]} />
+          <StatusPill label={t(rowStatus)} tone={STATUS_TONE[rowStatus]} />
         )}
         {lifecycle && (
           <div className="text-[11px]" style={{ color: LIFECYCLE_TONE[lifecycle.tone], marginTop: 2 }}>{lifecycle.text}</div>
         )}
         {rowStatus === "Active" && e.employmentStatus === "probation" && (
-          <div className="text-[11px]" style={{ color: "var(--muted)", marginTop: 2 }}>On probation</div>
+          <div className="text-[11px]" style={{ color: "var(--muted)", marginTop: 2 }}>{t("On probation")}</div>
         )}
       </div>
       <div className="text-[13px] whitespace-nowrap" style={{ color: "var(--muted)" }}>{slashDate(e.dateOfJoining)}</div>
       <div className="text-[13px] whitespace-nowrap">
         {rowStatus === "Notice Period" || isExited
-          ? <span className="mgr" style={{ color: "var(--crit)", fontStyle: "italic" }}>Last day {slashDate(e.lastWorkingDay)}</span>
+          ? <span className="mgr" style={{ color: "var(--crit)", fontStyle: "italic" }}>{t("Last day {date}", { date: slashDate(e.lastWorkingDay) })}</span>
           : e.reportingManagerName
             ? <span className="mgr" style={{ color: "var(--ink)" }}>{e.reportingManagerName}</span>
             : <span className="mgr none">{reportingManagerDisplay(e.reportingManagerName, e.noManagerByDesign)}</span>

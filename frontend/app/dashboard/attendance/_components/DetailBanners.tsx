@@ -2,6 +2,7 @@
 
 // The coloured plain-words messages above the times ("No punch recorded", "Arrived late" ...), and the day's note if there is one.
 
+import { useT } from "@/hooks/useI18n";
 import { tint } from "./attendancePalette";
 import type { Banner } from "./detailView";
 
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function DetailBanners({ banners, note }: Props) {
+  const t = useT();
   if (banners.length === 0 && !note) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -26,7 +28,7 @@ export default function DetailBanners({ banners, note }: Props) {
       {note && (
         <div style={{ display: "flex", gap: 10, padding: "10px 14px", borderRadius: 12, background: "var(--bg-low)", border: "1px solid var(--outline-v)", fontSize: 13 }}>
           <i className="ti ti-note" aria-hidden="true" style={{ color: "var(--on-variant)", fontSize: 17 }} />
-          <span><strong style={{ fontWeight: 600 }}>Note: </strong>{note}</span>
+          <span><strong style={{ fontWeight: 600 }}>{t("Note:")} </strong>{note}</span>
         </div>
       )}
     </div>

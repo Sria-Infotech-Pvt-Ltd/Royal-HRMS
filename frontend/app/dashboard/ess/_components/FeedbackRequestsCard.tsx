@@ -12,6 +12,7 @@ import { formatDate } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
 import { useToast } from "@/components/ToastProvider";
 import type { FeedbackRequest } from "@/types/feedback";
+import { useT } from "@/hooks/useI18n";
 
 interface Page { results: FeedbackRequest[] }
 
@@ -19,6 +20,7 @@ interface Props { refreshKey: number }
 
 export default function FeedbackRequestsCard({ refreshKey }: Props) {
   const { showToast } = useToast();
+  const t = useT();
   const mine = useFetch<Page>(`${API.performance.feedbackRequests}?scope=mine&r=${refreshKey}`);
   const forMe = useFetch<Page>(`${API.performance.feedbackRequests}?scope=for-me&r=${refreshKey}`);
   const [answering, setAnswering] = useState<FeedbackRequest | null>(null);
@@ -31,15 +33,15 @@ export default function FeedbackRequestsCard({ refreshKey }: Props) {
 
   async function respond(decline: boolean) {
     if (!answering) return;
-    if (!decline && !text.trim()) { setError("Write your feedback before sending it."); return; }
+    if (!decline && !text.trim()) { setError(t("Write your feedback before sending it.")); return; }
     setBusy(true); setError("");
     try {
       await clientApi.post(API.performance.feedbackRespond(answering.id), decline ? { decline: true } : { response: text.trim() });
-      showToast(decline ? "Request declined." : "Feedback sent.", "success");
+      showToast(decline ? t("Request declined.") : t("Feedback sent."), "success");
       setAnswering(null); setText("");
       mine.refetch(); forMe.refetch();
     } catch (e: unknown) {
-      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not send your response.");
+      setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Could not send your response."));
     } finally { setBusy(false); }
   }
 
@@ -47,13 +49,13 @@ export default function FeedbackRequestsCard({ refreshKey }: Props) {
     <>
       {toAnswer.length > 0 && (
         <section className="ess-card">
-          <h2>Feedback asked of you</h2>
-          <p>Colleagues who would value your perspective.</p>
+          <h2>{t("Feedback asked of you")}</h2>
+          <p>{t("Colleagues who would value your perspective.")}</p>
           <div className="ess-list">
             {toAnswer.map(r => (
               <div key={r.id} className="ess-row">
                 <div><b>{r.requester_name} · {r.cycle_label}</b><small>{r.topic}</small></div>
-                <button className="btn btn-filled btn-sm" type="button" onClick={() => { setAnswering(r); setText(""); setError(""); }}>Respond</button>
+                <button className="btn btn-filled btn-sm" type="button" onClick={() => { setAnswering(r); setText(""); setError(""); }}>{t("Respond")}</button>
               </div>
             ))}
           </div>
@@ -61,11 +63,11 @@ export default function FeedbackRequestsCard({ refreshKey }: Props) {
       )}
 
       <section className="ess-card">
-        <h2>Feedback requests</h2>
-        <p>Requests you have made and what came back.</p>
+        <h2>{t("Feedback requests")}</h2>
+        <p>{t("Requests you have made and what came back.")}</p>
         <div className="ess-list">
           {asked.length === 0 ? (
-            <div className="ess-row"><div><b>No feedback requests</b><small>Ask a manager or colleague for focused feedback.</small></div></div>
+            <div className="ess-row"><div><b>{t("No feedback requests")}</b><small>{t("Ask a manager or colleague for focused feedback.")}</small></div></div>
           ) : asked.map(r => (
             <div key={r.id} className="ess-row">
               <div>
@@ -81,21 +83,21 @@ export default function FeedbackRequestsCard({ refreshKey }: Props) {
 
       {answering && (
         <Modal
-          title={<h2 className="modal-title">Give <em style={{ color: "var(--brand-ink)" }}>feedback</em></h2>}
+          title={<h2 className="modal-title">{t("Give")} <em style={{ color: "var(--brand-ink)" }}>{t("feedback")}</em></h2>}
           onClose={() => setAnswering(null)} closeDisabled={busy}
           footer={
             <>
-              <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => respond(true)}>Decline</button>
-              <button className="btn btn-filled" type="button" disabled={busy} onClick={() => respond(false)}>{busy ? "Sending…" : "Send feedback"}</button>
+              <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => respond(true)}>{t("Decline")}</button>
+              <button className="btn btn-filled" type="button" disabled={busy} onClick={() => respond(false)}>{busy ? t("Sending…") : t("Send feedback")}</button>
             </>
           }
         >
           <div className="space-y-4">
-            <p className="hint">{answering.requester_name} asked: {answering.topic}</p>
+            <p className="hint">{t("{name} asked: {topic}", { name: answering.requester_name, topic: answering.topic })}</p>
             {error && <div className="alert alert-error">{error}</div>}
             <div className="ess-field">
-              <label htmlFor="fbAnswer">YOUR FEEDBACK</label>
-              <textarea id="fbAnswer" value={text} onChange={e => setText(e.target.value)} placeholder="Specific, constructive and kind." />
+              <label htmlFor="fbAnswer">{t("YOUR FEEDBACK")}</label>
+              <textarea id="fbAnswer" value={text} onChange={e => setText(e.target.value)} placeholder={t("Specific, constructive and kind.")} />
             </div>
           </div>
         </Modal>

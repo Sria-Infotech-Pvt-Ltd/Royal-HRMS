@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { setAssessmentStatus, clearAuth } from "@/lib/auth";
@@ -16,6 +17,7 @@ import {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AssessmentsPage() {
+  const t = useT();
   const router = useRouter();
   const { data, loading, error, refetch } = useFetch<MyAssessmentsData>(API.assessments.my);
 
@@ -147,7 +149,7 @@ export default function AssessmentsPage() {
       setPanelRunScore(result.assignment_score);
       refetch();
     } catch {
-      setPanelError("Could not save your response. Please try again.");
+      setPanelError(t("Could not save your response. Please try again."));
     } finally {
       setPanelSaving(false);
     }
@@ -161,7 +163,7 @@ export default function AssessmentsPage() {
       setFinalResults(prev => { const n = { ...prev }; delete n[assignmentId]; return n; });
       setCompletionModal(null); setSelectedPanel(null); refetch();
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not start retake.";
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Could not start retake.");
       setRetakeError(prev => ({ ...prev, [assignmentId]: message }));
     } finally { setRetaking(null); }
   }
@@ -181,10 +183,10 @@ export default function AssessmentsPage() {
       const isLastPending = !assignments.some(a =>
         a.id !== assignmentId && (a.status === "pending" || a.status === "in_progress")
       );
-      setCompletionModal({ result, title: assignment?.assessment_title ?? "Assessment", assignmentId, attemptNumber: (assignment?.attempt_number ?? 0) + 1, isLastPending });
+      setCompletionModal({ result, title: assignment?.assessment_title ?? t("Assessment"), assignmentId, attemptNumber: (assignment?.attempt_number ?? 0) + 1, isLastPending });
       setSelectedPanel(null); refetch();
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not submit assessment.";
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Could not submit assessment.");
       setCompleteError(prev => ({ ...prev, [assignmentId]: message }));
     } finally { setCompleting(null); }
   }
@@ -222,21 +224,21 @@ export default function AssessmentsPage() {
             <i className="ti ti-clipboard-check" style={{ color: "#fff", fontSize: 17 }} />
           </div>
           <div>
-            <h1 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: 0 }}>Assessment Portal</h1>
-            <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>Aira HRMS — Pre-Onboarding</p>
+            <h1 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: 0 }}>{t("Assessment Portal")}</h1>
+            <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>{t("Aira HRMS — Pre-Onboarding")}</p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {allComplete && (
             <button suppressHydrationWarning onClick={() => router.push("/dashboard")}
               style={{ padding: "8px 18px", borderRadius: 9, background: "var(--brand)", color: "#fff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
-              Go to Dashboard <i className="ti ti-arrow-right" />
+              {t("Go to Dashboard")} <i className="ti ti-arrow-right" />
             </button>
           )}
           <button suppressHydrationWarning onClick={handleLogout} disabled={loggingOut}
             style={{ padding: "8px 16px", borderRadius: 9, background: "transparent", color: "#64748b", fontWeight: 500, fontSize: 13, border: "1px solid #e2e8f0", cursor: loggingOut ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: loggingOut ? 0.6 : 1 }}>
             {loggingOut ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-logout" />}
-            {loggingOut ? "Logging out…" : "Logout"}
+            {loggingOut ? t("Logging out…") : t("Logout")}
           </button>
         </div>
       </header>
@@ -249,9 +251,9 @@ export default function AssessmentsPage() {
 
           {/* Sidebar header */}
           <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid #f1f5f9", background: "#fafafa" }}>
-            <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 2px" }}>Assessments</p>
+            <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 2px" }}>{t("Assessments")}</p>
             <p style={{ fontSize: 13, fontWeight: 600, color: "#334155", margin: 0 }}>
-              {loading ? "Loading…" : `${assignments.length} test${assignments.length !== 1 ? "s" : ""} assigned`}
+              {loading ? t("Loading…") : assignments.length === 1 ? t("{count} test assigned", { count: assignments.length }) : t("{count} tests assigned", { count: assignments.length })}
             </p>
           </div>
 
@@ -264,12 +266,12 @@ export default function AssessmentsPage() {
 
           {/* Error / empty */}
           {!loading && error && (
-            <div style={{ padding: 16, fontSize: 12, color: "#dc2626" }}><i className="ti ti-alert-circle mr-1" />Failed to load.</div>
+            <div style={{ padding: 16, fontSize: 12, color: "#dc2626" }}><i className="ti ti-alert-circle mr-1" />{t("Failed to load.")}</div>
           )}
           {!loading && !error && assignments.length === 0 && (
             <div style={{ padding: 24, textAlign: "center" }}>
               <i className="ti ti-clipboard" style={{ fontSize: 28, color: "#cbd5e1", display: "block", marginBottom: 8 }} />
-              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>No assessments assigned yet.</p>
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>{t("No assessments assigned yet.")}</p>
             </div>
           )}
 
@@ -301,7 +303,7 @@ export default function AssessmentsPage() {
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{assignment.assessment_title}</span>
                     {isDone && (
                       <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: isPassed === false ? "#fee2e2" : "#dcfce7", color: isPassed === false ? "#dc2626" : "#16a34a", flexShrink: 0 }}>
-                        {isPassed === false ? "Failed" : "Done"}
+                        {isPassed === false ? t("Failed") : t("Done")}
                       </span>
                     )}
                   </div>
@@ -311,8 +313,8 @@ export default function AssessmentsPage() {
                       <span>
                         <i className="ti ti-refresh" style={{ fontSize: 9, marginRight: 3 }} />
                         {assignment.attempts_remaining != null
-                          ? `${assignment.attempts_remaining} attempt${assignment.attempts_remaining !== 1 ? "s" : ""} left`
-                          : `${assignment.effective_max_attempts} max`}
+                          ? (assignment.attempts_remaining === 1 ? t("{count} attempt left", { count: assignment.attempts_remaining }) : t("{count} attempts left", { count: assignment.attempts_remaining }))
+                          : t("{count} max", { count: assignment.effective_max_attempts })}
                       </span>
                     )}
                     {timers[assignment.id] != null && !isDone && (
@@ -327,8 +329,8 @@ export default function AssessmentsPage() {
                     <div style={{ height: "100%", width: `${sortedItems.length > 0 ? (doneCount / sortedItems.length) * 100 : 0}%`, background: isDone && isPassed === false ? "#ef4444" : "var(--brand)", borderRadius: 99, transition: "width 0.4s" }} />
                   </div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{doneCount}/{sortedItems.length} items</span>
-                    {assignment.max_score > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "var(--brand)" }}>{currentScore}/{assignment.max_score} pts</span>}
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{t("{done}/{total} items", { done: doneCount, total: sortedItems.length })}</span>
+                    {assignment.max_score > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "var(--brand)" }}>{t("{score}/{max} pts", { score: currentScore, max: assignment.max_score })}</span>}
                   </div>
                 </div>
 
@@ -372,7 +374,7 @@ export default function AssessmentsPage() {
                               style={{ fontSize: 12, color: "#94a3b8", flexShrink: 0, transition: "transform 0.15s" }}
                             />
                             <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.05em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {group.title ?? "Section"}
+                              {group.title ?? t("Section")}
                             </span>
                             <span style={{ fontSize: 10, color: "#94a3b8", flexShrink: 0 }}>
                               {group.items.filter(i => isItemDone(i, assignment.responses)).length}/{group.items.length}
@@ -410,10 +412,10 @@ export default function AssessmentsPage() {
                                 <p style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, color: locked ? "#94a3b8" : isActive ? "var(--brand)" : "#334155", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</p>
                                 <p style={{ fontSize: 10, color: "#94a3b8", margin: 0, display: "flex", alignItems: "center", gap: 3 }}>
                                   <i className={`ti ${isVideo ? "ti-player-play" : "ti-help-circle"}`} style={{ fontSize: 9 }} />
-                                  {isVideo ? "Video" : "Quiz"}
+                                  {isVideo ? t("Video") : t("Quiz")}
                                   {done && itemResp && !isVideo && itemResp.is_correct != null && (
                                     <span style={{ color: itemResp.is_correct ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
-                                      {" "}· {itemResp.is_correct ? `+${itemResp.score_awarded}pts` : "✗"}
+                                      {" "}· {itemResp.is_correct ? t("+{score}pts", { score: itemResp.score_awarded }) : "✗"}
                                     </span>
                                   )}
                                 </p>
@@ -436,7 +438,7 @@ export default function AssessmentsPage() {
                         )}
                         <button suppressHydrationWarning onClick={() => handleComplete(assignment.id)} disabled={completing === assignment.id}
                           style={{ width: "100%", padding: "9px 0", borderRadius: 9, background: completing === assignment.id ? "#94a3b8" : "var(--brand)", color: "#fff", fontWeight: 600, fontSize: 12, border: "none", cursor: completing === assignment.id ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-                          {completing === assignment.id ? <><i className="ti ti-loader-2 spin" />Submitting…</> : <><i className="ti ti-send" />Submit Assessment</>}
+                          {completing === assignment.id ? <><i className="ti ti-loader-2 spin" />{t("Submitting…")}</> : <><i className="ti ti-send" />{t("Submit Assessment")}</>}
                         </button>
                       </>
                     )}
@@ -447,7 +449,7 @@ export default function AssessmentsPage() {
                         )}
                         <button suppressHydrationWarning onClick={() => handleRetake(assignment.id)} disabled={retaking === assignment.id}
                           style={{ width: "100%", padding: "9px 0", borderRadius: 9, background: "transparent", color: "#dc2626", fontWeight: 600, fontSize: 12, border: "1.5px solid #fca5a5", cursor: retaking === assignment.id ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: retaking === assignment.id ? 0.6 : 1 }}>
-                          {retaking === assignment.id ? <><i className="ti ti-loader-2 spin" />Starting…</> : <><i className="ti ti-refresh" />Retake Assessment</>}
+                          {retaking === assignment.id ? <><i className="ti ti-loader-2 spin" />{t("Starting…")}</> : <><i className="ti ti-refresh" />{t("Retake Assessment")}</>}
                         </button>
                       </>
                     )}
@@ -455,7 +457,7 @@ export default function AssessmentsPage() {
                     {/* Attempt history mini */}
                     {assignment.attempts && assignment.attempts.length > 0 && (
                       <div style={{ marginTop: 10 }}>
-                        <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 6px" }}>History</p>
+                        <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 6px" }}>{t("History")}</p>
                         {[...assignment.attempts].sort((a, b) => a.attempt_number - b.attempt_number).map(attempt => (
                           <div key={attempt.attempt_number} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 11, borderBottom: "1px solid #f1f5f9" }}>
                             <span style={{ color: "#64748b" }}>#{attempt.attempt_number}</span>
@@ -486,10 +488,10 @@ export default function AssessmentsPage() {
                 </p>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
-                <span style={{ fontSize: 12, color: "#64748b" }}>Item {selectedPanel.itemIndex} of {selectedPanel.totalItems}</span>
+                <span style={{ fontSize: 12, color: "#64748b" }}>{t("Item {current} of {total}", { current: selectedPanel.itemIndex, total: selectedPanel.totalItems })}</span>
                 {selectedPanel.maxScore > 0 && (
                   <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "3px 12px", textAlign: "center" }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: "#1d4ed8" }}>Score: </span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#1d4ed8" }}>{t("Score:")} </span>
                     <span style={{ fontSize: 14, fontWeight: 800, color: "var(--brand)" }}>{panelRunScore}</span>
                     <span style={{ fontSize: 11, color: "#64748b" }}>/{selectedPanel.maxScore}</span>
                   </div>
@@ -506,7 +508,7 @@ export default function AssessmentsPage() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
                 <div style={{ textAlign: "center" }}>
                   <i className="ti ti-loader-2 spin" style={{ fontSize: 36, color: "#94a3b8", display: "block", marginBottom: 12 }} />
-                  <p style={{ fontSize: 14, color: "#94a3b8" }}>Loading assessments…</p>
+                  <p style={{ fontSize: 14, color: "#94a3b8" }}>{t("Loading assessments…")}</p>
                 </div>
               </div>
             )}
@@ -514,7 +516,7 @@ export default function AssessmentsPage() {
             {/* Error */}
             {!loading && error && (
               <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 12, padding: "16px 20px", color: "#dc2626", fontSize: 14 }}>
-                <i className="ti ti-alert-circle mr-2" />Could not load assessments. Please refresh.
+                <i className="ti ti-alert-circle mr-2" />{t("Could not load assessments. Please refresh.")}
               </div>
             )}
 
@@ -526,17 +528,17 @@ export default function AssessmentsPage() {
                     <i className="ti ti-arrow-left" style={{ fontSize: 32, color: "var(--brand)" }} />
                   </div>
                   <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", margin: "0 0 8px" }}>
-                    {assignments.length === 0 ? "No Assessments Yet" : "Select an Item to Begin"}
+                    {assignments.length === 0 ? t("No Assessments Yet") : t("Select an Item to Begin")}
                   </h2>
                   <p style={{ fontSize: 14, color: "#64748b", margin: 0, lineHeight: 1.6 }}>
                     {assignments.length === 0
-                      ? "Your HR team will assign assessments before you can proceed to the dashboard."
-                      : "Click on any question or video in the sidebar on the left to start your assessment."}
+                      ? t("Your HR team will assign assessments before you can proceed to the dashboard.")
+                      : t("Click on any question or video in the sidebar on the left to start your assessment.")}
                   </p>
                   {allComplete && (
                     <button suppressHydrationWarning onClick={() => router.push("/dashboard")}
                       style={{ marginTop: 24, padding: "11px 28px", borderRadius: 10, background: "#16a34a", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      All Done — Go to Dashboard <i className="ti ti-arrow-right" />
+                      {t("All Done — Go to Dashboard")} <i className="ti ti-arrow-right" />
                     </button>
                   )}
                 </div>
@@ -570,9 +572,9 @@ export default function AssessmentsPage() {
                           return (
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 12, padding: 24 }}>
                               <i className="ti ti-video-off" style={{ fontSize: 40, color: "#64748b" }} />
-                              <p style={{ color: "#94a3b8", fontSize: 13, margin: 0 }}>Preview not available</p>
+                              <p style={{ color: "#94a3b8", fontSize: 13, margin: 0 }}>{t("Preview not available")}</p>
                               <a href={item.video_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#1e293b", color: "#e2e8f0", borderRadius: 8, padding: "8px 16px", fontSize: 13, textDecoration: "none" }}>
-                                <i className="ti ti-external-link" /> Open video
+                                <i className="ti ti-external-link" /> {t("Open video")}
                               </a>
                             </div>
                           );
@@ -581,7 +583,7 @@ export default function AssessmentsPage() {
 
                       {item.duration_secs && (
                         <p style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 5, marginBottom: 20 }}>
-                          <i className="ti ti-clock" /> Duration: {Math.ceil(item.duration_secs / 60)} min
+                          <i className="ti ti-clock" /> {t("Duration: {minutes} min", { minutes: Math.ceil(item.duration_secs / 60) })}
                         </p>
                       )}
 
@@ -592,15 +594,15 @@ export default function AssessmentsPage() {
                             <i className="ti ti-check" style={{ fontSize: 22, color: "#16a34a" }} />
                           </div>
                           <div>
-                            <p style={{ fontWeight: 700, color: "#15803d", margin: "0 0 2px" }}>Video marked as watched!</p>
-                            <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>Your progress has been saved.</p>
+                            <p style={{ fontWeight: 700, color: "#15803d", margin: "0 0 2px" }}>{t("Video marked as watched!")}</p>
+                            <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>{t("Your progress has been saved.")}</p>
                           </div>
                         </div>
                       )}
 
                       {alreadyDone && !panelResult && (
                         <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 14, padding: "14px 20px", display: "flex", alignItems: "center", gap: 10, marginBottom: 20, fontSize: 13, color: "#15803d", fontWeight: 600 }}>
-                          <i className="ti ti-circle-check" style={{ fontSize: 18 }} /> You have already watched this video.
+                          <i className="ti ti-circle-check" style={{ fontSize: 18 }} /> {t("You have already watched this video.")}
                         </div>
                       )}
 
@@ -609,19 +611,19 @@ export default function AssessmentsPage() {
                         {!alreadyDone && !panelResult && (
                           <button suppressHydrationWarning onClick={handlePanelSubmit} disabled={panelSaving}
                             style={{ padding: "12px 28px", borderRadius: 10, background: panelSaving ? "#94a3b8" : "var(--brand)", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: panelSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px color-mix(in srgb, var(--brand) 30%, transparent)" }}>
-                            {panelSaving ? <><i className="ti ti-loader-2 spin" />Saving…</> : <><i className="ti ti-circle-check" />Mark as Watched</>}
+                            {panelSaving ? <><i className="ti ti-loader-2 spin" />{t("Saving…")}</> : <><i className="ti ti-circle-check" />{t("Mark as Watched")}</>}
                           </button>
                         )}
                         {(panelResult || alreadyDone) && selectedPanel.itemIndex < selectedPanel.totalItems && (
                           <button suppressHydrationWarning onClick={goToNextItem}
                             style={{ padding: "12px 28px", borderRadius: 10, background: "var(--brand)", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-                            Next Item <i className="ti ti-arrow-right" />
+                            {t("Next Item")} <i className="ti ti-arrow-right" />
                           </button>
                         )}
                         {(panelResult || alreadyDone) && isLastItemInPanel && selectedAllAnswered && !selectedIsDone && (
                           <button suppressHydrationWarning onClick={() => handleComplete(selectedPanel.assignmentId)} disabled={completing === selectedPanel.assignmentId}
                             style={{ padding: "12px 28px", borderRadius: 10, background: completing === selectedPanel.assignmentId ? "#94a3b8" : "#16a34a", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: completing === selectedPanel.assignmentId ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>
-                            {completing === selectedPanel.assignmentId ? <><i className="ti ti-loader-2 spin" />Submitting…</> : <><i className="ti ti-send" />Submit Assessment</>}
+                            {completing === selectedPanel.assignmentId ? <><i className="ti ti-loader-2 spin" />{t("Submitting…")}</> : <><i className="ti ti-send" />{t("Submit Assessment")}</>}
                           </button>
                         )}
                       </div>
@@ -634,8 +636,8 @@ export default function AssessmentsPage() {
                       {/* Question card */}
                       <div style={{ background: "var(--surface)", border: "1px solid #e2e8f0", borderRadius: 14, padding: "24px 28px", marginBottom: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--brand)", textTransform: "uppercase", letterSpacing: "0.08em", background: "#f5f3ff", padding: "3px 10px", borderRadius: 20 }}>Question</span>
-                          {item.pass_score > 0 && <span style={{ fontSize: 11, color: "#64748b" }}><i className="ti ti-target mr-1" />{item.pass_score} point{item.pass_score !== 1 ? "s" : ""}</span>}
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--brand)", textTransform: "uppercase", letterSpacing: "0.08em", background: "#f5f3ff", padding: "3px 10px", borderRadius: 20 }}>{t("Question")}</span>
+                          {item.pass_score > 0 && <span style={{ fontSize: 11, color: "#64748b" }}><i className="ti ti-target mr-1" />{item.pass_score === 1 ? t("{count} point", { count: item.pass_score }) : t("{count} points", { count: item.pass_score })}</span>}
                         </div>
                         <p style={{ fontSize: 17, fontWeight: 600, color: "#0f172a", margin: 0, lineHeight: 1.65 }}>{item.question}</p>
                       </div>
@@ -665,8 +667,8 @@ export default function AssessmentsPage() {
                                 <i className={`ti ${resp?.is_correct ? "ti-check" : "ti-x"}`} style={{ fontSize: 22, color: resp?.is_correct ? "#16a34a" : "#dc2626" }} />
                               </div>
                               <div>
-                                <p style={{ fontWeight: 700, color: resp?.is_correct ? "#15803d" : "#dc2626", margin: "0 0 2px", fontSize: 15 }}>{resp?.is_correct ? "Correct Answer" : "Incorrect"}</p>
-                                <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>You answered: Option {resp?.selected_option?.toUpperCase() ?? "—"}{resp?.score_awarded ? ` · +${resp.score_awarded} pts` : ""}</p>
+                                <p style={{ fontWeight: 700, color: resp?.is_correct ? "#15803d" : "#dc2626", margin: "0 0 2px", fontSize: 15 }}>{resp?.is_correct ? t("Correct Answer") : t("Incorrect")}</p>
+                                <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>{t("You answered: Option {option}", { option: resp?.selected_option?.toUpperCase() ?? "—" })}{resp?.score_awarded ? ` · ${t("+{score} pts", { score: resp.score_awarded })}` : ""}</p>
                               </div>
                             </div>
                           </div>
@@ -679,12 +681,12 @@ export default function AssessmentsPage() {
                           <div style={{ width: 56, height: 56, borderRadius: "50%", background: panelResult.is_correct ? "#dcfce7" : "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
                             <i className={`ti ${panelResult.is_correct ? "ti-check" : "ti-x"}`} style={{ fontSize: 26, color: panelResult.is_correct ? "#16a34a" : "#dc2626" }} />
                           </div>
-                          <p style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 4px" }}>{panelResult.is_correct ? "Correct!" : "Incorrect"}</p>
-                          {panelResult.score_awarded > 0 && <p style={{ fontSize: 14, color: "#16a34a", fontWeight: 600, margin: "0 0 12px" }}>+{panelResult.score_awarded} point{panelResult.score_awarded !== 1 ? "s" : ""} awarded</p>}
+                          <p style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 4px" }}>{panelResult.is_correct ? t("Correct!") : t("Incorrect")}</p>
+                          {panelResult.score_awarded > 0 && <p style={{ fontSize: 14, color: "#16a34a", fontWeight: 600, margin: "0 0 12px" }}>{panelResult.score_awarded === 1 ? t("+{count} point awarded", { count: panelResult.score_awarded }) : t("+{count} points awarded", { count: panelResult.score_awarded })}</p>}
                           {selectedPanel.maxScore > 0 && (
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 18px", fontSize: 13 }}>
                               <i className="ti ti-chart-bar" style={{ color: "var(--brand)" }} />
-                              Running total: <strong style={{ color: "var(--brand)" }}>{panelResult.assignment_score} / {selectedPanel.maxScore}</strong>
+                              {t("Running total:")} <strong style={{ color: "var(--brand)" }}>{panelResult.assignment_score} / {selectedPanel.maxScore}</strong>
                             </div>
                           )}
                         </div>
@@ -701,19 +703,19 @@ export default function AssessmentsPage() {
                         {!alreadyDone && !panelResult && (
                           <button suppressHydrationWarning onClick={handlePanelSubmit} disabled={panelSaving || !panelSelected}
                             style={{ padding: "12px 28px", borderRadius: 10, background: panelSaving || !panelSelected ? "#94a3b8" : "var(--brand)", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: panelSaving || !panelSelected ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: panelSelected ? "0 2px 8px color-mix(in srgb, var(--brand) 30%, transparent)" : "none" }}>
-                            {panelSaving ? <><i className="ti ti-loader-2 spin" />Saving…</> : <><i className="ti ti-send" />Submit Answer</>}
+                            {panelSaving ? <><i className="ti ti-loader-2 spin" />{t("Saving…")}</> : <><i className="ti ti-send" />{t("Submit Answer")}</>}
                           </button>
                         )}
                         {(panelResult || alreadyDone) && selectedPanel.itemIndex < selectedPanel.totalItems && (
                           <button suppressHydrationWarning onClick={goToNextItem}
                             style={{ padding: "12px 28px", borderRadius: 10, background: "var(--brand)", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-                            Next Item <i className="ti ti-arrow-right" />
+                            {t("Next Item")} <i className="ti ti-arrow-right" />
                           </button>
                         )}
                         {(panelResult || alreadyDone) && isLastItemInPanel && selectedAllAnswered && !selectedIsDone && (
                           <button suppressHydrationWarning onClick={() => handleComplete(selectedPanel.assignmentId)} disabled={completing === selectedPanel.assignmentId}
                             style={{ padding: "12px 28px", borderRadius: 10, background: completing === selectedPanel.assignmentId ? "#94a3b8" : "#16a34a", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: completing === selectedPanel.assignmentId ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>
-                            {completing === selectedPanel.assignmentId ? <><i className="ti ti-loader-2 spin" />Submitting…</> : <><i className="ti ti-send" />Submit Assessment</>}
+                            {completing === selectedPanel.assignmentId ? <><i className="ti ti-loader-2 spin" />{t("Submitting…")}</> : <><i className="ti ti-send" />{t("Submit Assessment")}</>}
                           </button>
                         )}
                       </div>

@@ -2,6 +2,7 @@
 
 import { coverageItems, coveragePercent, segmentWidth } from "@/lib/faceRegistrationStatus";
 import type { FaceRosterCounts, FaceRosterFilter } from "@/types/faceRegistration";
+import { useT } from "@/hooks/useI18n";
 
 interface FaceCoverageCardProps {
   counts:    FaceRosterCounts
@@ -12,15 +13,16 @@ interface FaceCoverageCardProps {
 
 /** How far Face ID registration has got across all active employees, and one click to list who has not completed it. */
 export default function FaceCoverageCard({ counts, isLoading, filter, onFilter }: FaceCoverageCardProps) {
+  const t = useT();
   const percent = coveragePercent(counts);
   const toggle = (next: FaceRosterFilter) => onFilter(filter === next ? "" : next);
   return (
     <div className="card fid-coverage">
       <div className="fid-coverage-top">
         <div>
-          <div className="fid-coverage-title">Face ID coverage</div>
+          <div className="fid-coverage-title">{t("Face ID coverage")}</div>
           <div className="fid-coverage-figure">
-            {isLoading ? "—" : <><strong>{counts.approved.toLocaleString()}</strong> of {counts.total.toLocaleString()} employees registered <span>({percent}%)</span></>}
+            {isLoading ? "—" : <><strong>{counts.approved.toLocaleString()}</strong> {t("of {total} employees registered", { total: counts.total.toLocaleString() })} <span>({percent}%)</span></>}
           </div>
         </div>
         <button
@@ -30,17 +32,17 @@ export default function FaceCoverageCard({ counts, isLoading, filter, onFilter }
           disabled={isLoading || counts.incomplete === 0}
           onClick={() => toggle("incomplete")}
         >
-          <i className="ti ti-user-exclamation" /> {counts.incomplete === 0 && !isLoading ? "Everyone is registered" : `Show ${counts.incomplete.toLocaleString()} not completed`}
+          <i className="ti ti-user-exclamation" /> {counts.incomplete === 0 && !isLoading ? t("Everyone is registered") : t("Show {count} not completed", { count: counts.incomplete.toLocaleString() })}
         </button>
       </div>
 
-      <div className="fid-bar" role="img" aria-label={`${percent}% registered`}>
+      <div className="fid-bar" role="img" aria-label={t("{percent}% registered", { percent })}>
         {coverageItems(counts).map(item => (
           <span key={item.filter} className={`fid-seg tone-${item.tone}`} style={{ width: `${segmentWidth(item.value, counts.total)}%` }} />
         ))}
       </div>
 
-      <div className="fid-legend" role="group" aria-label="Filter employees by Face ID status">
+      <div className="fid-legend" role="group" aria-label={t("Filter employees by Face ID status")}>
         {coverageItems(counts).map(item => (
           <button
             key={item.filter}
@@ -50,7 +52,7 @@ export default function FaceCoverageCard({ counts, isLoading, filter, onFilter }
             disabled={isLoading}
             onClick={() => toggle(item.filter)}
           >
-            <i className={`fid-dot tone-${item.tone}`} /> {item.label} <strong>{isLoading ? "—" : item.value.toLocaleString()}</strong>
+            <i className={`fid-dot tone-${item.tone}`} /> {t(item.label)} <strong>{isLoading ? "—" : item.value.toLocaleString()}</strong>
           </button>
         ))}
       </div>

@@ -22,16 +22,16 @@ export default function LeaveHandoverFields({ form, onChange }: Props) {
       <div className="flex flex-col gap-4 border-t border-[var(--outline-v)] px-3.5 py-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <Lbl text="Handover to" />
+            <Lbl text={tr("Handover to")} />
             <input className="field-input" value={form.handover_to} onChange={event => onChange("handover_to", event.target.value)} placeholder={tr("Colleague name")} />
           </div>
           <div>
-            <Lbl text="Contact during leave" />
+            <Lbl text={tr("Contact during leave")} />
             <input className="field-input" value={form.contact_during_leave} onChange={event => onChange("contact_during_leave", event.target.value)} placeholder="+91 98765 43210" />
           </div>
         </div>
         <div>
-          <Lbl text="Handover notes" />
+          <Lbl text={tr("Handover notes")} />
           <textarea className="field-input" rows={2} maxLength={300} value={form.handover_notes} onChange={event => onChange("handover_notes", event.target.value)} placeholder={tr("Pending tasks and important context")} style={{ resize: "none" }} />
         </div>
       </div>

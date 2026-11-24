@@ -5,6 +5,7 @@
 // state, coloured pills, an employee avatar and paging. The tabs keep their own data and actions; this is only how they look.
 
 import type { CSSProperties, ReactNode } from "react";
+import { useT } from "@/hooks/useI18n";
 import { PALETTE, tint } from "./attendancePalette";
 
 export const MONO: CSSProperties = { fontFamily: "Menlo, Consolas, monospace", fontSize: 12.5 };
@@ -25,6 +26,7 @@ interface SectionCardProps {
 }
 
 export function SectionCard({ icon, colour, title, subtitle, count, filters, action, children }: SectionCardProps) {
+  const t = useT();
   return (
     <section aria-label={title} className="card" style={{ padding: 0, overflow: "hidden" }}>
       <header style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid var(--outline-v)", background: `linear-gradient(135deg, ${tint(colour, 0.1)} 0%, var(--surface) 62%)` }}>
@@ -32,7 +34,7 @@ export function SectionCard({ icon, colour, title, subtitle, count, filters, act
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--on-bg)", display: "flex", alignItems: "center", gap: 8 }}>
             {title}
-            {typeof count === "number" && <span aria-label={`${count} in total`} style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: tint(colour, 0.14), color: colour }}>{count}</span>}
+            {typeof count === "number" && <span aria-label={t("{count} in total", { count })} style={{ fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: tint(colour, 0.14), color: colour }}>{count}</span>}
           </h3>
           <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--on-variant)" }}>{subtitle}</p>
         </div>
@@ -76,9 +78,10 @@ export function PersonCell({ name, employeeId }: { name: string; employeeId: str
 
 /** Rows for a table body: three shimmering rows while loading, or a friendly message when there is nothing to show. */
 export function TableStates({ columns, loading, empty, icon, title, hint }: { columns: number; loading: boolean; empty: boolean; icon: string; title: string; hint: string }) {
+  const t = useT();
   if (loading) {
     return <>{Array.from({ length: 3 }, (_, row) => (
-      <tr key={`loading-${row}`} aria-label="Loading">{Array.from({ length: columns }, (__, cell) => <td key={cell}><div aria-hidden="true" style={{ ...SHIMMER, height: 14, borderRadius: 6 }} /></td>)}</tr>
+      <tr key={`loading-${row}`} aria-label={t("Loading")}>{Array.from({ length: columns }, (__, cell) => <td key={cell}><div aria-hidden="true" style={{ ...SHIMMER, height: 14, borderRadius: 6 }} /></td>)}</tr>
     ))}</>;
   }
   if (!empty) return null;
@@ -94,13 +97,14 @@ export function TableStates({ columns, loading, empty, icon, title, hint }: { co
 interface PagerProps { data: { page: number; total_pages: number; count?: number } | null; page: number; onPage: (page: number) => void; noun?: string }
 
 export function Pager({ data, page, onPage, noun }: PagerProps) {
+  const t = useT();
   if (!data || data.total_pages <= 1) return null;
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
-      <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {data.page} of {data.total_pages}{noun && data.count !== undefined ? ` · ${data.count} ${noun}` : ""}</span>
+      <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("Page {page} of {total}", { page: data.page, total: data.total_pages })}{noun && data.count !== undefined ? ` · ${data.count} ${noun}` : ""}</span>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => onPage(Math.max(page - 1, 1))}><i className="ti ti-chevron-left" /> Prev</button>
-        <button className="btn btn-ghost btn-sm" disabled={page >= data.total_pages} onClick={() => onPage(Math.min(page + 1, data.total_pages))}>Next <i className="ti ti-chevron-right" /></button>
+        <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => onPage(Math.max(page - 1, 1))}><i className="ti ti-chevron-left" /> {t("Prev")}</button>
+        <button className="btn btn-ghost btn-sm" disabled={page >= data.total_pages} onClick={() => onPage(Math.min(page + 1, data.total_pages))}>{t("Next")} <i className="ti ti-chevron-right" /></button>
       </div>
     </div>
   );

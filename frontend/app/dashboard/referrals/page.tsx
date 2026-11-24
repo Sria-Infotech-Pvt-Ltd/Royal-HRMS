@@ -11,10 +11,12 @@ import ReferralTable from "./ReferralTable";
 import ReferralRulesTab from "./ReferralRulesTab";
 import ReferSomeoneModal from "./ReferSomeoneModal";
 import { type ReferralRule, type ReferralListResponse, EMPTY_FORM } from "./_data";
+import { useT } from "@/hooks/useI18n";
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ReferralsPage() {
+  const t                = useT();
   const currentUser      = useCurrentUser();
   const isAdmin          = usePermission("recruitment.view");
   const [myBranch,       setMyBranch]       = useState("");
@@ -112,7 +114,7 @@ export default function ReferralsPage() {
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })
-          ?.response?.data?.message ?? "Failed to submit referral. Please try again.";
+          ?.response?.data?.message ?? t("Failed to submit referral. Please try again.");
       setFormError(msg);
     } finally {
       setSaving(false);
@@ -130,12 +132,12 @@ export default function ReferralsPage() {
       {/* ── Header ── */}
       <div className="page-header">
         <div>
-          <div className="page-title">Referrals</div>
-          <div className="page-sub">Refer talented people you know and earn a bonus when they join the team.</div>
+          <div className="page-title">{t("Referrals")}</div>
+          <div className="page-sub">{t("Refer talented people you know and earn a bonus when they join the team.")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-filled" onClick={() => { setFormError(""); setForm({ ...EMPTY_FORM, branch: myBranch }); setShowModal(true); }} suppressHydrationWarning>
-            <i className="ti ti-user-plus" /> Refer Someone
+            <i className="ti ti-user-plus" /> {t("Refer Someone")}
           </button>
         </div>
       </div>
@@ -144,7 +146,7 @@ export default function ReferralsPage() {
       {submitBanner && (
         <div className="alert alert-success" style={{ marginBottom: 16 }}>
           <i className="ti ti-circle-check" />
-          <div>Referral submitted successfully! It will appear in My Referrals shortly.</div>
+          <div>{t("Referral submitted successfully! It will appear in My Referrals shortly.")}</div>
         </div>
       )}
 
@@ -153,7 +155,7 @@ export default function ReferralsPage() {
         {statCards.map(s => (
           <div key={s.label} className="stat-card">
             <div className={`stat-icon ${s.cls}`}><i className={`ti ${s.icon}`} /></div>
-            <div className="stat-label">{s.label}</div>
+            <div className="stat-label">{t(s.label)}</div>
             <div className="stat-value">{s.value}</div>
           </div>
         ))}
@@ -164,16 +166,16 @@ export default function ReferralsPage() {
 
         {/* Tab bar */}
         <div style={{ display: "flex", borderBottom: "1px solid var(--outline-v)" }}>
-          {TABS.filter(t => t.show).map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} suppressHydrationWarning
+          {TABS.filter(item => item.show).map(item => (
+            <button key={item.key} onClick={() => setTab(item.key)} suppressHydrationWarning
               style={{
                 padding: "14px 22px", background: "none", border: "none", cursor: "pointer",
-                borderBottom: tab === t.key ? "2px solid var(--primary)" : "2px solid transparent",
-                color: tab === t.key ? "var(--primary)" : "var(--on-variant)",
-                fontWeight: tab === t.key ? 700 : 500, fontSize: 13,
+                borderBottom: tab === item.key ? "2px solid var(--primary)" : "2px solid transparent",
+                color: tab === item.key ? "var(--primary)" : "var(--on-variant)",
+                fontWeight: tab === item.key ? 700 : 500, fontSize: 13,
                 display: "flex", alignItems: "center", gap: 7, marginBottom: -1,
               }}>
-              <i className={`ti ${t.icon}`} /> {t.label}
+              <i className={`ti ${item.icon}`} /> {t(item.label)}
             </button>
           ))}
         </div>

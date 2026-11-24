@@ -2,6 +2,7 @@
 
 import { useId, useRef } from "react";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   saving: boolean;
@@ -20,6 +21,7 @@ interface Props {
 export default function EditRecordUnsavedChangesDialog({
   saving, savingDraft, onKeepEditing, onDontSave, onSaveAsDraft, onSave,
 }: Props) {
+  const t = useT();
   const mouseDownOnOverlay = useRef(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -34,22 +36,22 @@ export default function EditRecordUnsavedChangesDialog({
     >
       <div ref={dialogRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} className="modal" style={{ maxWidth: "min(440px, 94vw)" }}>
         <div className="modal-header">
-          <div id={titleId} className="modal-title">You have unsaved changes</div>
+          <div id={titleId} className="modal-title">{t("You have unsaved changes")}</div>
         </div>
         <div className="modal-body">
           <p style={{ fontSize: 14, color: "var(--on-variant)", lineHeight: 1.6, margin: 0 }}>
-            What would you like to do with your changes?
+            {t("What would you like to do with your changes?")}
           </p>
         </div>
         <div className="modal-footer" style={{ flexWrap: "wrap", gap: 8 }}>
           {/* Default focus lands here per spec — the safest action (don't lose anything, keep going). */}
-          <button autoFocus className="btn btn-ghost" onClick={onKeepEditing}>Keep editing</button>
-          <button className="btn btn-ghost" onClick={onDontSave}>Don&apos;t save</button>
+          <button autoFocus className="btn btn-ghost" onClick={onKeepEditing}>{t("Keep editing")}</button>
+          <button className="btn btn-ghost" onClick={onDontSave}>{t("Don't save")}</button>
           <button className="btn btn-ghost" disabled={savingDraft} onClick={onSaveAsDraft}>
-            {savingDraft ? "Saving…" : "Save as draft"}
+            {savingDraft ? t("Saving…") : t("Save as draft")}
           </button>
           <button className="btn btn-filled" disabled={saving} onClick={onSave}>
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("Saving…") : t("Save")}
           </button>
         </div>
       </div>

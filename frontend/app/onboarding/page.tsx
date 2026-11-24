@@ -6,6 +6,8 @@ import clientApi, { markIntentionalLogout, refreshAccessToken } from "@/lib/clie
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
 import { useHrContact } from "@/hooks/useHrContact";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import HrContactNote from "@/components/HrContactNote";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
@@ -29,6 +31,7 @@ import { todayDateString } from "@/lib/candidateValidation";
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
+  const t = useT();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [tab,       setTab]       = useState(0);
@@ -84,7 +87,7 @@ export default function OnboardingPage() {
   // Per-company configurable document types (Settings > Onboarding Fields >
   // Documents) — same fetch-all-filter-visible pattern as fieldConfig above.
   const [docTypeConfig, setDocTypeConfig] = useState<DocumentTypeConfig[]>([]);
-  const docTypes = docTypeConfig.filter(t => t.visible).sort((a, b) => a.order - b.order);
+  const docTypes = docTypeConfig.filter(docType => docType.visible).sort((a, b) => a.order - b.order);
   const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
   const [fileUploadError, setFileUploadError] = useState<string | null>(null);
 
@@ -184,16 +187,16 @@ export default function OnboardingPage() {
   // remains, so a removed-then-re-added entry never collides with itself.
   async function saveEducationEntries(): Promise<boolean> {
     if (!educationEntries.some(e => e.institution.trim())) {
-      setEducationErr("Please add at least one education entry (with an institution) before continuing.");
+      setEducationErr(t("Please add at least one education entry (with an institution) before continuing."));
       return false;
     }
     for (const entry of educationEntries) {
       if (!entry.level) {
-        setEducationErr("Select an education type for every entry.");
+        setEducationErr(t("Select an education type for every entry."));
         return false;
       }
       if (entry.level === "other" && !entry.custom_level_label.trim()) {
-        setEducationErr("Name the custom education type for every entry marked \"Other\".");
+        setEducationErr(t("Name the custom education type for every entry marked \"Other\"."));
         return false;
       }
     }
@@ -224,7 +227,7 @@ export default function OnboardingPage() {
       setEducationEntries(saved);
       return true;
     } catch (err: unknown) {
-      setEducationErr((err as { message?: string })?.message ?? "Failed to save. Please try again.");
+      setEducationErr((err as { message?: string })?.message ?? t("Failed to save. Please try again."));
       return false;
     }
   }
@@ -255,7 +258,7 @@ export default function OnboardingPage() {
   async function saveExperienceEntries(): Promise<boolean> {
     for (const entry of experienceEntries) {
       if (!entry.employer_name.trim()) {
-        setExperienceErr("Employer name is required for every entry — remove any blank ones, or fill them in.");
+        setExperienceErr(t("Employer name is required for every entry — remove any blank ones, or fill them in."));
         return false;
       }
     }
@@ -288,7 +291,7 @@ export default function OnboardingPage() {
       refetchTotalExperience();
       return true;
     } catch (err: unknown) {
-      setExperienceErr((err as { message?: string })?.message ?? "Failed to save. Please try again.");
+      setExperienceErr((err as { message?: string })?.message ?? t("Failed to save. Please try again."));
       return false;
     }
   }
@@ -334,13 +337,13 @@ export default function OnboardingPage() {
   async function saveFamilyNominationEntries(): Promise<boolean> {
     for (const entry of familyEntries) {
       if (!entry.name.trim()) {
-        setFamilyNominationErr("Name is required for every family member — remove any blank ones, or fill them in.");
+        setFamilyNominationErr(t("Name is required for every family member — remove any blank ones, or fill them in."));
         return false;
       }
     }
     for (const entry of nomineeEntries) {
       if (!entry.family_member) {
-        setFamilyNominationErr("Select a family member for every nominee — remove any incomplete ones, or fill them in.");
+        setFamilyNominationErr(t("Select a family member for every nominee — remove any incomplete ones, or fill them in."));
         return false;
       }
     }
@@ -394,7 +397,7 @@ export default function OnboardingPage() {
       setNomineeEntries(savedNominees);
       return true;
     } catch (err: unknown) {
-      setFamilyNominationErr((err as { message?: string })?.message ?? "Failed to save. Please try again.");
+      setFamilyNominationErr((err as { message?: string })?.message ?? t("Failed to save. Please try again."));
       return false;
     }
   }
@@ -417,7 +420,7 @@ export default function OnboardingPage() {
   async function saveAssetEntries(): Promise<boolean> {
     for (const entry of assetEntries) {
       if (!entry.asset_type) {
-        setAssetErr("Select an asset type for every entry — remove any incomplete ones, or fill them in.");
+        setAssetErr(t("Select an asset type for every entry — remove any incomplete ones, or fill them in."));
         return false;
       }
     }
@@ -447,7 +450,7 @@ export default function OnboardingPage() {
       setAssetEntries(saved);
       return true;
     } catch (err: unknown) {
-      setAssetErr((err as { message?: string })?.message ?? "Failed to save. Please try again.");
+      setAssetErr((err as { message?: string })?.message ?? t("Failed to save. Please try again."));
       return false;
     }
   }
@@ -507,7 +510,7 @@ export default function OnboardingPage() {
     if (user?.onboarding_status === "rejected") {
       clientApi.get<{ data: { onboarding_rejection_remarks?: string } }>(API.employees.me)
         .then(({ data }) => setRejectionRemarks(
-          data?.data?.onboarding_rejection_remarks || "Please review and resubmit — contact HR for details.",
+          data?.data?.onboarding_rejection_remarks || tr("Please review and resubmit — contact HR for details."),
         ))
         .catch(() => {});
     }
@@ -567,7 +570,7 @@ export default function OnboardingPage() {
         // then it has to open for the correction screen"). Reset the actual
         // state that gates which screen renders, and surface HR's remarks
         // so landing back on the wizard isn't a guessing game.
-        setRejectionRemarks(info.onboarding_rejection_remarks || "Please review and resubmit — contact HR for details.");
+        setRejectionRemarks(info.onboarding_rejection_remarks || t("Please review and resubmit — contact HR for details."));
         setIsAlreadySubmitted(false);
         setSubmitted(false);
         return true;
@@ -637,7 +640,7 @@ export default function OnboardingPage() {
       const { data } = await clientApi.get(API.onboarding.customFileFields);
       setCustomFileValues(data?.data ?? []);
     } catch (err: unknown) {
-      setFileUploadError((err as { message?: string })?.message ?? "Failed to upload file. Please try again.");
+      setFileUploadError((err as { message?: string })?.message ?? t("Failed to upload file. Please try again."));
     } finally {
       setUploadingFileKey(null);
     }
@@ -649,7 +652,7 @@ export default function OnboardingPage() {
       await clientApi.delete(API.onboarding.customFileFieldDetail(valueId));
       setCustomFileValues(prev => prev.filter(v => v.id !== valueId));
     } catch (err: unknown) {
-      setFileUploadError((err as { message?: string })?.message ?? "Failed to delete file. Please try again.");
+      setFileUploadError((err as { message?: string })?.message ?? t("Failed to delete file. Please try again."));
     }
   }
 
@@ -722,7 +725,7 @@ export default function OnboardingPage() {
       })
       .map(c => c.label);
     if (missing.length > 0) {
-      setSaveErr(`Please fill in: ${missing.join(", ")}`);
+      setSaveErr(t("Please fill in: {fields}", { fields: missing.join(", ") }));
       return false;
     }
 
@@ -745,15 +748,15 @@ export default function OnboardingPage() {
         API.onboarding.profileStep(currentStep.step), { ...form, ...customForStep },
       );
       if (res.data?.success === false) {
-        setSaveErr(res.data.message ?? "Please fill in all required fields.");
+        setSaveErr(res.data.message ?? t("Please fill in all required fields."));
         return false;
       }
       if (res.data?.data?.bank_change_status) setBankChangeStatus(res.data.data.bank_change_status);
-      setSaveMsg(res.data?.message?.includes("HR review") ? res.data.message : "Saved successfully.");
+      setSaveMsg(res.data?.message?.includes("HR review") ? res.data.message : t("Saved successfully."));
       setTimeout(() => setSaveMsg(null), res.data?.message?.includes("HR review") ? 6000 : 2500);
       return true;
     } catch (err: unknown) {
-      setSaveErr((err as { message?: string })?.message ?? "Save failed. Please try again.");
+      setSaveErr((err as { message?: string })?.message ?? t("Save failed. Please try again."));
       return false;
     } finally {
       setSaving(false);
@@ -835,7 +838,7 @@ export default function OnboardingPage() {
     const ok = await saveSection();
     if (ok && tab < steps.length - 1) {
       setHighestSaved(prev => Math.max(prev, tab));
-      setTab(t => t + 1);
+      setTab(previous => previous + 1);
     }
   }
 
@@ -848,11 +851,11 @@ export default function OnboardingPage() {
   async function handlePanCardUpload(file: File) {
     const value = form.pan_number.trim().toUpperCase();
     if (!value) {
-      setPanErr("Enter your PAN number before uploading the PAN card.");
+      setPanErr(t("Enter your PAN number before uploading the PAN card."));
       return;
     }
     if (!PAN_RE.test(value)) {
-      setPanErr("Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter.");
+      setPanErr(t("Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter."));
       return;
     }
     setPanErr(null);
@@ -860,7 +863,7 @@ export default function OnboardingPage() {
     try {
       await clientApi.patch(API.onboarding.profileStep(4), { pan_number: value });
     } catch (err: unknown) {
-      setPanErr((err as { message?: string })?.message ?? "Could not save PAN number. Please try again.");
+      setPanErr((err as { message?: string })?.message ?? t("Could not save PAN number. Please try again."));
       return;
     } finally {
       setPanSaving(false);
@@ -890,7 +893,7 @@ export default function OnboardingPage() {
       const r = await clientApi.get(API.onboarding.documents);
       setDocs(r.data?.data ?? []);
     } catch (err: unknown) {
-      setSaveErr((err as { message?: string })?.message ?? "Upload failed. Max 5 MB, PDF/JPG/PNG only.");
+      setSaveErr((err as { message?: string })?.message ?? t("Upload failed. Max 5 MB, PDF/JPG/PNG only."));
     } finally {
       setUploading(null);
       setUploadProgress(0);
@@ -906,7 +909,7 @@ export default function OnboardingPage() {
       const r = await clientApi.get(API.onboarding.documents);
       setDocs(r.data?.data ?? []);
     } catch (err: unknown) {
-      setSaveErr((err as { message?: string })?.message ?? "Could not remove this document. Please try again.");
+      setSaveErr((err as { message?: string })?.message ?? t("Could not remove this document. Please try again."));
     } finally {
       setUploading(null);
     }
@@ -923,7 +926,7 @@ export default function OnboardingPage() {
       setSubmitted(true);
       setRejectionRemarks(null);
     } catch (err: unknown) {
-      setSaveErr((err as { message?: string })?.message ?? "Submission failed. Please try again.");
+      setSaveErr((err as { message?: string })?.message ?? t("Submission failed. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -937,7 +940,7 @@ export default function OnboardingPage() {
     try {
       const redirected = await checkAndHandleApproval();
       if (!redirected) {
-        setCheckApprovalMsg("Still awaiting HR review — check back later, or wait for the email notification.");
+        setCheckApprovalMsg(t("Still awaiting HR review — check back later, or wait for the email notification."));
       }
     } finally {
       setCheckingApproval(false);
@@ -953,19 +956,19 @@ export default function OnboardingPage() {
             <i className="ti ti-check" style={{ color: "var(--success)", fontSize: 36 }} />
           </div>
           <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--on-bg)", marginBottom: ".75rem" }}>
-            {isApprovedAwaitingActivation ? "Approved — check your email" : "Profile Submitted!"}
+            {isApprovedAwaitingActivation ? t("Approved — check your email") : t("Profile Submitted!")}
           </h2>
           <p style={{ color: "var(--on-variant)", lineHeight: 1.6, marginBottom: "1.5rem" }}>
             {isApprovedAwaitingActivation ? (
-              <>HR has approved your onboarding.<br />We have emailed you a link to set your password and activate your account.</>
+              <>{t("HR has approved your onboarding.")}<br />{t("We have emailed you a link to set your password and activate your account.")}</>
             ) : (
-              <>Your onboarding details have been sent for HR review.<br />You will receive access once approved.</>
+              <>{t("Your onboarding details have been sent for HR review.")}<br />{t("You will receive access once approved.")}</>
             )}
           </p>
           <p style={{ fontSize: ".82rem", color: "var(--outline)", background: "var(--bg-low)", padding: ".75rem 1rem", borderRadius: 8, marginBottom: "1.5rem" }}>
             {isApprovedAwaitingActivation
-              ? "You can close this tab and continue from the email."
-              : "You can close this tab. We will notify you by email when approved."}
+              ? t("You can close this tab and continue from the email.")
+              : t("You can close this tab. We will notify you by email when approved.")}
           </p>
           <HrContactNote contact={hrContact} />
           {checkApprovalMsg && (
@@ -987,8 +990,8 @@ export default function OnboardingPage() {
             }}
           >
             {checkingApproval
-              ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 15 }} /> Checking…</>
-              : <><i className="ti ti-refresh" style={{ fontSize: 15 }} /> Check Approval Status</>
+              ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 15 }} /> {t("Checking…")}</>
+              : <><i className="ti ti-refresh" style={{ fontSize: 15 }} /> {t("Check Approval Status")}</>
             }
           </button>
         </div>
@@ -1010,8 +1013,8 @@ export default function OnboardingPage() {
           }}
         >
           {loggingOut
-            ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 15 }} /> Logging out…</>
-            : <><i className="ti ti-logout" style={{ fontSize: 15 }} /> Logout</>
+            ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 15 }} /> {t("Logging out…")}</>
+            : <><i className="ti ti-logout" style={{ fontSize: 15 }} /> {t("Logout")}</>
           }
         </button>
       </div>
@@ -1034,13 +1037,13 @@ export default function OnboardingPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-icon.png" alt="Aira HRMS" style={{ height: 34, width: "auto", objectFit: "contain" }} />
           <div>
-            <h2 style={{ fontSize: 18 }}>Complete your profile</h2>
-            <p>Fill in your details to get started. Your information is kept secure.</p>
+            <h2 style={{ fontSize: 18 }}>{t("Complete your profile")}</h2>
+            <p>{t("Fill in your details to get started. Your information is kept secure.")}</p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{progressPct}% complete</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{t("{percent}% complete", { percent: progressPct })}</div>
             <div style={{ height: 5, width: 120, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden", marginTop: 4 }}>
               <div style={{ height: "100%", width: `${progressPct}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.3s ease" }} />
             </div>
@@ -1056,8 +1059,8 @@ export default function OnboardingPage() {
             style={{ flexShrink: 0 }}
           >
             {loggingOut
-              ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Logging out…</>
-              : <><i className="ti ti-logout" style={{ fontSize: 14 }} /> Logout</>
+              ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> {t("Logging out…")}</>
+              : <><i className="ti ti-logout" style={{ fontSize: 14 }} /> {t("Logout")}</>
             }
           </button>
         </div>
@@ -1069,16 +1072,16 @@ export default function OnboardingPage() {
         <div className="wiz-main">
           <div className="stephead">
             <div>
-              <h3>{steps[tab].label}</h3>
-              <p>Step {tab + 1} of {steps.length}</p>
+              <h3>{t(steps[tab].label)}</h3>
+              <p>{t("Step {current} of {total}", { current: tab + 1, total: steps.length })}</p>
             </div>
             {steps[tab].kind === "fields" && autosaveStatus !== "idle" && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".78rem", color: autosaveStatus === "saved" ? "var(--success)" : autosaveStatus === "error" ? "var(--error)" : "var(--on-variant)" }}>
                 {autosaveStatus === "saving"
-                  ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} /> Saving…</>
+                  ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} /> {t("Saving…")}</>
                   : autosaveStatus === "error"
-                  ? <><i className="ti ti-alert-triangle" style={{ fontSize: 13 }} /> Not saved yet. Check your connection; Save &amp; Continue will retry</>
-                  : <><i className="ti ti-cloud-check" style={{ fontSize: 13 }} /> All changes saved</>
+                  ? <><i className="ti ti-alert-triangle" style={{ fontSize: 13 }} /> {t("Not saved yet. Check your connection; Save & Continue will retry")}</>
+                  : <><i className="ti ti-cloud-check" style={{ fontSize: 13 }} /> {t("All changes saved")}</>
                 }
               </div>
             )}
@@ -1089,7 +1092,7 @@ export default function OnboardingPage() {
             <div className="alert alert-warn" style={{ marginBottom: "1.25rem" }}>
               <i className="ti ti-alert-triangle" />
               <div>
-                <b>HR sent this back for corrections:</b> {rejectionRemarks}
+                <b>{t("HR sent this back for corrections:")}</b> {rejectionRemarks}
               </div>
             </div>
           )}
@@ -1104,8 +1107,7 @@ export default function OnboardingPage() {
             }}>
               <i className="ti ti-clock-hour-4" style={{ fontSize: 16, marginTop: 1 }} />
               <div>
-                A bank detail change you submitted is awaiting HR review — your previous
-                details remain active for payroll until it&apos;s approved.
+                {t("A bank detail change you submitted is awaiting HR review — your previous details remain active for payroll until it's approved.")}
               </div>
             </div>
           )}
@@ -1213,21 +1215,21 @@ export default function OnboardingPage() {
         </div>
 
         <div className="modal-foot">
-          <button className="btn btn-ghost" onClick={() => setTab(t => t - 1)} disabled={tab === 0 || saving} type="button">
-            <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Previous
+          <button className="btn btn-ghost" onClick={() => setTab(previous => previous - 1)} disabled={tab === 0 || saving} type="button">
+            <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> {t("Previous")}
           </button>
           {tab < steps.length - 1 ? (
             <button className="btn btn-filled" onClick={next} disabled={saving} type="button">
               {saving
-                ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Saving…</>
-                : <>Save & Continue <i className="ti ti-arrow-right" style={{ fontSize: 14 }} /></>
+                ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> {t("Saving…")}</>
+                : <>{t("Save & Continue")} <i className="ti ti-arrow-right" style={{ fontSize: 14 }} /></>
               }
             </button>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: ".5rem" }}>
               <div style={{ display: "flex", gap: ".75rem" }}>
                 <button className="btn btn-ghost" onClick={saveSection} disabled={saving} type="button">
-                  {saving ? "Saving…" : "Save Draft"}
+                  {saving ? t("Saving…") : t("Save Draft")}
                 </button>
                 <button
                   className="btn btn-filled"
@@ -1235,17 +1237,17 @@ export default function OnboardingPage() {
                   disabled={saving || !canSubmit}
                   type="button"
                   style={{ background: "var(--success)", borderColor: "var(--success)" }}
-                  title={canSubmit ? undefined : "Complete Face ID registration (Step 6) before submitting."}
+                  title={canSubmit ? undefined : t("Complete Face ID registration (Step 6) before submitting.")}
                 >
                   {saving
-                    ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Submitting…</>
-                    : <><i className="ti ti-check" style={{ fontSize: 14 }} /> Submit for Approval</>
+                    ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> {t("Submitting…")}</>
+                    : <><i className="ti ti-check" style={{ fontSize: 14 }} /> {t("Submit for Approval")}</>
                   }
                 </button>
               </div>
               {!canSubmit && (
                 <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>
-                  Complete Face ID registration (Step 6) to enable submission.
+                  {t("Complete Face ID registration (Step 6) to enable submission.")}
                 </span>
               )}
             </div>

@@ -11,6 +11,7 @@ import { API } from "@/lib/api/endpoints";
 import {
   avatarColor, fullDateTime, initials, viewKey, CAT_BADGE, CAT_LABEL, type Announcement,
 } from "../../announcements/_data";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   announcement: Announcement;
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function EssAnnouncementDetailModal({ announcement, isOwn, onToggleReact, onClose }: Props) {
+  const t = useT();
   const avatar = avatarColor(announcement.posted_by_name);
 
   useEffect(() => {
@@ -37,15 +39,15 @@ export default function EssAnnouncementDetailModal({ announcement, isOwn, onTogg
   }, [announcement.id, isOwn]);
 
   const audience = announcement.visibility === "all"
-    ? "All Employees"
+    ? t("All Employees")
     : announcement.visibility === "department" ? announcement.target_org_unit_name : announcement.target_branch_name;
 
   return (
     <Modal
-      title={<><i className="ti ti-speakerphone" /> Announcement</>}
+      title={<><i className="ti ti-speakerphone" /> {t("Announcement")}</>}
       onClose={onClose}
       maxWidth="min(640px, 96vw)"
-      footer={<button className="btn btn-filled" onClick={onClose} suppressHydrationWarning>Close</button>}
+      footer={<button className="btn btn-filled" onClick={onClose} suppressHydrationWarning>{t("Close")}</button>}
     >
       <div className="ann-view-author-row">
         <div style={{
@@ -59,14 +61,14 @@ export default function EssAnnouncementDetailModal({ announcement, isOwn, onTogg
             <span style={{ fontWeight: 600, fontSize: 14 }}>{announcement.posted_by_name}</span>
             {announcement.posted_by_role && <span className="ann-view-role">{announcement.posted_by_role}</span>}
           </div>
-          <div className="ann-view-timestamp">Posted {fullDateTime(announcement.created_at)}</div>
+          <div className="ann-view-timestamp">{t("Posted {date}", { date: fullDateTime(announcement.created_at) })}</div>
         </div>
       </div>
 
       <div className="ann-view-badges">
-        {announcement.is_pinned && <span className="badge badge-warn"><i className="ti ti-pin" /> Pinned</span>}
+        {announcement.is_pinned && <span className="badge badge-warn"><i className="ti ti-pin" /> {t("Pinned")}</span>}
         <span className={`badge ${CAT_BADGE[announcement.category]}`} style={{ textTransform: "capitalize" }}>
-          {CAT_LABEL[announcement.category]}
+          {t(CAT_LABEL[announcement.category])}
         </span>
         <span className="badge badge-neutral"><i className="ti ti-users" /> {audience}</span>
       </div>
@@ -81,7 +83,7 @@ export default function EssAnnouncementDetailModal({ announcement, isOwn, onTogg
           suppressHydrationWarning
         >
           <i className={`ti ${announcement.has_reacted ? "ti-heart-filled" : "ti-heart"}`} style={{ fontSize: 16 }} />
-          {announcement.reactions_count > 0 ? announcement.reactions_count : "React"}
+          {announcement.reactions_count > 0 ? announcement.reactions_count : t("React")}
         </button>
       </div>
     </Modal>

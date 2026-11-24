@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -29,6 +30,7 @@ const PAGE_SIZE   = 10;
 
 export default function HolidayCalendarPage() {
   const router = useRouter();
+  const t = useT();
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const [year,      setYear]      = useState(new Date().getFullYear());
@@ -152,10 +154,10 @@ export default function HolidayCalendarPage() {
         API.leave.holidayBulkImport, form, { headers: { "Content-Type": "multipart/form-data" } }
       );
       const d = res.data.data;
-      setImportMsg(`Imported ${d.created} of ${d.total_rows} holidays (${d.skipped} skipped, ${d.failed} failed).`);
+      setImportMsg(t("Imported {created} of {total} holidays ({skipped} skipped, {failed} failed).", { created: d.created, total: d.total_rows, skipped: d.skipped, failed: d.failed }));
       refetch();
     } catch (err) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Import failed.";
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Import failed.");
       setImportMsg(msg);
     } finally {
       setImporting(false);
@@ -163,11 +165,11 @@ export default function HolidayCalendarPage() {
   }
 
   const filterTabs: Array<{ id: FilterTab; label: string; count: number }> = [
-    { id: "all",      label: "All",      count: stats.total    },
-    { id: "national", label: "National", count: stats.national },
-    { id: "regional", label: "Regional", count: stats.regional },
-    { id: "company",  label: "Company",  count: stats.company  },
-    { id: "optional", label: "Optional", count: stats.optional },
+    { id: "all",      label: t("All"),      count: stats.total    },
+    { id: "national", label: t("National"), count: stats.national },
+    { id: "regional", label: t("Regional"), count: stats.regional },
+    { id: "company",  label: t("Company"),  count: stats.company  },
+    { id: "optional", label: t("Optional"), count: stats.optional },
   ];
 
   return (
@@ -175,22 +177,22 @@ export default function HolidayCalendarPage() {
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <div className="page-header">
         <div>
-          <div className="page-title">Holiday Calendar</div>
-          <div className="page-sub">Manage national, regional, and company holidays</div>
+          <div className="page-title">{t("Holiday Calendar")}</div>
+          <div className="page-sub">{t("Manage national, regional, and company holidays")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
           <button className="btn btn-ghost" onClick={downloadTemplate}>
-            <i className="ti ti-download" /> Download Template
+            <i className="ti ti-download" /> {t("Download Template")}
           </button>
           <button className="btn btn-ghost" onClick={() => importInputRef.current?.click()} disabled={importing}>
-            <i className="ti ti-upload" /> {importing ? "Importing…" : "Import CSV"}
+            <i className="ti ti-upload" /> {importing ? t("Importing…") : t("Import CSV")}
           </button>
-          <input ref={importInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} aria-label="Import holiday CSV" />
+          <input ref={importInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} aria-label={t("Import holiday CSV")} />
           <button className="btn btn-filled" onClick={openAdd}>
-            <i className="ti ti-plus" /> Add Holiday
+            <i className="ti ti-plus" /> {t("Add Holiday")}
           </button>
         </div>
       </div>
@@ -198,7 +200,7 @@ export default function HolidayCalendarPage() {
       {importMsg && (
         <div className="mb-4 px-4 py-2.5 rounded-xl border border-[var(--outline-v)] bg-[var(--bg-mid)] text-sm text-[var(--on-bg)] flex items-center justify-between">
           <span>{importMsg}</span>
-          <button onClick={() => setImportMsg(null)} className="text-[var(--on-variant)] hover:text-[var(--on-bg)]" aria-label="Dismiss">
+          <button onClick={() => setImportMsg(null)} className="text-[var(--on-variant)] hover:text-[var(--on-bg)]" aria-label={t("Dismiss")}>
             <i className="ti ti-x text-xs" />
           </button>
         </div>
@@ -207,14 +209,14 @@ export default function HolidayCalendarPage() {
       {!yearData ? null : stats.total === 0 && (
         <div className="mb-4 px-4 py-2.5 rounded-xl border border-[var(--warn)] bg-[var(--warn-c)] text-sm text-[var(--warn)] flex items-center gap-2">
           <i className="ti ti-alert-triangle" />
-          <span>No holidays configured for {year}. Public holidays will not be reflected in attendance or LOP calculations until holidays are added or imported.</span>
+          <span>{t("No holidays configured for {year}. Public holidays will not be reflected in attendance or LOP calculations until holidays are added or imported.", { year })}</span>
         </div>
       )}
 
       {/* ── Year navigator + quick filters ───────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--outline-v)] rounded-xl px-2 py-1.5 shadow-sm">
-          <button onClick={() => { setYear(y => y - 1); setPage(1); }} aria-label="Previous year"
+          <button onClick={() => { setYear(y => y - 1); setPage(1); }} aria-label={t("Previous year")}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--on-variant)] transition-colors">
             <i className="ti ti-chevron-left text-sm" />
           </button>
@@ -224,7 +226,7 @@ export default function HolidayCalendarPage() {
           >
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-          <button onClick={() => { setYear(y => y + 1); setPage(1); }} aria-label="Next year"
+          <button onClick={() => { setYear(y => y + 1); setPage(1); }} aria-label={t("Next year")}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--on-variant)] transition-colors">
             <i className="ti ti-chevron-right text-sm" />
           </button>
@@ -234,9 +236,9 @@ export default function HolidayCalendarPage() {
           <SearchableSelect
             value={fBranch} onChange={v => { setFBranch(v); setPage(1); }}
             inputClassName="text-sm border border-[var(--outline-v)] rounded-lg px-3 py-2 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] cursor-pointer"
-            placeholder="All Company Codes"
+            placeholder={t("All Company Codes")}
             options={[
-              { value: "All Branches", label: "All Company Codes" },
+              { value: "All Branches", label: t("All Company Codes") },
               ...branches.map(b => ({ value: b.branch_name, label: b.branch_name })),
             ]}
           />
@@ -244,8 +246,8 @@ export default function HolidayCalendarPage() {
             <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[var(--on-variant)] text-sm" />
             <input
               value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search holidays…"
-              aria-label="Search holidays"
+              placeholder={t("Search holidays…")}
+              aria-label={t("Search holidays")}
               className="pl-8 pr-3 py-2 text-sm border border-[var(--outline-v)] rounded-lg bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] w-48"
             />
           </div>
@@ -267,7 +269,7 @@ export default function HolidayCalendarPage() {
             </div>
             <div>
               <div className="text-2xl font-extrabold text-[var(--on-bg)] leading-none">{s.value}</div>
-              <div className="text-xs text-[var(--on-variant)] mt-0.5">{s.label}</div>
+              <div className="text-xs text-[var(--on-variant)] mt-0.5">{t(s.label)}</div>
             </div>
           </div>
         ))}
@@ -275,23 +277,23 @@ export default function HolidayCalendarPage() {
 
       {/* ── Filter tabs ───────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 flex-wrap mb-4">
-        {filterTabs.map(t => (
+        {filterTabs.map(tab => (
           <button
-            key={t.id}
-            onClick={() => { setFilterTab(t.id); setPage(1); }}
+            key={tab.id}
+            onClick={() => { setFilterTab(tab.id); setPage(1); }}
             className={[
               "px-4 py-1.5 rounded-full text-sm font-medium border transition-all",
-              filterTab === t.id
+              filterTab === tab.id
                 ? "bg-[var(--primary)] text-[var(--on-primary)] border-[var(--primary)]"
                 : "bg-[var(--surface)] text-[var(--on-variant)] border-[var(--outline-v)] hover:border-[var(--primary)] hover:text-[var(--primary)]",
             ].join(" ")}
           >
-            {t.label}
+            {tab.label}
             <span className={[
               "ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-xs font-bold px-1",
-              filterTab === t.id ? "bg-[var(--surface)] text-[var(--primary)]" : "bg-[var(--bg-mid)] text-[var(--on-variant)]",
+              filterTab === tab.id ? "bg-[var(--surface)] text-[var(--primary)]" : "bg-[var(--bg-mid)] text-[var(--on-variant)]",
             ].join(" ")}>
-              {t.count}
+              {tab.count}
             </span>
           </button>
         ))}
@@ -299,11 +301,11 @@ export default function HolidayCalendarPage() {
         <div className="ml-auto flex items-center gap-1 bg-[var(--bg-mid)] rounded-xl p-1">
           <button onClick={() => setView("list")}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${view === "list" ? "bg-[var(--surface)] shadow-sm text-[var(--primary)]" : "text-[var(--on-variant)] hover:text-[var(--on-bg)]"}`}>
-            <i className="ti ti-list text-sm" /> List
+            <i className="ti ti-list text-sm" /> {t("List")}
           </button>
           <button onClick={() => setView("calendar")}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${view === "calendar" ? "bg-[var(--surface)] shadow-sm text-[var(--primary)]" : "text-[var(--on-variant)] hover:text-[var(--on-bg)]"}`}>
-            <i className="ti ti-calendar-month text-sm" /> Calendar
+            <i className="ti ti-calendar-month text-sm" /> {t("Calendar")}
           </button>
         </div>
       </div>
@@ -312,24 +314,24 @@ export default function HolidayCalendarPage() {
       <div className="flex flex-wrap gap-2 mb-4">
         <select value={fType} onChange={e => { setFType(e.target.value as HolidayType | "all"); setPage(1); }}
           className="text-xs border border-[var(--outline-v)] rounded-lg px-3 py-1.5 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-variant)] cursor-pointer field-select">
-          <option value="all">All Types</option>
-          <option value="national">National</option>
-          <option value="regional">Regional</option>
-          <option value="company">Company</option>
+          <option value="all">{t("All Types")}</option>
+          <option value="national">{t("National")}</option>
+          <option value="regional">{t("Regional")}</option>
+          <option value="company">{t("Company")}</option>
         </select>
         <select value={fMonth === "all" ? "all" : fMonth} onChange={e => changeFMonth(e.target.value === "all" ? "all" : parseInt(e.target.value))}
           className="text-xs border border-[var(--outline-v)] rounded-lg px-3 py-1.5 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-variant)] cursor-pointer field-select">
-          <option value="all">All Months</option>
-          {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m}</option>)}
+          <option value="all">{t("All Months")}</option>
+          {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{t(m)}</option>)}
         </select>
         {(search || fBranch !== "All Branches" || fType !== "all" || fMonth !== "all") && (
           <button onClick={() => { setSearch(""); setFBranch("All Branches"); setFType("all"); setFMonth("all"); setPage(1); }}
             className="text-xs px-3 py-1.5 rounded-lg border border-[var(--error)] text-[var(--error)] bg-[var(--error-c)] hover:opacity-80 transition-colors flex items-center gap-1">
-            <i className="ti ti-x text-xs" /> Clear Filters
+            <i className="ti ti-x text-xs" /> {t("Clear Filters")}
           </button>
         )}
         <span className="ml-auto text-xs text-[var(--on-variant)] self-center">
-          {loading ? "Loading…" : `${filtered.length} holiday${filtered.length !== 1 ? "s" : ""}`}
+          {loading ? t("Loading…") : filtered.length === 1 ? t("{count} holiday", { count: filtered.length }) : t("{count} holidays", { count: filtered.length })}
         </span>
       </div>
 
@@ -350,15 +352,15 @@ export default function HolidayCalendarPage() {
 
       {/* ── Type legend ───────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-4 mt-4 px-1">
-        {(["national","regional","company"] as HolidayType[]).map(t => (
-          <div key={t} className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
-            <span className={`w-2.5 h-2.5 rounded-full ${TYPE_STYLES[t].dot}`} />
-            <span className="capitalize font-medium">{t}</span>
+        {(["national","regional","company"] as HolidayType[]).map(type => (
+          <div key={type} className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
+            <span className={`w-2.5 h-2.5 rounded-full ${TYPE_STYLES[type].dot}`} />
+            <span className="capitalize font-medium">{t(type)}</span>
           </div>
         ))}
         <div className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
           <span className="w-2.5 h-2.5 rounded-full bg-[var(--purple)]" />
-          <span className="font-medium">Optional</span>
+          <span className="font-medium">{t("Optional")}</span>
         </div>
       </div>
 

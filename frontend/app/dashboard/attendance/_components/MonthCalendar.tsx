@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PALETTE, tint } from "./attendancePalette";
 import { LATE_LOGIN_LABEL, LATE_LOGIN_MEANING } from "@/lib/lateLogin";
+import { useT } from "@/hooks/useI18n";
 import { tr } from "@/lib/i18n/tr";
 import {
   STATUS_META, buildGrid, dayTiming, effectiveStatus, formatMonthLabel, hoursBarPercent, timeRangeLabel, type DayRecord,
@@ -33,7 +34,7 @@ interface Props {
 
 function describe(day: DayRecord, status: string, month: string): string {
   const times = timeRangeLabel(day);
-  return `${day.day_num} ${formatMonthLabel(month).split(" ")[0]}: ${STATUS_META[status].label}${times ? `, ${times}` : ""}${day.is_wfh ? `, ${tr("Work from home")}` : ""}`;
+  return `${day.day_num} ${formatMonthLabel(month).split(" ")[0]}: ${tr(STATUS_META[status].label)}${times ? `, ${times}` : ""}${day.is_wfh ? `, ${tr("Work from home")}` : ""}`;
 }
 
 /** The width of an element, kept up to date as the window or the layout changes. Zero until measured (and in tests, where nothing is). */
@@ -53,6 +54,7 @@ function useMeasuredWidth<T extends HTMLElement>() {
 interface CellProps extends Omit<Props, "days"> { day: DayRecord; weekend: boolean; compact: boolean }
 
 function Cell({ day, month, todayISO, highlight, selectedDate, onSelect, weekend, compact }: CellProps) {
+  const t = useT();
   const [hover, setHover] = useState(false);
   const timing = dayTiming(day.date, todayISO);
   const status = effectiveStatus(day, todayISO);
@@ -91,19 +93,19 @@ function Cell({ day, month, todayISO, highlight, selectedDate, onSelect, weekend
             fontWeight: 800, fontSize: compact ? 11.5 : 13, minWidth: compact ? 20 : 24, height: compact ? 20 : 24, borderRadius: 12, display: "grid", placeItems: "center",
             background: isToday ? PALETTE.brand : "transparent", color: isToday ? "#fff" : selected ? PALETTE.brand : isFuture ? "var(--outline)" : "var(--on-bg)",
           }}>{day.day_num}</span>
-          {isToday && !compact && <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".06em", color: PALETTE.brand }}>TODAY</span>}
+          {isToday && !compact && <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".06em", color: PALETTE.brand }}>{t("TODAY")}</span>}
         </span>
-        {day.is_flagged && <i className="ti ti-flag-3-filled" role="img" aria-label="Flagged" title="Flagged for review" style={{ color: meta.colour, fontSize: compact ? 11 : 14 }} />}
+        {day.is_flagged && <i className="ti ti-flag-3-filled" role="img" aria-label={t("Flagged")} title={t("Flagged for review")} style={{ color: meta.colour, fontSize: compact ? 11 : 14 }} />}
       </div>
       {!isFuture && (
         <span style={{
           alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: compact ? 9.5 : 10.5, fontWeight: 700, padding: compact ? "0 5px" : "1px 8px", borderRadius: 999,
           ...(status === "no_record" ? { background: "transparent", color: meta.colour, border: `1px dashed ${tint(meta.colour, 0.7)}` } : { background: meta.colour, color: "#fff", border: "1px solid transparent" }),
-        }}>{compact ? meta.short : meta.label}</span>
+        }}>{compact ? (meta.short ? t(meta.short) : "") : t(meta.label)}</span>
       )}
       {day.late_forgiven && (
         <span title={tr(LATE_LOGIN_MEANING)} style={{ alignSelf: "flex-start", fontSize: compact ? 9 : 10, fontWeight: 700, color: PALETTE.late, whiteSpace: "nowrap" }}>
-          <i className="ti ti-clock-exclamation" aria-hidden="true" /> {compact ? "Late" : tr(LATE_LOGIN_LABEL)}
+          <i className="ti ti-clock-exclamation" aria-hidden="true" /> {compact ? t("Late") : tr(LATE_LOGIN_LABEL)}
         </span>
       )}
       {day.is_wfh && (
@@ -113,7 +115,7 @@ function Cell({ day, month, todayISO, highlight, selectedDate, onSelect, weekend
       )}
       {!compact && times && <div style={{ fontSize: 10.5, color: "var(--on-variant)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{times}</div>}
       {day.total_hours > 0 && (
-        <div title={`${day.total_hours}h worked`} aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: "rgba(15,23,42,0.07)" }}>
+        <div title={t("{hours}h worked", { hours: day.total_hours })} aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: "rgba(15,23,42,0.07)" }}>
           <div style={{ width: `${hoursBarPercent(day.total_hours)}%`, height: "100%", background: meta.colour }} />
         </div>
       )}
@@ -122,15 +124,16 @@ function Cell({ day, month, todayISO, highlight, selectedDate, onSelect, weekend
 }
 
 export default function MonthCalendar({ days, month, todayISO, highlight, selectedDate, onSelect }: Props) {
+  const t = useT();
   const weeks = buildGrid(days, month);
   const [gridRef, width] = useMeasuredWidth<HTMLDivElement>();
   const compact = width > 0 && width / 7 < COMPACT_BELOW_PX;
   return (
-    <div ref={gridRef} className="card" aria-label="Attendance calendar" style={{ overflow: "hidden", padding: 0, display: "flex", flexDirection: "column", flex: 1, height: "100%" }}>
+    <div ref={gridRef} className="card" aria-label={t("Attendance calendar")} style={{ overflow: "hidden", padding: 0, display: "flex", flexDirection: "column", flex: 1, height: "100%" }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid var(--outline-v)", background: "var(--bg-low)" }}>
         {DAY_HEADERS.map((header, index) => (
           <div key={header} style={{ padding: "8px 0", textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: index >= 5 ? PALETTE.brand : "var(--on-variant)" }}>
-            {compact ? header.slice(0, 1) : header}
+            {compact ? t(header).slice(0, 1) : t(header)}
           </div>
         ))}
       </div>

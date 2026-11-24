@@ -7,6 +7,7 @@ import type { Director } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import type { PeopleConfig } from "../_data";
 import { confirmDialog } from "@/components/DialogProvider";
+import { useT } from "@/hooks/useI18n";
 
 interface Row {
   key: string;
@@ -50,10 +51,11 @@ function sanitizeId(raw: string, format: PeopleConfig["idFormat"]): string {
 }
 
 export default function DirectorsSection({ canEdit, config, collapsed, onToggleCollapse }: Props) {
+  const t = useT();
   const { sectionTitle, idLabel, idFormat, singular } = config;
   const idPlaceholder = idFormat === "din" ? "01234567" : idFormat === "pan" ? "AAAAA0000A" : "";
   const idMaxLength = idFormat === "din" ? 8 : idFormat === "pan" ? 10 : undefined;
-  const designationPlaceholder = DESIGNATION_PLACEHOLDERS[singular] ?? "Managing Director";
+  const designationPlaceholder = t(DESIGNATION_PLACEHOLDERS[singular] ?? "Managing Director");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function DirectorsSection({ canEdit, config, collapsed, onToggleC
       const results: Director[] = res.data?.data?.results ?? [];
       setRows(results.map(toRow));
     } catch (err: unknown) {
-      setLoadError((err as { message?: string })?.message ?? "Failed to load directors.");
+      setLoadError((err as { message?: string })?.message ?? t("Failed to load directors."));
     } finally {
       setLoading(false);
     }
@@ -85,11 +87,11 @@ export default function DirectorsSection({ canEdit, config, collapsed, onToggleC
 
   async function removeRow(row: Row) {
     if (row.id) {
-      if (!(await confirmDialog(`Remove director "${row.name}"?`))) return;
+      if (!(await confirmDialog(t("Remove director \"{name}\"?", { name: row.name })))) return;
       try {
         await clientApi.delete(API.settings.directors.detail(row.id));
       } catch (err: unknown) {
-        updateRow(row.key, { error: (err as { message?: string })?.message ?? "Failed to remove." });
+        updateRow(row.key, { error: (err as { message?: string })?.message ?? t("Failed to remove.") });
         return;
       }
     }
@@ -112,28 +114,28 @@ export default function DirectorsSection({ canEdit, config, collapsed, onToggleC
     } catch (err: unknown) {
       const e = err as { message?: string; data?: Record<string, string[]> };
       const msg = e.data ? Object.values(e.data)[0]?.[0] ?? e.message : e.message;
-      updateRow(row.key, { saving: false, error: msg ?? "Failed to save." });
+      updateRow(row.key, { saving: false, error: msg ?? t("Failed to save.") });
     }
   }
 
   return (
     <ProfileCard
       icon="ti-users-group"
-      title={sectionTitle}
-      subtitle={`Each ${singular}'s ${idLabel}, name, and designation.`}
+      title={t(sectionTitle)}
+      subtitle={t("Each {singular}'s {idLabel}, name, and designation.", { singular: t(singular), idLabel: t(idLabel) })}
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
     >
-      {loading && <div style={{ color: "var(--on-variant)", fontSize: 13, padding: "8px 0" }}>Loading…</div>}
+      {loading && <div style={{ color: "var(--on-variant)", fontSize: 13, padding: "8px 0" }}>{t("Loading…")}</div>}
       {loadError && <div style={{ color: "var(--error)", fontSize: 13, padding: "8px 0" }}>{loadError}</div>}
       {!loading && !loadError && (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>{idLabel} <span style={{ color: "var(--error)" }}>*</span></th>
-                <th>Name <span style={{ color: "var(--error)" }}>*</span></th>
-                <th>Designation <span style={{ color: "var(--error)" }}>*</span></th>
+                <th>{t(idLabel)} <span style={{ color: "var(--error)" }}>*</span></th>
+                <th>{t("Name")} <span style={{ color: "var(--error)" }}>*</span></th>
+                <th>{t("Designation")} <span style={{ color: "var(--error)" }}>*</span></th>
                 <th style={{ width: 36 }} />
               </tr>
             </thead>
@@ -180,8 +182,8 @@ export default function DirectorsSection({ canEdit, config, collapsed, onToggleC
                         style={{ width: 28, height: 28, padding: 0, justifyContent: "center", color: "var(--error)" }}
                         onClick={() => removeRow(row)}
                         disabled={row.saving}
-                        title="Remove"
-                        aria-label={`Remove ${row.name || singular}`}
+                        title={t("Remove")}
+                        aria-label={t("Remove {name}", { name: row.name || t(singular) })}
                       >
                         <i className="ti ti-trash" style={{ fontSize: 13 }} />
                       </button>
@@ -193,14 +195,14 @@ export default function DirectorsSection({ canEdit, config, collapsed, onToggleC
           </table>
           {rows.length === 0 && (
             <div style={{ textAlign: "center", padding: "20px 0", color: "var(--on-variant)", fontSize: 13 }}>
-              No {sectionTitle.toLowerCase()} added yet.
+              {t("No {title} added yet.", { title: t(sectionTitle).toLowerCase() })}
             </div>
           )}
         </div>
       )}
       {canEdit && (
         <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 12, color: "var(--primary)" }} onClick={addRow}>
-          <i className="ti ti-plus" /> Add {singular}
+          <i className="ti ti-plus" /> {t("Add {singular}", { singular: t(singular) })}
         </button>
       )}
     </ProfileCard>

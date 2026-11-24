@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { AttendanceSummary } from "@/types/dashboard";
+import { useT } from "@/hooks/useI18n";
 
 const CHIPS: { key: keyof AttendanceSummary; label: string; color: string; bg: string }[] = [
   { key: "present",    label: "Present",    color: "#16a34a", bg: "rgba(22,163,74,0.12)"   },
@@ -15,6 +16,7 @@ const CHIPS: { key: keyof AttendanceSummary; label: string; color: string; bg: s
 ];
 
 export default function HrAttendanceSummary() {
+  const t = useT();
   const { data, loading, refetch } = useFetch<AttendanceSummary>(API.dashboard.hrAttendanceSummary);
 
   useEffect(() => {
@@ -32,18 +34,18 @@ export default function HrAttendanceSummary() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-calendar-stats" /> Today&apos;s Attendance</div>
+        <div className="card-title"><i className="ti ti-calendar-stats" /> {t("Today's Attendance")}</div>
         {!loading && total > 0 && (
-          <span className="badge badge-primary">{total} employees</span>
+          <span className="badge badge-primary">{t("{count} employees", { count: total })}</span>
         )}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : !data ? (
-        <div style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>No data available</div>
+        <div style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>{t("No data available")}</div>
       ) : (
         <div style={{ padding: "12px 20px 16px" }}>
           {/* Stacked bar */}
@@ -52,7 +54,7 @@ export default function HrAttendanceSummary() {
               {CHIPS.map(c => {
                 const pct = total > 0 ? ((data[c.key] ?? 0) / total) * 100 : 0;
                 return pct > 0 ? (
-                  <div key={c.key} title={`${c.label}: ${data[c.key]}`} style={{ width: `${pct}%`, background: c.color }} />
+                  <div key={c.key} title={t("{label}: {count}", { label: t(c.label), count: data[c.key] ?? 0 })} style={{ width: `${pct}%`, background: c.color }} />
                 ) : null;
               })}
             </div>
@@ -63,7 +65,7 @@ export default function HrAttendanceSummary() {
             {CHIPS.map(c => (
               <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, background: c.bg }}>
                 <span style={{ fontSize: 15, fontWeight: 800, color: c.color, minWidth: 24, lineHeight: 1 }}>{data[c.key] ?? 0}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--on-bg)" }}>{c.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--on-bg)" }}>{t(c.label)}</span>
               </div>
             ))}
           </div>

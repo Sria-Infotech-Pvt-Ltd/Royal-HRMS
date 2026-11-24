@@ -1,5 +1,6 @@
 // Pure helpers for the "Today completed" state of the Home hero.
 import type { AttendanceStatus } from "@/types/employeeDashboard";
+import { tr } from "@/lib/i18n/tr";
 
 /** The day counts as completed once the employee has punched in AND is now punched out. */
 export function isDayComplete(status: AttendanceStatus | null): boolean {
@@ -10,5 +11,5 @@ export function isDayComplete(status: AttendanceStatus | null): boolean {
 export function formatWorked(hhmm: string | null | undefined): string {
   const match = /^(\d+):(\d{2})$/.exec(hhmm ?? "");
   if (!match) return "—";
-  return `${Number(match[1])}h ${match[2]}m`;
+  return tr("{hours}h {minutes}m", { hours: Number(match[1]), minutes: match[2] });
 }

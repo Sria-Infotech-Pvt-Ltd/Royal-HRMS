@@ -3,6 +3,8 @@
 import { useRecentRequests } from "@/hooks/useEmployeeDashboard";
 import type { RecentRequest } from "@/types/employeeDashboard";
 import AssessmentLockedNotice from "./AssessmentLockedNotice";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 const REQUEST_META: Record<RecentRequest["request_type"], { icon: string; color: string; bg: string; label: string }> = {
   leave:                { icon: "ti-beach",  color: "var(--success)", bg: "rgba(22,163,74,0.10)",  label: "Leave"       },
@@ -37,7 +39,7 @@ function detailLine(req: RecentRequest): string {
     const start = d.start_date as string | undefined;
     const end   = d.end_date   as string | undefined;
     const days  = d.days       as number | undefined;
-    if (start && end) return `${fmtDate(start)} – ${fmtDate(end)}${days ? ` · ${days}d` : ""}`;
+    if (start && end) return `${fmtDate(start)} – ${fmtDate(end)}${days ? ` · ${tr("{count}d", { count: days })}` : ""}`;
   }
   if (req.request_type === "expense") {
     const amount   = d.amount   as number  | undefined;
@@ -47,7 +49,7 @@ function detailLine(req: RecentRequest): string {
   if (req.request_type === "attendance_correction") {
     const date      = d.date       as string | undefined;
     const punchType = d.punch_type as string | undefined;
-    return [date ? fmtDate(date) : "", punchType ? `${punchType} punch` : ""].filter(Boolean).join(" · ");
+    return [date ? fmtDate(date) : "", punchType ? tr("{type} punch", { type: punchType }) : ""].filter(Boolean).join(" · ");
   }
   return "";
 }
@@ -56,6 +58,7 @@ function detailLine(req: RecentRequest): string {
 // (useRecentRequests defaults to page_size=5); the full, searchable history
 // lives on the My Requests page.
 export default function EmpRecentRequests() {
+  const t = useT();
   const { data, loading, status } = useRecentRequests(1);
 
   const requests = data?.results ?? [];
@@ -64,21 +67,21 @@ export default function EmpRecentRequests() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-inbox" /> Recent Activity</div>
+        <div className="card-title"><i className="ti ti-inbox" /> {t("Recent Activity")}</div>
         {!loading && pending > 0 && (
-          <span className="badge badge-warn">{pending} pending</span>
+          <span className="badge badge-warn">{t("{count} pending", { count: pending })}</span>
         )}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : status === 403 ? (
         <AssessmentLockedNotice />
       ) : requests.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
-          No requests yet. <a href="/dashboard/leave" style={{ color: "var(--primary)" }}>Apply leave</a>
+          {t("No requests yet.")} <a href="/dashboard/leave" style={{ color: "var(--primary)" }}>{t("Apply leave")}</a>
         </div>
       ) : (
         <div style={{ padding: "4px 0 8px" }}>
@@ -98,7 +101,7 @@ export default function EmpRecentRequests() {
                   </div>
                 </div>
                 <span className={STATUS_BADGE[req.status] ?? "badge badge-neutral"} style={{ fontSize: 10, whiteSpace: "nowrap", flexShrink: 0 }}>
-                  {STATUS_LABEL[req.status] ?? req.status}
+                  {STATUS_LABEL[req.status] ? t(STATUS_LABEL[req.status]) : req.status}
                 </span>
               </div>
             );
@@ -108,7 +111,7 @@ export default function EmpRecentRequests() {
 
       <div style={{ padding: "10px 20px", borderTop: "1px solid var(--border)" }}>
         <a href="/dashboard/my-requests" style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none" }}>
-          View All Requests <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
+          {t("View All Requests")} <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
         </a>
       </div>
     </div>

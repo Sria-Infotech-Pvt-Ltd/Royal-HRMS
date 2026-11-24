@@ -1,6 +1,7 @@
 "use client";
 
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
+import { useT } from "@/hooks/useI18n";
 
 function initials(name: string): string {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? "").join("");
@@ -17,6 +18,7 @@ interface Props {
  * a festive accent so it reads as celebratory content rather than a regular post.
  */
 export default function BirthdayCelebrationCard({ employee, onOpen }: Props) {
+  const t = useT();
   const firstName = employee.full_name.split(" ")[0];
 
   return (
@@ -45,12 +47,12 @@ export default function BirthdayCelebrationCard({ employee, onOpen }: Props) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: "var(--on-bg)" }}>
-              🎂 Happy Birthday {firstName}
+              {t("🎂 Happy Birthday {name}", { name: firstName })}
             </span>
-            <span className="badge badge-primary" style={{ fontSize: 10 }}>Celebration</span>
+            <span className="badge badge-primary" style={{ fontSize: 10 }}>{t("Celebration")}</span>
           </div>
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-            Today is {firstName}&apos;s Birthday. Wish {firstName} a wonderful year ahead.
+            {t("Today is {name}'s Birthday. Wish {name} a wonderful year ahead.", { name: firstName })}
           </div>
         </div>
 

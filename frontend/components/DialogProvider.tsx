@@ -12,6 +12,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
 import Modal from "@/components/Modal";
+import { tr } from "@/lib/i18n/tr";
 
 export interface ConfirmOptions {
   title?: string;
@@ -114,9 +115,9 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
       {children}
       {pending?.kind === "confirm" && (
         <ConfirmModal
-          title={pending.options.title ?? "Please confirm"}
+          title={pending.options.title ?? tr("Please confirm")}
           body={pending.options.body}
-          confirmLabel={pending.options.confirmLabel ?? "Confirm"}
+          confirmLabel={pending.options.confirmLabel ?? tr("Confirm")}
           danger={pending.options.danger}
           onConfirm={() => finish(true)}
           onCancel={() => finish(false)}
@@ -129,8 +130,8 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
           maxWidth={420}
           footer={
             <>
-              <button className="btn btn-ghost" type="button" onClick={() => finish(null)}>Cancel</button>
-              <button className="btn btn-filled" type="button" onClick={() => finish(inputValue)}>{pending.options.confirmLabel ?? "OK"}</button>
+              <button className="btn btn-ghost" type="button" onClick={() => finish(null)}>{tr("Cancel")}</button>
+              <button className="btn btn-filled" type="button" onClick={() => finish(inputValue)}>{pending.options.confirmLabel ?? tr("OK")}</button>
             </>
           }
         >

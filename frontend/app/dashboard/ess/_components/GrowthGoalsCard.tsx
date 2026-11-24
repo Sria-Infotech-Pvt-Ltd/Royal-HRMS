@@ -14,6 +14,7 @@ import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import ConfirmModal from "@/components/ConfirmModal";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 export interface GrowthGoal {
   id: string;
@@ -34,26 +35,27 @@ interface RowProps {
 }
 
 function GoalRow({ goal, onStatusChange, onRemove }: RowProps) {
+  const t = useT();
   return (
     <div style={{ padding: "14px 0", borderBottom: "1px solid var(--outline-v)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 600 }}>{goal.title}</div>
         <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
-          {goal.description || goal.target_metric || "—"} · Due {goal.due_date ? formatDate(goal.due_date) : "—"}
+          {goal.description || goal.target_metric || "—"} · {t("Due {date}", { date: goal.due_date ? formatDate(goal.due_date) : "—" })}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span className={`badge ${STATUS_BADGE[goal.status]}`}>{STATUS_LABEL[goal.status]}</span>
+        <span className={`badge ${STATUS_BADGE[goal.status]}`}>{t(STATUS_LABEL[goal.status])}</span>
         <select
           className="field-input field-select"
           style={{ padding: "3px 6px", fontSize: 11 }}
           value={goal.status}
           onChange={e => onStatusChange(goal.id, e.target.value)}
-          title="Update status"
+          title={t("Update status")}
         >
-          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
         </select>
-        <button className="btn btn-ghost btn-sm" onClick={() => onRemove(goal)} title="Remove goal" aria-label="Remove goal">
+        <button className="btn btn-ghost btn-sm" onClick={() => onRemove(goal)} title={t("Remove goal")} aria-label={t("Remove goal")}>
           <i className="ti ti-trash" />
         </button>
       </div>
@@ -70,6 +72,7 @@ interface Props {
 }
 
 export default function GrowthGoalsCard({ cycleName, goals, loading, error, refetch }: Props) {
+  const t = useT();
   const [title, setTitle] = useState("");
   const [targetMetric, setTargetMetric] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -91,7 +94,7 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
       setTitle(""); setTargetMetric(""); setDueDate("");
       refetch();
     } catch (err: unknown) {
-      setAddErr(extractError(err, "Failed to add goal. Is there an active review cycle?"));
+      setAddErr(extractError(err, t("Failed to add goal. Is there an active review cycle?")));
     } finally {
       setAdding(false);
     }
@@ -103,7 +106,7 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
       await clientApi.patch(API.performance.myGoalDetail(id), { status });
       refetch();
     } catch (err: unknown) {
-      setRowErr(extractError(err, "Failed to update goal status."));
+      setRowErr(extractError(err, t("Failed to update goal status.")));
     }
   }
 
@@ -116,7 +119,7 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
       setRemoving(null);
       refetch();
     } catch (err: unknown) {
-      setRowErr(extractError(err, "Failed to remove goal."));
+      setRowErr(extractError(err, t("Failed to remove goal.")));
     } finally {
       setRemoveSaving(false);
     }
@@ -125,11 +128,11 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
   return (
     <div className="card mb-16">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-target-arrow" /> {cycleName ? `${cycleName} goals` : "Goals"}</div>
+        <div className="card-title"><i className="ti ti-target-arrow" /> {cycleName ? t("{cycle} goals", { cycle: cycleName }) : t("Goals")}</div>
       </div>
       <div style={{ padding: "4px 20px 0" }}>
         <p style={{ margin: 0, fontSize: 12.5, color: "var(--on-variant)" }}>
-          {cycleName ? "Current goals are read-only until the review cycle opens for edits." : "No review cycle is open right now."}
+          {cycleName ? t("Current goals are read-only until the review cycle opens for edits.") : t("No review cycle is open right now.")}
         </p>
       </div>
 
@@ -137,12 +140,12 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
         {error && <div className="alert alert-error mb-16">{error}</div>}
         {rowErr && <div className="alert alert-error mb-16">{rowErr}</div>}
         {loading ? (
-          <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>Loading…</h3></div>
+          <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>{t("Loading…")}</h3></div>
         ) : goals.length === 0 ? (
           <div className="empty-state">
             <i className="ti ti-target-arrow" />
-            <h3>No goals yet</h3>
-            <p>{cycleName ? "Add a goal below for the active review cycle." : "No review cycle is open right now, so goals can't be added yet. They can be added once HR opens a cycle."}</p>
+            <h3>{t("No goals yet")}</h3>
+            <p>{cycleName ? t("Add a goal below for the active review cycle.") : t("No review cycle is open right now, so goals can't be added yet. They can be added once HR opens a cycle.")}</p>
           </div>
         ) : (
           goals.map(g => (
@@ -153,9 +156,9 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
 
       {removing && (
         <ConfirmModal
-          title="Remove this goal?"
-          body={`This permanently removes "${removing.title}" from ${cycleName ?? "the active cycle"}.`}
-          confirmLabel="Remove Goal"
+          title={t("Remove this goal?")}
+          body={t("This permanently removes \"{title}\" from {cycle}.", { title: removing.title, cycle: cycleName ?? t("the active cycle") })}
+          confirmLabel={t("Remove Goal")}
           danger
           saving={removeSaving}
           onConfirm={confirmRemove}
@@ -168,24 +171,24 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
           GrowthTab), so its absence here means there's nothing to add one to. */}
       {cycleName && (
         <div style={{ padding: "16px 20px 20px", borderTop: "1px solid var(--outline-v)", marginTop: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)", marginBottom: 10 }}>ADD A GOAL</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)", marginBottom: 10 }}>{t("ADD A GOAL")}</div>
           {addErr && <div className="alert alert-error mb-16">{addErr}</div>}
           <div className="form-row cols-2" style={{ marginBottom: 12 }}>
             <div className="field-group">
-              <label className="field-label">Title</label>
-              <input className="field-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Improve platform reliability" />
+              <label className="field-label">{t("Title")}</label>
+              <input className="field-input" value={title} onChange={e => setTitle(e.target.value)} placeholder={t("e.g. Improve platform reliability")} />
             </div>
             <div className="field-group">
-              <label className="field-label">Target</label>
-              <input className="field-input" value={targetMetric} onChange={e => setTargetMetric(e.target.value)} placeholder="e.g. Reduce incidents by 20%" />
+              <label className="field-label">{t("Target")}</label>
+              <input className="field-input" value={targetMetric} onChange={e => setTargetMetric(e.target.value)} placeholder={t("e.g. Reduce incidents by 20%")} />
             </div>
             <div className="field-group">
-              <label className="field-label">Due date</label>
+              <label className="field-label">{t("Due date")}</label>
               <DateInput className="field-input" value={dueDate} onChange={isoDate => setDueDate(isoDate)} />
             </div>
           </div>
           <button className="btn btn-filled" onClick={handleAdd} disabled={adding || !title.trim()}>
-            {adding ? "Adding…" : "Add goal"}
+            {adding ? t("Adding…") : t("Add goal")}
           </button>
         </div>
       )}

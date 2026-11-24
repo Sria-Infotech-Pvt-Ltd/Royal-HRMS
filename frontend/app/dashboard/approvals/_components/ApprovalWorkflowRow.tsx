@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { useT } from "@/hooks/useI18n";
 import { FALLBACK_LOOK, LOOK, type WorkflowCardData } from "./ApprovalWorkflowCard";
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 
 /** One workflow as a slim queue line: icon, name and who sees it, count pills, and the way in. */
 export default function ApprovalWorkflowRow({ row, actionLabel, onAction }: Props) {
+  const t = useT();
   const look = LOOK[row.key] ?? FALLBACK_LOOK;
   const needsMe = (row.mine ?? 0) > 0;
   return (
@@ -21,11 +23,11 @@ export default function ApprovalWorkflowRow({ row, actionLabel, onAction }: Prop
         <div className="ap-line-scope" title={row.scope}>{row.scope}</div>
       </div>
       {row.pending === null && row.mine === null ? (
-        <span className="ap-pill">See inside tab</span>
+        <span className="ap-pill">{t("See inside tab")}</span>
       ) : (
         <>
-          <span className="ap-pill" title="Waiting"><i className="ti ti-hourglass" /> {row.pending ?? "—"} waiting</span>
-          <span className={`ap-pill${needsMe ? " is-hot" : ""}`} title="For me to act on"><i className="ti ti-bolt" /> {row.mine ?? "—"} for me</span>
+          <span className="ap-pill" title={t("Waiting")}><i className="ti ti-hourglass" /> {t("{count} waiting", { count: row.pending ?? "—" })}</span>
+          <span className={`ap-pill${needsMe ? " is-hot" : ""}`} title={t("For me to act on")}><i className="ti ti-bolt" /> {t("{count} for me", { count: row.mine ?? "—" })}</span>
         </>
       )}
       <button type="button" className={`btn btn-sm ${needsMe ? "btn-filled" : "btn-outline"}`} onClick={onAction}>{actionLabel}</button>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { MatrixFilter, QuickPreset } from "@/lib/permissionMatrixView";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   query: string;
@@ -31,6 +32,7 @@ const QUICK_PRESETS: { value: QuickPreset; label: string; icon: string; hint: st
 
 /** Search box and filter chips above the matrix. The chips carry how many modules each one would show. */
 export default function PermissionMatrixToolbar({ query, onQueryChange, filter, onFilterChange, counts, shownCount, isCompact, onCompactChange, onQuickSet }: Props) {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="relative min-w-[240px] flex-1 sm:max-w-sm">
@@ -39,12 +41,12 @@ export default function PermissionMatrixToolbar({ query, onQueryChange, filter, 
           type="search"
           value={query}
           onChange={event => onQueryChange(event.target.value)}
-          placeholder="Search a module or a permission…"
-          aria-label="Search permissions"
+          placeholder={t("Search a module or a permission…")}
+          aria-label={t("Search permissions")}
           className="field-input w-full !pl-9"
         />
       </div>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter modules">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("Filter modules")}>
         {FILTERS.map(option => {
           const isActive = filter === option.value;
           return (
@@ -59,40 +61,40 @@ export default function PermissionMatrixToolbar({ query, onQueryChange, filter, 
                 : { background: "var(--surface)", borderColor: "var(--outline-v)", color: "var(--on-variant)" }}
             >
               <i className={`ti ${option.icon}`} />
-              {option.label}
+              {t(option.label)}
               <span className="rounded-full px-1.5 text-[10px]" style={{ background: isActive ? "rgba(255,255,255,.25)" : "var(--bg-low)" }}>{counts[option.value]}</span>
             </button>
           );
         })}
       </div>
       <div className="ml-auto flex items-center gap-3">
-        <span className="text-xs text-[var(--on-variant)]" aria-live="polite">Showing {shownCount} of {counts.all} modules</span>
-        <div className="inline-flex overflow-hidden rounded-lg border" style={{ borderColor: "var(--outline-v)" }} role="group" aria-label="Row density">
+        <span className="text-xs text-[var(--on-variant)]" aria-live="polite">{t("Showing {shown} of {total} modules", { shown: shownCount, total: counts.all })}</span>
+        <div className="inline-flex overflow-hidden rounded-lg border" style={{ borderColor: "var(--outline-v)" }} role="group" aria-label={t("Row density")}>
           {([false, true] as const).map(compact => (
             <button
               key={String(compact)} type="button" aria-pressed={isCompact === compact} onClick={() => onCompactChange(compact)}
               className="px-2.5 py-1.5 text-xs font-semibold"
               style={isCompact === compact ? { background: "var(--primary)", color: "#fff" } : { background: "var(--surface)", color: "var(--on-variant)" }}
-              title={compact ? "Compact rows: more modules on screen" : "Comfortable rows"}
+              title={compact ? t("Compact rows: more modules on screen") : t("Comfortable rows")}
             >
-              <i className={`ti ${compact ? "ti-layout-list" : "ti-layout-rows"}`} /> {compact ? "Compact" : "Comfortable"}
+              <i className={`ti ${compact ? "ti-layout-list" : "ti-layout-rows"}`} /> {compact ? t("Compact") : t("Comfortable")}
             </button>
           ))}
         </div>
       </div>
       {onQuickSet && (
         <div className="flex basis-full flex-wrap items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--on-variant)]">Quick set for the modules shown</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--on-variant)]">{t("Quick set for the modules shown")}</span>
           {QUICK_PRESETS.map(preset => (
             <button
-              key={preset.value} type="button" onClick={() => onQuickSet(preset.value)} title={preset.hint}
+              key={preset.value} type="button" onClick={() => onQuickSet(preset.value)} title={t(preset.hint)}
               className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold"
               style={{ background: "var(--surface)", borderColor: "var(--outline-v)", color: "var(--on-bg)" }}
             >
-              <i className={`ti ${preset.icon}`} style={{ color: "var(--primary)" }} /> {preset.label}
+              <i className={`ti ${preset.icon}`} style={{ color: "var(--primary)" }} /> {t(preset.label)}
             </button>
           ))}
-          <span className="text-[11px] text-[var(--on-variant)]">Nothing is saved until you press Save baseline.</span>
+          <span className="text-[11px] text-[var(--on-variant)]">{t("Nothing is saved until you press Save baseline.")}</span>
         </div>
       )}
     </div>

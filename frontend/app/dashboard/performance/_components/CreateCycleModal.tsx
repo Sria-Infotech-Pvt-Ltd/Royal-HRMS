@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   onClose: () => void;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function CreateCycleModal({ onClose, onCreated }: Props) {
+  const t = useT();
   const [name, setName] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
@@ -30,7 +32,7 @@ export default function CreateCycleModal({ onClose, onCreated }: Props) {
       onCreated();
     } catch (error: unknown) {
       const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(msg ?? "Failed to create review cycle.");
+      setErr(msg ?? t("Failed to create review cycle."));
     } finally {
       setSaving(false);
     }
@@ -40,42 +42,42 @@ export default function CreateCycleModal({ onClose, onCreated }: Props) {
     <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ width: "min(480px, 95vw)" }}>
         <div className="modal-header">
-          <div className="modal-title">New review cycle</div>
-          <button className="modal-close" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
+          <div className="modal-title">{t("New review cycle")}</div>
+          <button className="modal-close" onClick={onClose} aria-label={t("Close")}><i className="ti ti-x" /></button>
         </div>
         <div className="modal-body">
           {err && <div className="alert alert-error mb-16">{err}</div>}
           <div className="field-group mb-16">
-            <label className="field-label">Name</label>
-            <input className="field-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Q4 2026" />
+            <label className="field-label">{t("Name")}</label>
+            <input className="field-input" value={name} onChange={e => setName(e.target.value)} placeholder={t("e.g. Q4 2026")} />
           </div>
           <div className="form-row cols-2">
             <div className="field-group mb-16">
-              <label className="field-label">Period Start</label>
+              <label className="field-label">{t("Period Start")}</label>
               <DateInput className="field-input" value={periodStart} onChange={isoDate => setPeriodStart(isoDate)} />
             </div>
             <div className="field-group mb-16">
-              <label className="field-label">Period End</label>
+              <label className="field-label">{t("Period End")}</label>
               <DateInput className="field-input" value={periodEnd} onChange={isoDate => setPeriodEnd(isoDate)} />
             </div>
             <div className="field-group mb-16">
-              <label className="field-label">Self-Review Due</label>
+              <label className="field-label">{t("Self-Review Due")}</label>
               <DateInput className="field-input" value={selfDue} onChange={isoDate => setSelfDue(isoDate)} />
             </div>
             <div className="field-group mb-16">
-              <label className="field-label">Manager Review Due</label>
+              <label className="field-label">{t("Manager Review Due")}</label>
               <DateInput className="field-input" value={managerDue} onChange={isoDate => setManagerDue(isoDate)} />
             </div>
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>{t("Cancel")}</button>
           <button
             className="btn btn-filled"
             onClick={handleCreate}
             disabled={saving || !name.trim() || !periodStart || !periodEnd || !selfDue || !managerDue}
           >
-            {saving ? "Creating…" : "Create Cycle"}
+            {saving ? t("Creating…") : t("Create Cycle")}
           </button>
         </div>
       </div>

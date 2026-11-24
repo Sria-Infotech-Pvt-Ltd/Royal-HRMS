@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useT } from "@/hooks/useI18n";
 import { searchAddress, type GeocodeResult } from "@/lib/geocode";
 
 const MIN_QUERY_LENGTH = 4;
@@ -12,6 +13,7 @@ interface WfhAddressSearchProps {
 
 /** Address lookup for a WFH location. Searches only when the Search button (or Enter) is pressed, never while typing. */
 export default function WfhAddressSearch({ inputClassName, onPick }: WfhAddressSearchProps) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodeResult[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -20,7 +22,7 @@ export default function WfhAddressSearch({ inputClassName, onPick }: WfhAddressS
 
   async function runSearch() {
     if (query.trim().length < MIN_QUERY_LENGTH) {
-      setErrorMessage("Type at least the street, area and city.");
+      setErrorMessage(t("Type at least the street, area and city."));
       return;
     }
     setErrorMessage("");
@@ -30,7 +32,7 @@ export default function WfhAddressSearch({ inputClassName, onPick }: WfhAddressS
       setResults(await searchAddress(query));
     } catch (caught: unknown) {
       setResults(null);
-      setErrorMessage(caught instanceof Error ? caught.message : "The address search failed. Please try again.");
+      setErrorMessage(caught instanceof Error ? caught.message : t("The address search failed. Please try again."));
     } finally {
       setIsSearching(false);
     }
@@ -60,7 +62,7 @@ export default function WfhAddressSearch({ inputClassName, onPick }: WfhAddressS
           value={query}
           onChange={event => setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="House / street, area, city, pincode"
+          placeholder={t("House / street, area, city, pincode")}
           className={inputClassName}
           suppressHydrationWarning
         />
@@ -71,7 +73,7 @@ export default function WfhAddressSearch({ inputClassName, onPick }: WfhAddressS
           className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 whitespace-nowrap"
           style={{ background: "var(--primary)" }}
         >
-          {isSearching ? "Searching…" : "Search"}
+          {isSearching ? t("Searching…") : t("Search")}
         </button>
       </div>
 
@@ -82,11 +84,11 @@ export default function WfhAddressSearch({ inputClassName, onPick }: WfhAddressS
       )}
 
       {results !== null && results.length === 0 && !errorMessage && (
-        <p className="text-xs mt-2" style={{ color: "var(--on-variant)" }}>No match found. Try adding the area, city or pincode.</p>
+        <p className="text-xs mt-2" style={{ color: "var(--on-variant)" }}>{t("No match found. Try adding the area, city or pincode.")}</p>
       )}
 
       {results !== null && results.length > 0 && (
-        <div role="listbox" aria-label="Address matches" className="flex flex-col gap-1.5 mt-3">
+        <div role="listbox" aria-label={t("Address matches")} className="flex flex-col gap-1.5 mt-3">
           {results.map((result, index) => {
             const isPicked = pickedIndex === index;
             return (

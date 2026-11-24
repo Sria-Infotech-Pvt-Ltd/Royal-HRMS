@@ -1,5 +1,7 @@
 // Pure helpers for the Announcements list filters: no component state, safe to import anywhere.
 
+import { tr } from "@/lib/i18n/tr"
+
 export type SortKey = "newest" | "oldest" | "reactions" | "views"
 
 export interface ListFilters {
@@ -39,5 +41,5 @@ export function hasActiveFilters(filters: ListFilters): boolean {
 export function averagePerPost(total: number, posts: number): string | null {
   if (posts <= 0) return null
   const average = total / posts
-  return `about ${average >= 10 ? Math.round(average) : Math.round(average * 10) / 10} per post`
+  return tr("about {count} per post", { count: average >= 10 ? Math.round(average) : Math.round(average * 10) / 10 })
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi, { isSessionKnownExpired } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -111,11 +112,11 @@ export function useEmployeeImport(onCreated: () => void) {
   const downloadTemplate = useCallback(async () => {
     setError(null);
     const outcome = await downloadBlobFile(API.employees.importTemplate, {}, "employee_import_template.xlsx");
-    if (!outcome.success) setError(outcome.message ?? "Could not download the template.");
+    if (!outcome.success) setError(outcome.message ?? tr("Could not download the template."));
   }, []);
 
   const runPreview = useCallback(async () => {
-    if (!file) { setError("Choose the filled template first."); return; }
+    if (!file) { setError(tr("Choose the filled template first.")); return; }
     setIsBusy(true);
     setError(null);
     try {
@@ -123,7 +124,7 @@ export function useEmployeeImport(onCreated: () => void) {
       setPreview(response.data.data);
       setStep("previewed");
     } catch (err: unknown) {
-      setError(failureMessage(err, "The file could not be checked. Nothing was imported."));
+      setError(failureMessage(err, tr("The file could not be checked. Nothing was imported.")));
     } finally {
       setIsBusy(false);
     }
@@ -141,7 +142,7 @@ export function useEmployeeImport(onCreated: () => void) {
       link.click();
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
-      setError(failureMessage(err, "Could not create the error file."));
+      setError(failureMessage(err, tr("Could not create the error file.")));
     }
   }, [file]);
 
@@ -158,8 +159,8 @@ export function useEmployeeImport(onCreated: () => void) {
       const failure = err as ApiFailure;
       // No answer from the server: the outcome is unknown, and pressing Confirm again is safe (same batch id returns the same job).
       setError(failure.response?.status
-        ? failureMessage(err, "The import was rejected. Nothing was created.")
-        : "The connection was lost, so the outcome is unknown. Press Confirm again: this import cannot be applied twice.");
+        ? failureMessage(err, tr("The import was rejected. Nothing was created."))
+        : tr("The connection was lost, so the outcome is unknown. Press Confirm again: this import cannot be applied twice."));
     } finally {
       setIsBusy(false);
     }
@@ -173,7 +174,7 @@ export function useEmployeeImport(onCreated: () => void) {
       setJob(response.data.data);
       setStep("job");
     } catch (err: unknown) {
-      setError(failureMessage(err, "Could not open that import."));
+      setError(failureMessage(err, tr("Could not open that import.")));
     }
   }, []);
 
@@ -195,7 +196,7 @@ export function useEmployeeImport(onCreated: () => void) {
       setJob(response.data.data);
       restartPolling();
     } catch (err: unknown) {
-      setError(failureMessage(err, "Could not cancel the import."));
+      setError(failureMessage(err, tr("Could not cancel the import.")));
     } finally {
       setIsActing(false);
     }
@@ -212,7 +213,7 @@ export function useEmployeeImport(onCreated: () => void) {
       setJob(response.data.data);
       restartPolling();
     } catch (err: unknown) {
-      setError(failureMessage(err, "Could not retry the failed emails."));
+      setError(failureMessage(err, tr("Could not retry the failed emails.")));
     } finally {
       setIsActing(false);
     }
@@ -222,7 +223,7 @@ export function useEmployeeImport(onCreated: () => void) {
     if (!job) return;
     setError(null);
     const outcome = await downloadBlobFile(API.employees.importJobErrors(job.job_id), {}, "employee_import_errors.xlsx");
-    if (!outcome.success) setError(outcome.message ?? "Could not download the error report.");
+    if (!outcome.success) setError(outcome.message ?? tr("Could not download the error report."));
   }, [job]);
 
   return {

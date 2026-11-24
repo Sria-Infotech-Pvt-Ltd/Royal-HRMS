@@ -1,3 +1,4 @@
+import { tr } from "@/lib/i18n/tr"
 import { useCallback, useState } from "react"
 import { useFetch } from "@/hooks/useFetch"
 import clientApi from "@/lib/clientApi"
@@ -29,7 +30,7 @@ export function usePerformanceHub() {
       await clientApi.patch(API.performance.cycleDetail(id), { status })
       reload()
     } catch (error: unknown) {
-      setActionError(messageFrom(error, status === "active" ? "Could not activate the cycle." : "Could not close the cycle."))
+      setActionError(messageFrom(error, status === "active" ? tr("Could not activate the cycle.") : tr("Could not close the cycle.")))
     } finally {
       setBusyId(null)
     }

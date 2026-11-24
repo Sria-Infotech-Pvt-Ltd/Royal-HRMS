@@ -8,6 +8,7 @@
 
 import { useMemo, useState } from "react";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import { parseEmployeeQuery, type ParsedEmployeeStatus } from "@/lib/employeeQueryParser";
 
 interface Props {
@@ -24,6 +25,7 @@ const EXAMPLES = [
 ];
 
 export default function AiAssistPanel({ departments, branches, onClose, onApply }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
 
   const parsed = useMemo(
@@ -39,27 +41,26 @@ export default function AiAssistPanel({ departments, branches, onClose, onApply 
 
   return (
     <Modal
-      title={<><i className="ti ti-sparkles" style={{ color: "var(--primary)" }} /> AI Assist</>}
+      title={<><i className="ti ti-sparkles" style={{ color: "var(--primary)" }} /> {t("AI Assist")}</>}
       onClose={onClose}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={apply} disabled={!parsed}>
-            Apply filters
+            {t("Apply filters")}
           </button>
         </>
       }
     >
       <p style={{ fontSize: 12.5, color: "var(--on-variant)", marginBottom: 12 }}>
-        Describe who you&apos;re looking for in plain words — this matches against real status, org unit and location
-        filters (not an external AI service).
+        {t("Describe who you're looking for in plain words — this matches against real status, org unit and location filters (not an external AI service).")}
       </p>
 
       <textarea
         className="field-input"
         rows={2}
         autoFocus
-        placeholder="e.g. onboarding employees in AI & ML"
+        placeholder={t("e.g. onboarding employees in AI & ML")}
         value={query}
         onChange={e => setQuery(e.target.value)}
       />
@@ -72,7 +73,7 @@ export default function AiAssistPanel({ departments, branches, onClose, onApply 
             className="btn btn-ghost btn-sm"
             onClick={() => setQuery(ex)}
           >
-            {ex}
+            {t(ex)}
           </button>
         ))}
       </div>
@@ -86,11 +87,11 @@ export default function AiAssistPanel({ departments, branches, onClose, onApply 
         {parsed && (
           <div style={{ padding: "12px 14px", borderRadius: 10, background: "var(--bg-low)" }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--on-variant)", marginBottom: 6 }}>
-              DETECTED
+              {t("DETECTED")}
             </div>
             {parsed.matched.length === 0 ? (
               <div style={{ fontSize: 12.5, color: "var(--on-variant)" }}>
-                Nothing matched a known status, org unit or location — Apply will search this text by name, ID or email instead.
+                {t("Nothing matched a known status, org unit or location — Apply will search this text by name, ID or email instead.")}
               </div>
             ) : (
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "var(--on-bg)" }}>

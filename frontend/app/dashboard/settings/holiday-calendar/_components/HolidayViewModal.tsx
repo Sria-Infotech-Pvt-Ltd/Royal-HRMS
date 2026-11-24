@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import type { Holiday } from "@/types/holidays";
 
 const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -21,13 +22,14 @@ interface Props {
 }
 
 export default function HolidayViewModal({ holiday, onClose, onEdit }: Props) {
+  const t = useT();
   const rows: [string, string][] = [
-    ["Date",    fmtDate(holiday.date)],
-    ["Day",     holiday.day],
-    ["Type",    holiday.holiday_type_display],
-    ["Applies", holiday.mandatory_optional],
-    ["Status",  holiday.is_active ? "Active" : "Inactive"],
-    ["Company Code",  holiday.branch_name],
+    [t("Date"),    fmtDate(holiday.date)],
+    [t("Day"),     holiday.day],
+    [t("Type"),    holiday.holiday_type_display],
+    [t("Applies"), holiday.mandatory_optional],
+    [t("Status"),  holiday.is_active ? t("Active") : t("Inactive")],
+    [t("Company Code"),  holiday.branch_name],
   ];
 
   return (
@@ -38,7 +40,7 @@ export default function HolidayViewModal({ holiday, onClose, onEdit }: Props) {
             <span className={`w-3 h-3 rounded-full ${TYPE_DOT[holiday.holiday_type]}`} />
             <span className="text-sm font-bold text-[var(--on-bg)]">{holiday.name}</span>
           </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors" aria-label="Close">
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors" aria-label={t("Close")}>
             <i className="ti ti-x text-sm" />
           </button>
         </div>
@@ -51,7 +53,7 @@ export default function HolidayViewModal({ holiday, onClose, onEdit }: Props) {
           ))}
           {holiday.description && (
             <div className="col-span-2">
-              <div className="text-xs text-[var(--outline)] mb-0.5">Description</div>
+              <div className="text-xs text-[var(--outline)] mb-0.5">{t("Description")}</div>
               <div className="text-sm text-[var(--on-bg)]">{holiday.description}</div>
             </div>
           )}
@@ -59,11 +61,11 @@ export default function HolidayViewModal({ holiday, onClose, onEdit }: Props) {
         <div className="flex gap-2 px-6 pb-5">
           <button onClick={onEdit}
             className="flex-1 py-2 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-mid)] transition-colors flex items-center justify-center gap-2">
-            <i className="ti ti-edit" /> Edit
+            <i className="ti ti-edit" /> {t("Edit")}
           </button>
           <button onClick={onClose}
             className="flex-1 py-2 rounded-xl bg-[var(--info)] text-white text-sm font-medium hover:bg-[var(--info)] transition-colors">
-            Close
+            {t("Close")}
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 /** Images, PDFs and links on an announcement: the limits, the checks done before upload, the editable draft, and the request body.
     The server checks everything again (type, real file content, size, counts, links); these checks only give instant feedback. */
+import { tr } from "@/lib/i18n/tr";
 import { API_BASE } from "@/lib/config";
 
 export const MAX_IMAGES = 5;
@@ -110,7 +111,6 @@ export function documentCount(draft: AttachmentDraft): number {
 /** Add files of one kind, keeping the first ones when the limit is reached. Returns the new draft and a message per refused file. */
 export function addFiles(draft: AttachmentDraft, kind: AttachmentKind, files: File[]): { draft: AttachmentDraft; errors: string[] } {
   const limit = kind === "image" ? MAX_IMAGES : MAX_DOCUMENTS;
-  const label = kind === "image" ? "images" : "PDF attachments";
   const errors: string[] = [];
   const accepted: File[] = [];
   let count = kind === "image" ? imageCount(draft) : documentCount(draft);
@@ -119,7 +119,9 @@ export function addFiles(draft: AttachmentDraft, kind: AttachmentKind, files: Fi
     if (problem) {
       errors.push(problem);
     } else if (count >= limit) {
-      errors.push(`An announcement can have at most ${limit} ${label}; "${file.name}" was not added.`);
+      errors.push(kind === "image"
+        ? tr("An announcement can have at most {limit} images; \"{name}\" was not added.", { limit, name: file.name })
+        : tr("An announcement can have at most {limit} PDF attachments; \"{name}\" was not added.", { limit, name: file.name }));
     } else {
       accepted.push(file);
       count += 1;
@@ -175,10 +177,10 @@ export function linkProblems(link: AnnouncementLink, strict: boolean): LinkProbl
   const problems: LinkProblems = {};
   const title = link.title.trim();
   const url = link.url.trim();
-  if (!title && (strict || url)) problems.title = "Enter a title for the link.";
-  else if (title.length > LINK_TITLE_MAX) problems.title = `At most ${LINK_TITLE_MAX} characters.`;
-  if (!url && (strict || title)) problems.url = "Enter the web address.";
-  else if (url && !isSafeHttpUrl(url)) problems.url = "Enter a valid address starting with http:// or https://.";
+  if (!title && (strict || url)) problems.title = tr("Enter a title for the link.");
+  else if (title.length > LINK_TITLE_MAX) problems.title = tr("At most {max} characters.", { max: LINK_TITLE_MAX });
+  if (!url && (strict || title)) problems.url = tr("Enter the web address.");
+  else if (url && !isSafeHttpUrl(url)) problems.url = tr("Enter a valid address starting with http:// or https://.");
   return problems;
 }
 
@@ -187,10 +189,10 @@ export function draftErrors(draft: AttachmentDraft): string[] {
   const errors: string[] = [];
   draft.links.forEach((link, index) => {
     const problems = linkProblems(link, true);
-    if (problems.title || problems.url) errors.push(`Link ${index + 1}: ${problems.title ?? problems.url}`);
+    if (problems.title || problems.url) errors.push(tr("Link {number}: {problem}", { number: index + 1, problem: problems.title ?? problems.url ?? "" }));
   });
-  if (imageCount(draft) > MAX_IMAGES) errors.push(`At most ${MAX_IMAGES} images.`);
-  if (documentCount(draft) > MAX_DOCUMENTS) errors.push(`At most ${MAX_DOCUMENTS} PDF attachments.`);
+  if (imageCount(draft) > MAX_IMAGES) errors.push(tr("At most {max} images.", { max: MAX_IMAGES }));
+  if (documentCount(draft) > MAX_DOCUMENTS) errors.push(tr("At most {max} PDF attachments.", { max: MAX_DOCUMENTS }));
   return errors;
 }
 

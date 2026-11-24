@@ -1,11 +1,13 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import type { CompleteData } from "./_types";
 
 export default function CompletionModal({ result, title, attemptNumber, isLastPending, retaking, onRetake, onContinue, onDashboard }: {
   result: CompleteData; title: string; attemptNumber: number; isLastPending: boolean;
   retaking: boolean; onRetake: () => void; onContinue: () => void; onDashboard: () => void;
 }) {
+  const t = useT();
   const pct = result.max_score > 0 ? Math.round((result.score / result.max_score) * 100) : 0;
   const R = 52; const C = 2 * Math.PI * R;
   const passed = result.passed;
@@ -26,21 +28,21 @@ export default function CompletionModal({ result, title, attemptNumber, isLastPe
           </div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: passed ? "#dcfce7" : "#fee2e2", borderRadius: 20, padding: "4px 14px", marginBottom: 8 }}>
             <i className={`ti ${passed ? "ti-circle-check" : "ti-circle-x"}`} style={{ color: passed ? "#16a34a" : "#dc2626", fontSize: 14 }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: passed ? "#15803d" : "#dc2626" }}>{passed ? "Passed" : "Not Passed"}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: passed ? "#15803d" : "#dc2626" }}>{passed ? t("Passed") : t("Not Passed")}</span>
           </div>
-          <p style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>{pct}% Score</p>
-          <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 24px" }}>{title} · Attempt #{attemptNumber}</p>
+          <p style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>{t("{percent}% Score", { percent: pct })}</p>
+          <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 24px" }}>{title} · {t("Attempt #{number}", { number: attemptNumber })}</p>
           {passed && isLastPending ? (
             <button suppressHydrationWarning onClick={onDashboard} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "var(--brand)", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              Go to Dashboard <i className="ti ti-arrow-right" />
+              {t("Go to Dashboard")} <i className="ti ti-arrow-right" />
             </button>
           ) : passed ? (
             <button suppressHydrationWarning onClick={onContinue} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "var(--brand)", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              Continue to Next Assessment <i className="ti ti-arrow-right" />
+              {t("Continue to Next Assessment")} <i className="ti ti-arrow-right" />
             </button>
           ) : (
             <button suppressHydrationWarning onClick={onRetake} disabled={retaking} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: retaking ? "#94a3b8" : "#dc2626", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: retaking ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              {retaking ? <><i className="ti ti-loader-2 spin" />Starting…</> : <><i className="ti ti-refresh" />Re-take Assessment</>}
+              {retaking ? <><i className="ti ti-loader-2 spin" />{t("Starting…")}</> : <><i className="ti ti-refresh" />{t("Re-take Assessment")}</>}
             </button>
           )}
         </div>

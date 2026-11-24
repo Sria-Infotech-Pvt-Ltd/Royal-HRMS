@@ -56,6 +56,7 @@ import { matchEmploymentType } from "@/lib/employmentType";
 import { parseApiError } from "@/lib/apiError";
 import { MARITAL_STATUS_OPTIONS } from "@/lib/maritalStatus";
 import { usePermission } from "@/hooks/usePermission";
+import { useT } from "@/hooks/useI18n";
 import { useToast } from "@/components/ToastProvider";
 import EditRecordContactFields from "./EditRecordContactFields";
 import { buildContactChanges } from "./editRecordContact";
@@ -141,18 +142,19 @@ function ageFromDateOfBirth(value: string): number | null {
 // can be opened in any order. Same label/sub/group/tag data, no numbers,
 // no required-count badges.
 function EditRecordSidebar({ currentStep, onStepClick, hasMissing }: { currentStep: number; onStepClick: (i: number) => void; hasMissing: boolean }) {
+  const t = useT();
   return (
     <div className="wiz-nav" style={{ overflowY: "visible" }}>
       {STEPS.map((s, i) => (
         <div key={s.label}>
-          {s.group && <div className="navgrp">{s.group}</div>}
+          {s.group && <div className="navgrp">{t(s.group)}</div>}
           <button type="button" onClick={() => onStepClick(i)} className={`step${i === currentStep ? " on" : ""}`} style={{ paddingLeft: 12 }}>
             <div className="tx">
               <div className="t1">
-                {s.label}
-                {s.tag && <span className={`tag ${s.tag.tone}`}>{s.tag.label}</span>}
+                {t(s.label)}
+                {s.tag && <span className={`tag ${s.tag.tone}`}>{t(s.tag.label)}</span>}
               </div>
-              <div className="t2">{s.sub}</div>
+              <div className="t2">{t(s.sub)}</div>
             </div>
           </button>
         </div>
@@ -162,8 +164,8 @@ function EditRecordSidebar({ currentStep, onStepClick, hasMissing }: { currentSt
         className="mt-4 rounded-lg p-3 text-[11.5px]"
         style={hasMissing ? { background: "var(--warn-c)", color: "var(--warn)" } : { background: "var(--ok-bg)", color: "var(--ok)" }}
       >
-        <div style={{ fontWeight: 700, marginBottom: 2 }}>{hasMissing ? "A few required fields are empty" : "Nothing outstanding"}</div>
-        <div>{hasMissing ? "Fill in the required fields marked with *." : "All required fields are complete. Optional sections can be finished after joining."}</div>
+        <div style={{ fontWeight: 700, marginBottom: 2 }}>{hasMissing ? t("A few required fields are empty") : t("Nothing outstanding")}</div>
+        <div>{hasMissing ? t("Fill in the required fields marked with *.") : t("All required fields are complete. Optional sections can be finished after joining.")}</div>
       </div>
     </div>
   );
@@ -230,6 +232,7 @@ interface ApiEditDraft {
 }
 
 export default function EditRecordModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  const t = useT();
   const { showToast } = useToast();
   // The shared Modal component doesn't lock body scroll on its own — with
   // tall content (this modal has a lot), the page behind it could also
@@ -313,7 +316,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       setPhotoUrl(data.data.profile_photo_url ?? undefined);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setPhotoError(msg || "Failed to upload photo. Please try again.");
+      setPhotoError(msg || t("Failed to upload photo. Please try again."));
     } finally {
       setUploadingPhoto(false);
     }
@@ -402,13 +405,13 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     setSavingDraft(true);
     try {
       await clientApi.post(API.employees.editDraft(employee.id), { data: buildSnapshot(), last_step: step });
-      showToast("Draft saved.", "success");
+      showToast(t("Draft saved."), "success");
       // The current edits are now safely persisted as a draft — closing
       // right after this is safe, so this counts as a new "known saved" point.
-      setBaselineTick(t => t + 1);
+      setBaselineTick(tick => tick + 1);
       if (closeAfter) onClose();
     } catch {
-      showToast("Failed to save draft. Please try again.", "error");
+      showToast(t("Failed to save draft. Please try again."), "error");
     } finally {
       setSavingDraft(false);
     }
@@ -423,7 +426,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       // from the live record (that's the whole point), so closing without
       // an explicit Save/Save as Draft should still prompt.
     } catch {
-      showToast("Failed to resume the draft.", "error");
+      showToast(t("Failed to resume the draft."), "error");
     }
   }
 
@@ -590,8 +593,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
   }, [uuid]);
 
   const saveFamilyAndNominees = useCallback(async () => {
-    if (!familyEntries.every(e => e.name.trim())) { setFamilyErr("Name is required for every family member entry."); return false; }
-    if (!nomineeEntries.every(e => e.family_member)) { setFamilyErr("Select a family member for every nominee entry."); return false; }
+    if (!familyEntries.every(e => e.name.trim())) { setFamilyErr(t("Name is required for every family member entry.")); return false; }
+    if (!nomineeEntries.every(e => e.family_member)) { setFamilyErr(t("Select a family member for every nominee entry.")); return false; }
     setFamilyErr(null);
     try {
       for (const id of deletedFamilyIds.current) await clientApi.delete(API.onboarding.employees.familyDetail(uuid, id));
@@ -628,13 +631,13 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setFamilyErr(msg ?? "Failed to save family & nomination details.");
+      setFamilyErr(msg ?? t("Failed to save family & nomination details."));
       return false;
     }
-  }, [familyEntries, nomineeEntries, uuid]);
+  }, [familyEntries, nomineeEntries, uuid, t]);
 
   const saveAssets = useCallback(async () => {
-    if (!assetEntries.every(e => e.asset_type)) { setAssetErr("Select an asset type for every entry."); return false; }
+    if (!assetEntries.every(e => e.asset_type)) { setAssetErr(t("Select an asset type for every entry.")); return false; }
     setAssetErr(null);
     try {
       for (const id of deletedAssetIds.current) await clientApi.delete(API.onboarding.employees.assetDetail(uuid, id));
@@ -659,10 +662,10 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setAssetErr(msg ?? "Failed to save assets.");
+      setAssetErr(msg ?? t("Failed to save assets."));
       return false;
     }
-  }, [assetEntries, uuid]);
+  }, [assetEntries, uuid, t]);
 
   const saveEducationAndExperience = useCallback(async () => {
     setEduExpErr(null);
@@ -695,10 +698,10 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setEduExpErr(msg ?? "Failed to save education & experience details.");
+      setEduExpErr(msg ?? t("Failed to save education & experience details."));
       return false;
     }
-  }, [educationEntries, experienceEntries, uuid]);
+  }, [educationEntries, experienceEntries, uuid, t]);
 
   async function onUploadDocument(documentType: string, file: File) {
     setDocUploadError("");
@@ -714,7 +717,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       refreshDocs(data.data);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setDocUploadError(msg || "Failed to upload document. Please try again.");
+      setDocUploadError(msg || t("Failed to upload document. Please try again."));
     } finally {
       setUploadingDocType(null);
     }
@@ -731,7 +734,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     setSavedMsg(false);
     setContactErrors({});
     if (statutory.uan_number && statutory.uan_number.length !== 12) {
-      setSaveError("UAN must be 12 digits");
+      setSaveError(t("UAN must be 12 digits"));
       setStep(3); // Statutory & accounts — where UAN lives
       setSaving(false);
       return;
@@ -845,7 +848,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
           baselineCtc.current = { annualCtc: employment.annual_ctc, salaryStructure: employment.salary_structure };
         } catch (err: unknown) {
           const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-          setSaveError(msg ?? "Failed to save the CTC change.");
+          setSaveError(msg ?? t("Failed to save the CTC change."));
           ctcOk = false;
         }
       }
@@ -859,7 +862,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
         setSavedContact({ email: personal.personalEmail, mobile: personal.mobileNumber });
         setIsLoginChangeConfirmed(false);
       } else {
-        setSaveError(prev => prev ?? "Some sections could not be saved — see the errors above.");
+        setSaveError(prev => prev ?? t("Some sections could not be saved — see the errors above."));
         // Jump to the first failing section, in wizard order, so its
         // inline error is actually visible instead of silently failing on
         // a step the user isn't looking at.
@@ -870,14 +873,14 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       }
       setSavedMsg(allOk);
       if (allOk) {
-        setBaselineTick(t => t + 1);
-        showToast("Changes saved.", "success");
+        setBaselineTick(tick => tick + 1);
+        showToast(t("Changes saved."), "success");
         // The changes just went live — any draft for this employee+admin is now stale, resumed or not.
         if (pendingDraft) { clientApi.delete(API.employees.editDraft(employee.id)).catch(() => {}); setPendingDraft(null); }
         if (closeAfter) onClose();
       }
     } catch (err: unknown) {
-      const parsed = parseApiError(err, "Failed to save changes. Please try again.");
+      const parsed = parseApiError(err, t("Failed to save changes. Please try again."));
       setContactErrors({ email: parsed.fieldErrors.email, phone: parsed.fieldErrors.phone });
       setSaveError(parsed.message);
       // Email/phone (contact) errors are highlighted on Personal identity (step 0).
@@ -895,9 +898,9 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
     <Modal
       title={
         <div>
-          <div className="text-[18px] font-bold">Edit <span style={{ color: "var(--primary)", fontStyle: "italic" }}>record</span></div>
+          <div className="text-[18px] font-bold">{t("Edit")} <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{t("record")}</span></div>
           <div className="text-[12px] mt-0.5" style={{ color: "var(--on-variant)", fontWeight: 400 }}>
-            Jump to any section, change what you need, and save. Nothing else has to be re-entered.
+            {t("Jump to any section, change what you need, and save. Nothing else has to be re-entered.")}
           </div>
         </div>
       }
@@ -908,16 +911,16 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
       footer={
         <div className="flex items-center gap-3 w-full justify-end">
-          {savedMsg && <span style={{ fontSize: 12, color: "var(--ok)", marginRight: "auto" }}>All changes saved</span>}
+          {savedMsg && <span style={{ fontSize: 12, color: "var(--ok)", marginRight: "auto" }}>{t("All changes saved")}</span>}
           {saveError && <span style={{ fontSize: 12, color: "var(--crit)", marginRight: "auto" }}>{saveError}</span>}
           <button onClick={() => saveAsDraft(false)} disabled={saving || savingDraft} className="btn btn-ghost">
-            {savingDraft ? "Saving…" : "Save as draft"}
+            {savingDraft ? t("Saving…") : t("Save as draft")}
           </button>
           <button onClick={() => onSaveChanges(false)} disabled={saving || savingDraft} className="btn btn-ghost">
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("Saving…") : t("Save")}
           </button>
           <button onClick={() => onSaveChanges(true)} disabled={saving || savingDraft} className="btn btn-filled">
-            {saving ? "Saving…" : "Save & close"}
+            {saving ? t("Saving…") : t("Save & close")}
           </button>
         </div>
       }
@@ -925,7 +928,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       {loading ? (
         <div className="flex items-center justify-center py-20 gap-2 text-[13px]" style={{ color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 animate-spin text-[22px]" style={{ color: "var(--primary)" }} />
-          Loading…
+          {t("Loading…")}
         </div>
       ) : (
         <div className="wiz">
@@ -947,9 +950,9 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
             <div className="stephead" style={{ padding: "20px 24px 0" }}>
               <div>
                 {step === 1
-                  ? <h3><em className="hl">Employment</em> details</h3>
-                  : <h3>{STEPS[step].label}</h3>}
-                <p>{step === 1 ? "Position, reporting line, work setup and pay." : STEPS[step].sub}</p>
+                  ? <h3><em className="hl">{t("Employment")}</em> {t("details")}</h3>
+                  : <h3>{t(STEPS[step].label)}</h3>}
+                <p>{step === 1 ? t("Position, reporting line, work setup and pay.") : t(STEPS[step].sub)}</p>
               </div>
             </div>
 
@@ -959,10 +962,10 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                 background: "var(--warn-c)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
               }}>
                 <span style={{ fontSize: 13, flex: 1, minWidth: 200 }}>
-                  You have unsaved draft changes from {new Date(pendingDraft.updated_at).toLocaleString()}.
+                  {t("You have unsaved draft changes from {date}.", { date: new Date(pendingDraft.updated_at).toLocaleString() })}
                 </span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={discardDraft}>Discard draft and start fresh</button>
-                <button type="button" className="btn btn-filled btn-sm" onClick={resumeDraft}>Resume draft</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={discardDraft}>{t("Discard draft and start fresh")}</button>
+                <button type="button" className="btn btn-filled btn-sm" onClick={resumeDraft}>{t("Resume draft")}</button>
               </div>
             )}
 
@@ -972,16 +975,16 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                   <div className="flex items-center gap-4 mb-5">
                     <Avatar text={`${personal.firstName} ${personal.lastName}`.trim() || employee.code} size={64} photoUrl={photoUrl} />
                     <div>
-                      <div className="text-[12.5px] font-semibold mb-1">Employee photo</div>
+                      <div className="text-[12.5px] font-semibold mb-1">{t("Employee photo")}</div>
                       <div className="text-[11px] mb-1.5" style={{ color: "var(--on-variant)" }}>
-                        Square JPG or PNG, at least 400×400px. Cropped to a circle on ID cards and reports.
+                                        {t("Square JPG or PNG, at least 400×400px. Cropped to a circle on ID cards and reports.")}
                       </div>
                       {/* Same "btn btn-ghost btn-sm" small outline button DocUploadButton
                           uses for every other inline attach control in the Hire flow
                           (PAN/Aadhaar/Passport cards, Documents step, certificates) —
                           reusing that exact class combination, not a new style. */}
                       <label className="btn btn-ghost btn-sm" style={{ cursor: uploadingPhoto ? "wait" : "pointer", display: "inline-flex" }}>
-                        {uploadingPhoto ? <><i className="ti ti-loader-2 animate-spin" /> Uploading…</> : <><i className="ti ti-upload" /> Upload file</>}
+                        {uploadingPhoto ? <><i className="ti ti-loader-2 animate-spin" /> {t("Uploading…")}</> : <><i className="ti ti-upload" /> {t("Upload file")}</>}
                         <input
                           type="file" accept="image/jpeg,image/png" className="sr-only" disabled={uploadingPhoto}
                           onChange={e => { const file = e.target.files?.[0]; if (file) onUploadPhoto(file); e.target.value = ""; }}
@@ -991,31 +994,31 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     </div>
                   </div>
 
-                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Identity</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>{t("Identity")}</div>
                   <div className="grid grid-cols-3 gap-3 mb-3">
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Salutation <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Salutation")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("OPTIONAL")}</span></label>
                       <select value={personal.salutation} onChange={e => setPersonal(p => ({ ...p, salutation: e.target.value }))} className="field-input field-select">
-                        <option value="">Select</option>
-                        {["Mr.", "Ms.", "Mrs.", "Dr."].map(s => <option key={s} value={s}>{s}</option>)}
+                        <option value="">{t("Select")}</option>
+                        {["Mr.", "Ms.", "Mrs.", "Dr."].map(s => <option key={s} value={s}>{t(s)}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">First name <span style={{ color: "var(--error)" }}>*</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("First name")} <span style={{ color: "var(--error)" }}>*</span></label>
                       <input value={personal.firstName} readOnly className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} />
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Middle name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
-                      <input value={personal.middleName} onChange={e => setPersonal(p => ({ ...p, middleName: e.target.value }))} placeholder="e.g. Kumar" className="field-input" />
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Middle name")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("OPTIONAL")}</span></label>
+                      <input value={personal.middleName} onChange={e => setPersonal(p => ({ ...p, middleName: e.target.value }))} placeholder={t("e.g. Kumar")} className="field-input" />
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 mb-5">
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Last name <span style={{ color: "var(--error)" }}>*</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Last name")} <span style={{ color: "var(--error)" }}>*</span></label>
                       <input value={personal.lastName} readOnly className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} />
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Display name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Display name")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("auto")}</span></label>
                       <div className="flex gap-2">
                         <input value={personal.displayName} onChange={e => setPersonal(p => ({ ...p, displayName: e.target.value }))} className="field-input" />
                         <button
@@ -1023,82 +1026,82 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                           onClick={() => setPersonal(p => ({ ...p, displayName: [p.salutation, p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ") }))}
                           className="btn btn-sm"
                           style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
-                        >+ Suggest</button>
+                        >{t("+ Suggest")}</button>
                       </div>
-                      <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>
+                      <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Shown across the app and in approvals.")}</p>
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Employee number <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Employee number")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("auto")}</span></label>
                       <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-bg)" }}>{employee.code}</div>
                     </div>
                   </div>
 
-                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Basic details</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>{t("Basic details")}</div>
                   <div className="grid grid-cols-3 gap-3 mb-3">
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Date of birth <span style={{ color: "var(--error)" }}>*</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Date of birth")} <span style={{ color: "var(--error)" }}>*</span></label>
                       <DateInput value={personal.dateOfBirth} onChange={iso => setPersonal(p => ({ ...p, dateOfBirth: iso }))} className="field-input" separator="-" />
                       {personalAge !== null && (
                         <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>
-                          Age {personalAge}
+                          {t("Age {age}", { age: personalAge })}
                         </p>
                       )}
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Gender <span style={{ color: "var(--error)" }}>*</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Gender")} <span style={{ color: "var(--error)" }}>*</span></label>
                       <select value={personal.gender} onChange={e => setPersonal(p => ({ ...p, gender: e.target.value }))} className="field-input field-select">
-                        <option value="">Select</option>
-                        <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                        <option value="">{t("Select")}</option>
+                        <option value="male">{t("Male")}</option><option value="female">{t("Female")}</option><option value="other">{t("Other")}</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Blood group <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Blood group")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("OPTIONAL")}</span></label>
                       <select value={personal.bloodGroup} onChange={e => setPersonal(p => ({ ...p, bloodGroup: e.target.value }))} className="field-input field-select">
-                        <option value="">Select</option>
+                        <option value="">{t("Select")}</option>
                         {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(b => <option key={b} value={b}>{b}</option>)}
                       </select>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 mb-5">
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Marital status</label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Marital status")}</label>
                       <select value={personal.maritalStatus} onChange={e => setPersonal(p => ({ ...p, maritalStatus: e.target.value }))} className="field-input field-select">
-                        {MARITAL_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {MARITAL_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Nationality <span style={{ color: "var(--error)" }}>*</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Nationality")} <span style={{ color: "var(--error)" }}>*</span></label>
                       <CountrySelect value={personal.nationality} onChange={v => setPersonal(p => ({ ...p, nationality: v }))} mode="demonym" />
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Place of birth")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("OPTIONAL")}</span></label>
                       <div className="flex gap-2">
-                        <input value={personal.placeOfBirth} onChange={e => setPersonal(p => ({ ...p, placeOfBirth: e.target.value }))} placeholder="City / town" className="field-input" />
+                        <input value={personal.placeOfBirth} onChange={e => setPersonal(p => ({ ...p, placeOfBirth: e.target.value }))} placeholder={t("City / town")} className="field-input" />
                         <button
                           type="button"
                           onClick={() => setPersonal(p => ({ ...p, placeOfBirth: values.currentVillage || values.currentDistrict }))}
                           className="btn btn-sm"
                           style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
-                        >+ Suggest</button>
+                        >{t("+ Suggest")}</button>
                       </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3 mb-5">
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Father&apos;s name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>FROM FAMILY</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Father's name")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("FROM FAMILY")}</span></label>
                       <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
-                        {familyEntries.find(entry => entry.relationship === "father")?.name || personal.fatherName || "Set in Family & nomination"}
+                        {familyEntries.find(entry => entry.relationship === "father")?.name || personal.fatherName || t("Set in Family & nomination")}
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Mother&apos;s name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>FROM FAMILY</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Mother's name")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("FROM FAMILY")}</span></label>
                       <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
-                        {familyEntries.find(entry => entry.relationship === "mother")?.name || personal.motherName || "Set in Family & nomination"}
+                        {familyEntries.find(entry => entry.relationship === "mother")?.name || personal.motherName || t("Set in Family & nomination")}
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Languages known <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Languages known")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("OPTIONAL")}</span></label>
                       <LanguagesSelect
                         value={personal.languagesKnown}
                         onChange={languagesKnown => setPersonal(p => ({ ...p, languagesKnown }))}
@@ -1106,49 +1109,49 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     </div>
                   </div>
 
-                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Statutory declarations</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>{t("Statutory declarations")}</div>
                   <div className="grid grid-cols-2 gap-3 mb-5">
                     <div>
                       <label className="block text-[12.5px] font-semibold mb-1.5" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        Specially abled
+                        {t("Specially abled")}
                         <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--warn)", background: "var(--warn-c)", borderRadius: 99, padding: "1px 6px" }}>RPwD</span>
                       </label>
                       <select value={personal.speciallyAbled} onChange={e => setPersonal(p => ({ ...p, speciallyAbled: e.target.value }))} className="field-input field-select">
-                        <option value="no">No</option><option value="yes">Yes</option>
+                        <option value="no">{t("No")}</option><option value="yes">{t("Yes")}</option>
                       </select>
-                      <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Record-keeping obligation under the RPwD Act 2016.</p>
+                      <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Record-keeping obligation under the RPwD Act 2016.")}</p>
                     </div>
                     <div>
                       <label className="block text-[12.5px] font-semibold mb-1.5" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        International worker
+                        {t("International worker")}
                         <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--warn)", background: "var(--warn-c)", borderRadius: 99, padding: "1px 6px" }}>GOI</span>
                       </label>
                       <select value={personal.internationalWorker} onChange={e => setPersonal(p => ({ ...p, internationalWorker: e.target.value }))} className="field-input field-select">
-                        <option value="no">No</option><option value="yes">Yes</option>
+                        <option value="no">{t("No")}</option><option value="yes">{t("Yes")}</option>
                       </select>
-                      <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Mandatory declaration on EPF Form 11.</p>
+                      <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Mandatory declaration on EPF Form 11.")}</p>
                     </div>
                   </div>
 
-                  <div className="text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: "var(--on-variant)" }}>Voluntary self-declaration</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: "var(--on-variant)" }}>{t("Voluntary self-declaration")}</div>
                   <p className="text-[11.5px] mb-2" style={{ color: "var(--on-variant)" }}>
-                    Not required of a private employer. Collect only where a government, PSU or aided establishment must report it, or a state incentive scheme requires it. Self-declared, and hidden from reporting managers.
+                    {t("Not required of a private employer. Collect only where a government, PSU or aided establishment must report it, or a state incentive scheme requires it. Self-declared, and hidden from reporting managers.")}
                   </p>
                   <div className="grid grid-cols-3 gap-3 mb-5">
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Category / community <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Category / community")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("OPTIONAL")}</span></label>
                       <select value={personal.category} onChange={e => setPersonal(p => ({ ...p, category: e.target.value }))} className="field-input field-select">
-                        <option value="prefer_not_to_say">Prefer not to say</option>
-                        <option value="general">General</option>
+                        <option value="prefer_not_to_say">{t("Prefer not to say")}</option>
+                        <option value="general">{t("General")}</option>
                         <option value="obc">OBC</option>
                         <option value="sc">SC</option>
                         <option value="st">ST</option>
-                        <option value="other">Other</option>
+                        <option value="other">{t("Other")}</option>
                       </select>
                     </div>
                   </div>
 
-                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Contact</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>{t("Contact")}</div>
                   <div className="grid grid-cols-3 gap-3 mb-5">
                     <EditRecordContactFields
                       canEdit={canEditContact}
@@ -1163,8 +1166,8 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       onLoginChangeConfirmed={setIsLoginChangeConfirmed}
                     />
                     <div>
-                      <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL, not yet stored post-hire</span></label>
-                      <PhoneInput value={personal.alternateMobile} onChange={v => setPersonal(p => ({ ...p, alternateMobile: v }))} placeholder="Optional" />
+                      <label className="block text-[12.5px] font-semibold mb-1.5">{t("Alternate mobile")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("OPTIONAL, not yet stored post-hire")}</span></label>
+                      <PhoneInput value={personal.alternateMobile} onChange={v => setPersonal(p => ({ ...p, alternateMobile: v }))} placeholder={t("Optional")} />
                     </div>
                   </div>
 
@@ -1225,7 +1228,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                   uploading={uploadingDocType}
                   docError={docUploadError}
                   onUploadDoc={onUploadDocument}
-                  onDeleteDoc={() => setDocUploadError("To replace a document, upload a new file of the same type.")}
+                  onDeleteDoc={() => setDocUploadError(t("To replace a document, upload a new file of the same type."))}
                 />
               )}
 
@@ -1233,94 +1236,94 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                 <div className="mstep on">
                   {familyErr && <div className="alert alert-error" style={{ marginBottom: 16 }}>{familyErr}</div>}
 
-                  <div className="sechead">FAMILY MEMBERS</div>
+                  <div className="sechead">{t("FAMILY MEMBERS")}</div>
                   <div className="hint" style={{ marginBottom: 14 }}>
-                    Nominees are chosen from this list, and the parents&apos; names on step 1 are filled from it. Add family before setting nominations.
+                    {t("Nominees are chosen from this list, and the parents' names on step 1 are filled from it. Add family before setting nominations.")}
                   </div>
                   {familyEntries.map(entry => (
                     <div key={entry.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                        <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>Family member</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>{t("Family member")}</span>
                         <button className="btn btn-ghost btn-sm" type="button" style={{ color: "var(--error)" }}
                           onClick={() => { if (!entry.id.startsWith("temp-")) deletedFamilyIds.current.add(entry.id); setFamilyEntries(p => p.filter(e => e.id !== entry.id)); setNomineeEntries(p => p.filter(n => n.family_member !== entry.id)); }}>
-                          Remove
+                          {t("Remove")}
                         </button>
                       </div>
                       <div className="g3">
-                        <div className="f"><label>Name</label><input className="finput" placeholder="Full name" value={entry.name} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, name: e.target.value } : x))} /></div>
+                        <div className="f"><label>{t("Name")}</label><input className="finput" placeholder={t("Full name")} value={entry.name} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, name: e.target.value } : x))} /></div>
                         <div className="f">
-                          <label>Relationship</label>
+                          <label>{t("Relationship")}</label>
                           <select className="finput field-select" value={entry.relationship} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, relationship: e.target.value } : x))}>
-                            <option value="">Select</option>
-                            {FAMILY_RELATIONSHIPS.map(r => <option key={r} value={r}>{FAMILY_RELATIONSHIP_LABELS[r]}</option>)}
+                            <option value="">{t("Select")}</option>
+                            {FAMILY_RELATIONSHIPS.map(r => <option key={r} value={r}>{t(FAMILY_RELATIONSHIP_LABELS[r])}</option>)}
                           </select>
                         </div>
-                        <div className="f"><label>Date of birth</label><DateInput separator="-" className="finput" value={entry.date_of_birth} onChange={iso => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, date_of_birth: iso } : x))} /></div>
+                        <div className="f"><label>{t("Date of birth")}</label><DateInput separator="-" className="finput" value={entry.date_of_birth} onChange={iso => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, date_of_birth: iso } : x))} /></div>
                         <div className="f">
-                          <label>Gender</label>
+                          <label>{t("Gender")}</label>
                           <select className="finput field-select" value={entry.gender} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, gender: e.target.value } : x))}>
-                            <option value="">Select</option>
-                            <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                            <option value="">{t("Select")}</option>
+                            <option value="male">{t("Male")}</option><option value="female">{t("Female")}</option><option value="other">{t("Other")}</option>
                           </select>
                         </div>
-                        <div className="f"><label>Blood group</label><input className="finput" placeholder="e.g. O+" value={entry.blood_group} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, blood_group: e.target.value } : x))} /></div>
+                        <div className="f"><label>{t("Blood group")}</label><input className="finput" placeholder={t("e.g. O+")} value={entry.blood_group} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, blood_group: e.target.value } : x))} /></div>
                         <div className="f">
-                          <label>Dependent</label>
+                          <label>{t("Dependent")}</label>
                           <select className="finput field-select" value={entry.is_dependent ? "yes" : "no"} onChange={e => setFamilyEntries(p => p.map(x => x.id === entry.id ? { ...x, is_dependent: e.target.value === "yes" } : x))}>
-                            <option value="yes">Yes</option><option value="no">No</option>
+                            <option value="yes">{t("Yes")}</option><option value="no">{t("No")}</option>
                           </select>
                         </div>
                       </div>
                     </div>
                   ))}
                   <button className="add" type="button" onClick={() => setFamilyEntries(p => [...p, { id: nextTempId(), name: "", relationship: "", date_of_birth: "", gender: "", blood_group: "", is_dependent: false }])}>
-                    + Add family member
+                    {t("+ Add family member")}
                   </button>
 
                   <div className="divider" />
-                  <div className="sechead">NOMINATION</div>
+                  <div className="sechead">{t("NOMINATION")}</div>
                   <div className="hint" style={{ marginBottom: 14 }}>
-                    Required for EPF Form 2. Nominees are picked from the family list, so a name is only typed once. Each scheme should total 100%.
+                    {t("Required for EPF Form 2. Nominees are picked from the family list, so a name is only typed once. Each scheme should total 100%.")}
                   </div>
                   {familyEntries.length === 0 && (
-                    <div className="hint" style={{ color: "var(--warn)", marginBottom: 14 }}>Add a family member above before adding a nominee.</div>
+                    <div className="hint" style={{ color: "var(--warn)", marginBottom: 14 }}>{t("Add a family member above before adding a nominee.")}</div>
                   )}
                   {nomineeEntries.map(entry => {
                     const familyMember = familyEntries.find(f => f.id === entry.family_member);
                     return (
                       <div key={entry.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                          <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>Nominee</span>
+                          <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>{t("Nominee")}</span>
                           <button className="btn btn-ghost btn-sm" type="button" style={{ color: "var(--error)" }}
                             onClick={() => { if (!entry.id.startsWith("temp-")) deletedNomineeIds.current.add(entry.id); setNomineeEntries(p => p.filter(e => e.id !== entry.id)); }}>
-                            Remove
+                            {t("Remove")}
                           </button>
                         </div>
                         <div className="g3">
                           <div className="f">
-                            <label>Nominee</label>
+                            <label>{t("Nominee")}</label>
                             <select className="finput field-select" value={entry.family_member} onChange={e => setNomineeEntries(p => p.map(x => x.id === entry.id ? { ...x, family_member: e.target.value } : x))}>
-                              <option value="">{familyEntries.length === 0 ? "Add family members first" : "Select from family"}</option>
-                              {familyEntries.map(f => <option key={f.id} value={f.id}>{f.name}{f.relationship ? ` (${FAMILY_RELATIONSHIP_LABELS[f.relationship] ?? f.relationship})` : ""}</option>)}
+                              <option value="">{familyEntries.length === 0 ? t("Add family members first") : t("Select from family")}</option>
+                              {familyEntries.map(f => <option key={f.id} value={f.id}>{f.name}{f.relationship ? ` (${FAMILY_RELATIONSHIP_LABELS[f.relationship] ? t(FAMILY_RELATIONSHIP_LABELS[f.relationship]) : f.relationship})` : ""}</option>)}
                             </select>
                           </div>
                           <div className="f">
-                            <label>Relationship <span className="tag">AUTO</span></label>
-                            <input className="finput" readOnly style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} value={familyMember ? (FAMILY_RELATIONSHIP_LABELS[familyMember.relationship] ?? familyMember.relationship) : "From family record"} />
+                            <label>{t("Relationship")} <span className="tag">{t("AUTO")}</span></label>
+                            <input className="finput" readOnly style={{ background: "var(--bg-low)", color: "var(--on-variant)" }} value={familyMember ? (FAMILY_RELATIONSHIP_LABELS[familyMember.relationship] ? t(FAMILY_RELATIONSHIP_LABELS[familyMember.relationship]) : familyMember.relationship) : t("From family record")} />
                           </div>
                           <div className="f">
-                            <label>Scheme</label>
+                            <label>{t("Scheme")}</label>
                             <select className="finput field-select" value={entry.scheme} onChange={e => setNomineeEntries(p => p.map(x => x.id === entry.id ? { ...x, scheme: e.target.value } : x))}>
-                              {NOMINATION_SCHEMES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                              {NOMINATION_SCHEMES.map(s => <option key={s.value} value={s.value}>{t(s.label)}</option>)}
                             </select>
                           </div>
-                          <div className="f"><label>Share %</label><input className="finput" type="number" min={0} max={100} value={entry.share_percentage} onChange={e => setNomineeEntries(p => p.map(x => x.id === entry.id ? { ...x, share_percentage: e.target.value.replace(/[^0-9]/g, "") } : x))} /></div>
+                          <div className="f"><label>{t("Share %")}</label><input className="finput" type="number" min={0} max={100} value={entry.share_percentage} onChange={e => setNomineeEntries(p => p.map(x => x.id === entry.id ? { ...x, share_percentage: e.target.value.replace(/[^0-9]/g, "") } : x))} /></div>
                         </div>
                       </div>
                     );
                   })}
                   <button className="add" type="button" disabled={familyEntries.length === 0} onClick={() => setNomineeEntries(p => [...p, { id: nextTempId(), family_member: "", scheme: "epf_eps", share_percentage: "" }])}>
-                    + Add nominee
+                    {t("+ Add nominee")}
                   </button>
                   {nomineeEntries.length > 0 && (
                     <div className="flex justify-end mt-2">
@@ -1330,33 +1333,33 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       }) ? "text-emerald-600" : "text-red-500"}`}>
                         {NOMINATION_SCHEMES.filter(s => s.value !== "both").map(s => {
                           const total = nomineeEntries.filter(n => n.scheme === s.value || n.scheme === "both").reduce((sum, n) => sum + (Number(n.share_percentage) || 0), 0);
-                          return `${s.label} ${total}%`;
+                          return `${t(s.label)} ${total}%`;
                         }).join(" · ")}
                       </span>
                     </div>
                   )}
 
                   <div className="divider" />
-                  <div className="sechead">GUARDIAN</div>
-                  <div className="hint" style={{ marginBottom: 14 }}>Only required if a nominee above is under 18.</div>
+                  <div className="sechead">{t("GUARDIAN")}</div>
+                  <div className="hint" style={{ marginBottom: 14 }}>{t("Only required if a nominee above is under 18.")}</div>
                   <div className="g3">
                     <div className="f">
-                      <label>Guardian name <span className="tag">OPTIONAL</span></label>
+                      <label>{t("Guardian name")} <span className="tag">{t("OPTIONAL")}</span></label>
                       <div style={{ display: "flex", gap: 8 }}>
                         <input className="finput" value={guardian.name} onChange={e => setGuardian(g => ({ ...g, name: e.target.value }))} />
                         <button type="button" className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
                           onClick={() => { const primary = emergencyContacts.find(c => c.is_primary) ?? emergencyContacts[0]; if (primary) setGuardian(g => ({ ...g, name: primary.name, relationship: primary.relationship })); }}>
-                          + Suggest
+                          {t("+ Suggest")}
                         </button>
                       </div>
                     </div>
                     <div className="f">
-                      <label>Relationship <span className="tag">OPTIONAL</span></label>
+                      <label>{t("Relationship")} <span className="tag">{t("OPTIONAL")}</span></label>
                       <input className="finput" value={guardian.relationship} onChange={e => setGuardian(g => ({ ...g, relationship: e.target.value }))} />
                     </div>
                     <div className="f">
-                      <label>Guardian address <span className="tag">OPTIONAL</span></label>
-                      <input className="finput" placeholder="Optional" value={guardian.address} onChange={e => setGuardian(g => ({ ...g, address: e.target.value }))} />
+                      <label>{t("Guardian address")} <span className="tag">{t("OPTIONAL")}</span></label>
+                      <input className="finput" placeholder={t("Optional")} value={guardian.address} onChange={e => setGuardian(g => ({ ...g, address: e.target.value }))} />
                     </div>
                   </div>
                 </div>
@@ -1397,7 +1400,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       ["Completed", educationEntries.find(e => e.is_highest)?.end_date || "—"],
                     ].map(([label, value]) => (
                       <div key={label}>
-                        <div className="text-[9px] font-bold tracking-wider uppercase" style={{ color: "var(--primary)" }}>{label}</div>
+                        <div className="text-[9px] font-bold tracking-wider uppercase" style={{ color: "var(--primary)" }}>{t(label)}</div>
                         <div className="text-[12.5px] font-semibold" style={{ color: "var(--on-bg)" }}>{value}</div>
                       </div>
                     ))}
@@ -1418,7 +1421,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                       ["Last working day", experienceEntries[0]?.end_date || "—"],
                     ].map(([label, value]) => (
                       <div key={label}>
-                        <div className="text-[9px] font-bold tracking-wider uppercase" style={{ color: "var(--primary)" }}>{label}</div>
+                        <div className="text-[9px] font-bold tracking-wider uppercase" style={{ color: "var(--primary)" }}>{t(label)}</div>
                         <div className="text-[12.5px] font-semibold" style={{ color: "var(--on-bg)" }}>{value}</div>
                       </div>
                     ))}
@@ -1432,16 +1435,16 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     error={null}
                   />
                   <div className="divider" />
-                  <div className="sechead">SKILLS &amp; CERTIFICATIONS</div>
+                  <div className="sechead">{t("SKILLS & CERTIFICATIONS")}</div>
                   <div className="g3">
                     <div className="f">
-                      <label>Core skills <span className="tag">OPTIONAL</span></label>
-                      <input value={coreSkills} onChange={e => setCoreSkills(e.target.value)} placeholder="e.g. React, payroll operations, team leadership" className="finput" />
-                      <div className="hint">Use comma-separated skills; keep this relevant to the role.</div>
+                      <label>{t("Core skills")} <span className="tag">{t("OPTIONAL")}</span></label>
+                      <input value={coreSkills} onChange={e => setCoreSkills(e.target.value)} placeholder={t("e.g. React, payroll operations, team leadership")} className="finput" />
+                      <div className="hint">{t("Use comma-separated skills; keep this relevant to the role.")}</div>
                     </div>
                     <div className="f">
-                      <label>Certifications <span className="tag">OPTIONAL</span></label>
-                      <input value={certifications} onChange={e => setCertifications(e.target.value)} placeholder="Certification and year" className="finput" />
+                      <label>{t("Certifications")} <span className="tag">{t("OPTIONAL")}</span></label>
+                      <input value={certifications} onChange={e => setCertifications(e.target.value)} placeholder={t("Certification and year")} className="finput" />
                     </div>
                   </div>
                 </div>
@@ -1453,7 +1456,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                   uploading={uploadingDocType}
                   error={docUploadError}
                   onUpload={onUploadDocument}
-                  onDelete={() => setDocUploadError("To replace a document, upload a new file of the same type.")}
+                  onDelete={() => setDocUploadError(t("To replace a document, upload a new file of the same type."))}
                   verification={verification} onVerificationChange={setVerification}
                   hasExperienceEntries={experienceEntries.length > 0}
                 />
@@ -1487,20 +1490,20 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
                     error={assetErr}
                   />
                   <div className="divider" />
-                  <div className="sechead">ACCESS CARD</div>
+                  <div className="sechead">{t("ACCESS CARD")}</div>
                   <div className="g3">
                     <div className="f">
-                      <label>Card number <span className="tag">OPTIONAL</span></label>
+                      <label>{t("Card number")} <span className="tag">{t("OPTIONAL")}</span></label>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <input className="finput" placeholder="Auto-generated if left blank" value={accessCard.cardNumber} onChange={e => setAccessCard(c => ({ ...c, cardNumber: e.target.value }))} />
+                        <input className="finput" placeholder={t("Auto-generated if left blank")} value={accessCard.cardNumber} onChange={e => setAccessCard(c => ({ ...c, cardNumber: e.target.value }))} />
                         <button type="button" className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
                           onClick={() => setAccessCard(c => ({ ...c, cardNumber: `AC-${Math.floor(Math.random() * 90000 + 10000)}` }))}>
-                          + Suggest
+                          {t("+ Suggest")}
                         </button>
                       </div>
                     </div>
-                    <div className="f"><label>Valid from</label><input className="finput" type="date" value={accessCard.validFrom} onChange={e => setAccessCard(c => ({ ...c, validFrom: e.target.value }))} /></div>
-                    <div className="f"><label>Valid till</label><input className="finput" type="date" value={accessCard.validTill} onChange={e => setAccessCard(c => ({ ...c, validTill: e.target.value }))} /></div>
+                    <div className="f"><label>{t("Valid from")}</label><input className="finput" type="date" value={accessCard.validFrom} onChange={e => setAccessCard(c => ({ ...c, validFrom: e.target.value }))} /></div>
+                    <div className="f"><label>{t("Valid till")}</label><input className="finput" type="date" value={accessCard.validTill} onChange={e => setAccessCard(c => ({ ...c, validTill: e.target.value }))} /></div>
                   </div>
                 </div>
               )}

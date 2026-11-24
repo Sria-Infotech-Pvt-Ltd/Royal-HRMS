@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
@@ -24,6 +25,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }: Props) {
+  const t = useT();
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
@@ -34,7 +36,7 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
       await clientApi.patch(API.settings.onboardingFields.detail(fieldKey), body);
       onChanged();
     } catch (err: unknown) {
-      setRowError((err as { message?: string })?.message ?? "Failed to update field.");
+      setRowError((err as { message?: string })?.message ?? t("Failed to update field."));
     } finally {
       setBusyKey(null);
     }
@@ -54,21 +56,21 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
       ]);
       onChanged();
     } catch (err: unknown) {
-      setRowError((err as { message?: string })?.message ?? "Failed to reorder fields.");
+      setRowError((err as { message?: string })?.message ?? t("Failed to reorder fields."));
     } finally {
       setBusyKey(null);
     }
   }
 
   async function remove(field: OnboardingFieldConfig) {
-    if (!(await confirmDialog(`Delete the custom field "${field.label}"? Any values employees already entered will be lost.`))) return;
+    if (!(await confirmDialog(t("Delete the custom field \"{label}\"? Any values employees already entered will be lost.", { label: field.label })))) return;
     setBusyKey(field.field_key);
     setRowError(null);
     try {
       await clientApi.delete(API.settings.onboardingFields.detail(field.field_key));
       onChanged();
     } catch (err: unknown) {
-      setRowError((err as { message?: string })?.message ?? "Failed to delete field.");
+      setRowError((err as { message?: string })?.message ?? t("Failed to delete field."));
     } finally {
       setBusyKey(null);
     }
@@ -85,12 +87,12 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
         <table>
           <thead>
             <tr>
-              <th style={{ width: 60 }}>Order</th>
-              <th>Field</th>
-              <th style={{ textAlign: "center" }}>Type</th>
-              <th style={{ textAlign: "center" }}>Visible</th>
-              <th style={{ textAlign: "center" }}>Required</th>
-              <th style={{ textAlign: "center" }}>Actions</th>
+              <th style={{ width: 60 }}>{t("Order")}</th>
+              <th>{t("Field")}</th>
+              <th style={{ textAlign: "center" }}>{t("Type")}</th>
+              <th style={{ textAlign: "center" }}>{t("Visible")}</th>
+              <th style={{ textAlign: "center" }}>{t("Required")}</th>
+              <th style={{ textAlign: "center" }}>{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -103,8 +105,8 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                       style={{ width: 22, height: 18, padding: 0, justifyContent: "center" }}
                       onClick={() => move(f, "up")}
                       disabled={!canEdit || idx === 0 || busyKey === f.field_key}
-                      title="Move up"
-                     aria-label="Move up">
+                      title={t("Move up")}
+                     aria-label={t("Move up")}>
                       <i className="ti ti-chevron-up" style={{ fontSize: 12 }} />
                     </button>
                     <button
@@ -112,8 +114,8 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                       style={{ width: 22, height: 18, padding: 0, justifyContent: "center" }}
                       onClick={() => move(f, "down")}
                       disabled={!canEdit || idx === fields.length - 1 || busyKey === f.field_key}
-                      title="Move down"
-                     aria-label="Move down">
+                      title={t("Move down")}
+                     aria-label={t("Move down")}>
                       <i className="ti ti-chevron-down" style={{ fontSize: 12 }} />
                     </button>
                   </div>
@@ -121,16 +123,16 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                 <td>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{f.label}</span>
-                    {f.is_custom && <span className="badge badge-info">Custom</span>}
+                    {f.is_custom && <span className="badge badge-info">{t("Custom")}</span>}
                     {f.is_locked && (
-                      <span title="Always required — can't be hidden or made optional">
+                      <span title={t("Always required — can't be hidden or made optional")}>
                         <i className="ti ti-lock" style={{ fontSize: 13, color: "var(--on-variant)" }} />
                       </span>
                     )}
                   </div>
                 </td>
                 <td style={{ textAlign: "center", fontSize: 12, color: "var(--on-variant)" }}>
-                  {TYPE_LABELS[f.field_type] ?? f.field_type}
+                  {t(TYPE_LABELS[f.field_type] ?? f.field_type)}
                 </td>
                 <td style={{ textAlign: "center" }}>
                   <input
@@ -158,8 +160,8 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                       }}
                       onClick={() => onEdit(f)}
                       disabled={!canEdit || busyKey === f.field_key}
-                      title="Edit label / options"
-                     aria-label="Edit label / options">
+                      title={t("Edit label / options")}
+                     aria-label={t("Edit label / options")}>
                       <i className="ti ti-pencil" style={{ fontSize: 13 }} />
                     </button>
                     <button
@@ -172,8 +174,8 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
                       }}
                       onClick={() => remove(f)}
                       disabled={!canEdit || !f.is_custom || busyKey === f.field_key}
-                      title={f.is_custom ? "Delete custom field" : "Built-in fields can't be deleted — hide them instead"}
-                     aria-label="Delete">
+                      title={f.is_custom ? t("Delete custom field") : t("Built-in fields can't be deleted — hide them instead")}
+                     aria-label={t("Delete")}>
                       <i className="ti ti-trash" style={{ fontSize: 13 }} />
                     </button>
                   </div>
@@ -183,7 +185,7 @@ export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }:
             {fields.length === 0 && (
               <tr>
                 <td colSpan={6} style={{ textAlign: "center", padding: "32px 0", color: "var(--on-variant)" }}>
-                  No fields configured for this step.
+                  {t("No fields configured for this step.")}
                 </td>
               </tr>
             )}

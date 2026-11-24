@@ -1,8 +1,10 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useEffect, useRef, useState } from "react";
 import type { ApiDocument } from "../_data";
 import { getFileTypeMeta } from "../_data";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   doc:        ApiDocument;
@@ -15,6 +17,7 @@ interface Props {
 // ─── DOCX renderer ────────────────────────────────────────────────────────────
 
 function DocxPreview({ fileUrl }: { fileUrl: string }) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -45,7 +48,7 @@ function DocxPreview({ fileUrl }: { fileUrl: string }) {
           renderEndnotes:              true,
         });
       } catch (e: unknown) {
-        if (!cancelled) setErr((e as { message?: string }).message ?? "Render failed");
+        if (!cancelled) setErr((e as { message?: string }).message ?? tr("Render failed"));
       }
     }
     render();
@@ -55,7 +58,7 @@ function DocxPreview({ fileUrl }: { fileUrl: string }) {
   if (err) return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32, color: "var(--on-variant)", flexDirection: "column", gap: 8 }}>
       <i className="ti ti-file-off" style={{ fontSize: 32, opacity: 0.3 }} />
-      <span style={{ fontSize: 13 }}>Could not render document — {err}</span>
+      <span style={{ fontSize: 13 }}>{t("Could not render document — {error}", { error: err })}</span>
     </div>
   );
 
@@ -74,6 +77,7 @@ function DocxPreview({ fileUrl }: { fileUrl: string }) {
 // ─── XLSX / XLS renderer ──────────────────────────────────────────────────────
 
 function XlsxPreview({ fileUrl }: { fileUrl: string }) {
+  const t = useT();
   const [html,    setHtml]    = useState<string | null>(null);
   const [sheets,  setSheets]  = useState<string[]>([]);
   const [active,  setActive]  = useState(0);
@@ -95,7 +99,7 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
           // sheet_to_html() throws internally when a sheet has no data (no "!ref" range) —
           // render an empty-sheet placeholder instead of failing the whole preview.
           if (!ws || !ws["!ref"]) {
-            return '<div style="padding:16px;color:#9aa0a6;font-size:12px;">This sheet is empty.</div>';
+            return '<div style="padding:16px;color:#9aa0a6;font-size:12px;">' + tr("This sheet is empty.") + '</div>';
           }
           // sheet_to_html() escapes cell text but NOT a cell's hyperlink
           // target (xlsx.js interpolates cell.l.Target verbatim into the
@@ -109,7 +113,7 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
         setAllHtml(htmlArr);
         setHtml(htmlArr[0] ?? "");
       } catch (e: unknown) {
-        if (!cancelled) setErr((e as { message?: string }).message ?? "Render failed");
+        if (!cancelled) setErr((e as { message?: string }).message ?? tr("Render failed"));
       }
     }
     render();
@@ -119,14 +123,14 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
   if (err) return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32, color: "var(--on-variant)", flexDirection: "column", gap: 8 }}>
       <i className="ti ti-file-off" style={{ fontSize: 32, opacity: 0.3 }} />
-      <span style={{ fontSize: 13 }}>Could not render spreadsheet — {err}</span>
+      <span style={{ fontSize: 13 }}>{t("Could not render spreadsheet — {error}", { error: err })}</span>
     </div>
   );
 
   if (!html) return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "var(--on-variant)" }}>
       <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "dcSpin 1s linear infinite" }} />
-      <span style={{ fontSize: 13 }}>Parsing spreadsheet…</span>
+      <span style={{ fontSize: 13 }}>{t("Parsing spreadsheet…")}</span>
     </div>
   );
 
@@ -161,6 +165,7 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export default function DocPreviewBody({ doc, blobUrl, textContent, loading, error }: Props) {
+  const t = useT();
   const ft = doc.file_type.toUpperCase();
   const fm = getFileTypeMeta(doc.file_type);
 
@@ -168,7 +173,7 @@ export default function DocPreviewBody({ doc, blobUrl, textContent, loading, err
   if (loading) return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: "var(--on-variant)" }}>
       <i className="ti ti-loader-2" style={{ fontSize: 32, animation: "dcSpin 1s linear infinite" }} />
-      <span style={{ fontSize: 13 }}>Loading preview…</span>
+      <span style={{ fontSize: 13 }}>{t("Loading preview…")}</span>
     </div>
   );
 
@@ -176,7 +181,7 @@ export default function DocPreviewBody({ doc, blobUrl, textContent, loading, err
   if (error) return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 32 }}>
       <i className="ti ti-file-off" style={{ fontSize: 40, opacity: 0.25, color: "var(--on-variant)" }} />
-      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)" }}>Preview unavailable</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)" }}>{t("Preview unavailable")}</div>
       <div style={{ fontSize: 12, color: "var(--outline)" }}>{error}</div>
     </div>
   );
@@ -227,11 +232,11 @@ export default function DocPreviewBody({ doc, blobUrl, textContent, loading, err
         <div style={{ fontSize: 15, fontWeight: 600, color: "var(--on-bg)", marginBottom: 6 }}>{doc.title}</div>
         <div style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 4 }}>{doc.file_type} · {doc.file_size_display}</div>
         <div style={{ fontSize: 12, color: "var(--outline)" }}>
-          In-browser preview is not available for {doc.file_type} files.
+          {t("In-browser preview is not available for {type} files.", { type: doc.file_type })}
         </div>
       </div>
       <a href={doc.file_url} download={doc.file_name} className="btn btn-filled" suppressHydrationWarning>
-        <i className="ti ti-download" /> Download to view
+        <i className="ti ti-download" /> {t("Download to view")}
       </a>
     </div>
   );

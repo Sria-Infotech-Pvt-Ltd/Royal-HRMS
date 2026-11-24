@@ -6,21 +6,24 @@ import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
 import { notificationRoute } from "@/lib/notificationRoutes";
 import type { Notification } from "@/types/notifications";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 function relativeTime(iso: string): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  if (diffSec < 60) return "Just now";
+  if (diffSec < 60) return tr("Just now");
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffMin < 60) return tr("{count} min ago", { count: diffMin });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hr ago`;
+  if (diffHr < 24) return tr("{count} hr ago", { count: diffHr });
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay === 1) return "Yesterday";
-  if (diffDay < 7) return `${diffDay} days ago`;
+  if (diffDay === 1) return tr("Yesterday");
+  if (diffDay < 7) return tr("{count} days ago", { count: diffDay });
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
 export function NotificationBell() {
+  const t = useT();
   const router = useRouter();
   const {
     notifications, unreadCount, isLoading, fetchNotifications, markRead, markAllRead,
@@ -69,7 +72,7 @@ export function NotificationBell() {
       <button
         ref={buttonRef}
         className="iconbtn relative"
-        title="Notifications"
+        title={t("Notifications")}
         onClick={() => setOpen(v => !v)}
         suppressHydrationWarning
       >
@@ -97,13 +100,13 @@ export function NotificationBell() {
           style={{ top: coords.top, right: coords.right, maxWidth: "calc(100vw - 16px)", background: "var(--surface)" }}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--outline-v)]">
-            <span className="text-sm font-semibold text-[var(--on-bg)]">Notifications</span>
+            <span className="text-sm font-semibold text-[var(--on-bg)]">{t("Notifications")}</span>
             {unreadCount > 0 && (
               <button
                 className="text-xs font-medium text-[var(--primary)] bg-transparent border-none cursor-pointer hover:underline"
                 onClick={markAllRead}
               >
-                Mark all as read
+                {t("Mark all as read")}
               </button>
             )}
           </div>
@@ -115,7 +118,7 @@ export function NotificationBell() {
               </div>
             ) : notifications.length === 0 ? (
               <div className="py-10 text-center text-sm text-[var(--on-variant)]">
-                No notifications yet
+                {t("No notifications yet")}
               </div>
             ) : (
               notifications.map(n => (

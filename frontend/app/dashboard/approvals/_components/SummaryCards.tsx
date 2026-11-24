@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useT } from "@/hooks/useI18n";
 import { TeamApprovalStyles } from "./teamApprovalStyles";
 
 interface Props {
@@ -17,6 +18,7 @@ const CARDS = [
 ] as const;
 
 export default function SummaryCards({ pending, leave, expense, correction, loading }: Props) {
+  const t = useT();
   const values: Record<string, number> = { pending, leave, expense, correction };
 
   return (
@@ -33,11 +35,11 @@ export default function SummaryCards({ pending, leave, expense, correction, load
             ) : (
               <div className="ta-summary-value tv-value">{values[c.key]}</div>
             )}
-            <div className="ta-summary-label">{c.label}</div>
+            <div className="ta-summary-label">{t(c.label)}</div>
             {!loading && (
               values[c.key] > 0
-                ? <span className="tv-hint">{c.hint}</span>
-                : <span className="tv-hint is-clear"><i className="ti ti-check" /> All clear</span>
+                ? <span className="tv-hint">{t(c.hint)}</span>
+                : <span className="tv-hint is-clear"><i className="ti ti-check" /> {t("All clear")}</span>
             )}
           </div>
         </div>

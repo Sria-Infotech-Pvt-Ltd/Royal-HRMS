@@ -2,6 +2,7 @@ import {
   announcementDownloadHref, formatFileSize, isSafeHttpUrl,
   type AnnouncementAttachment, type AnnouncementLink,
 } from "@/lib/announcementAttachments";
+import { useT } from "@/hooks/useI18n";
 
 interface MediaProps {
   attachments?: AnnouncementAttachment[];
@@ -12,6 +13,7 @@ const SECTION_LABEL = { fontSize: 11, fontWeight: 700, color: "var(--on-variant)
 
 /** Everything attached to an announcement, for its detail view: pictures, PDFs (with a download button) and links. */
 export default function AnnouncementMedia({ attachments = [], links = [] }: MediaProps) {
+  const t = useT();
   const images = attachments.filter(item => item.attachment_type === "image");
   const documents = attachments.filter(item => item.attachment_type === "document");
   const shownLinks = links.filter(link => link.title.trim() !== "");
@@ -37,7 +39,7 @@ export default function AnnouncementMedia({ attachments = [], links = [] }: Medi
 
       {documents.length > 0 && (
         <>
-          <div style={SECTION_LABEL}>Attachments</div>
+          <div style={SECTION_LABEL}>{t("Attachments")}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {documents.map(document => (
               <div key={document.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px solid var(--outline-v)", borderRadius: 8 }}>
@@ -51,9 +53,9 @@ export default function AnnouncementMedia({ attachments = [], links = [] }: Medi
                   href={announcementDownloadHref(document.download_path)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={`Download ${document.original_filename}`}
+                  aria-label={t("Download {name}", { name: document.original_filename })}
                 >
-                  <i className="ti ti-download" /> Download
+                  <i className="ti ti-download" /> {t("Download")}
                 </a>
               </div>
             ))}
@@ -63,7 +65,7 @@ export default function AnnouncementMedia({ attachments = [], links = [] }: Medi
 
       {shownLinks.length > 0 && (
         <>
-          <div style={SECTION_LABEL}>Links</div>
+          <div style={SECTION_LABEL}>{t("Links")}</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {shownLinks.map((link, index) => (
               isSafeHttpUrl(link.url) ? (
@@ -83,13 +85,14 @@ export default function AnnouncementMedia({ attachments = [], links = [] }: Medi
 
 /** The small version for a list card: the first picture and a count of what else is attached. */
 export function AnnouncementMediaPreview({ attachments = [], links = [] }: MediaProps) {
+  const t = useT();
   const images = attachments.filter(item => item.attachment_type === "image");
   const documents = attachments.filter(item => item.attachment_type === "document");
   if (!images.length && !documents.length && !links.length) return null;
   const chips = [
-    images.length > 1 ? `${images.length} images` : "",
-    documents.length ? `${documents.length} PDF${documents.length > 1 ? "s" : ""}` : "",
-    links.length ? `${links.length} link${links.length > 1 ? "s" : ""}` : "",
+    images.length > 1 ? t("{count} images", { count: images.length }) : "",
+    documents.length ? (documents.length > 1 ? t("{count} PDFs", { count: documents.length }) : t("{count} PDF", { count: documents.length })) : "",
+    links.length ? (links.length > 1 ? t("{count} links", { count: links.length }) : t("{count} link", { count: links.length })) : "",
   ].filter(Boolean);
 
   return (

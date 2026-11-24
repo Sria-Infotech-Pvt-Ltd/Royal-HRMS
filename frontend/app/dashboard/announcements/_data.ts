@@ -2,6 +2,7 @@
 // state, safe to import from anywhere.
 
 import { formatDate, formatDateTime } from "@/lib/formatDate";
+import { tr } from "@/lib/i18n/tr";
 import type { AnnouncementAttachment, AnnouncementLink } from "@/lib/announcementAttachments";
 import type { Category } from "@/lib/announcementCategories";
 
@@ -89,12 +90,12 @@ export function initials(name: string): string {
 export function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1)  return "Just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1)  return tr("Just now");
+  if (mins < 60) return tr("{count}m ago", { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24)  return `${hrs}h ago`;
+  if (hrs < 24)  return tr("{count}h ago", { count: hrs });
   const days = Math.floor(hrs / 24);
-  if (days < 7)  return `${days}d ago`;
+  if (days < 7)  return tr("{count}d ago", { count: days });
   return formatDate(iso);
 }
 

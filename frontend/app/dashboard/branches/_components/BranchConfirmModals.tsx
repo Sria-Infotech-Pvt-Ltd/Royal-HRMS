@@ -1,6 +1,7 @@
 "use client";
 
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import type { ApiEmployeeOption } from "./_data";
 
 export interface TransferConfirmState {
@@ -16,12 +17,13 @@ export function TransferConfirmModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const t = useT();
   return (
     <Modal
       title={
         <>
           <i className="ti ti-arrows-right-left" style={{ marginRight: "8px", color: "var(--primary)" }} />
-          Move {state.employee.full_name}?
+          {t("Move {name}?", { name: state.employee.full_name })}
         </>
       }
       onClose={onClose}
@@ -29,25 +31,28 @@ export function TransferConfirmModal({
       zIndex={1010}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-filled" onClick={onConfirm}>Yes, Move Them</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
+          <button className="btn btn-filled" onClick={onConfirm}>{t("Yes, Move Them")}</button>
         </>
       }
     >
       <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6, marginBottom: (state.reportsCount > 0 || state.hrForCount > 0) ? "14px" : 0 }}>
-        <strong>{state.employee.full_name}</strong> currently belongs to{" "}
-        <strong>{state.employee.branch || "no Company Code"}</strong>. This will move them to this Company Code
-        as its Company Code Admin.
+        <strong>{state.employee.full_name}</strong> {t("currently belongs to")}{" "}
+        <strong>{state.employee.branch || t("no Company Code")}</strong>{t(". This will move them to this Company Code as its Company Code Admin.")}
       </p>
       {(state.reportsCount > 0 || state.hrForCount > 0) && (
         <div className="alert alert-warn">
           <i className="ti ti-alert-triangle" />
           <div>
             {state.reportsCount > 0 && (
-              <div>They currently manage {state.reportsCount} {state.reportsCount === 1 ? "employee" : "employees"} — that reporting line won&apos;t be reassigned automatically.</div>
+              <div>{state.reportsCount === 1
+                ? t("They currently manage {count} employee — that reporting line won't be reassigned automatically.", { count: state.reportsCount })
+                : t("They currently manage {count} employees — that reporting line won't be reassigned automatically.", { count: state.reportsCount })}</div>
             )}
             {state.hrForCount > 0 && (
-              <div>They&apos;re the assigned HR for {state.hrForCount} {state.hrForCount === 1 ? "employee" : "employees"} — that assignment won&apos;t be reassigned automatically.</div>
+              <div>{state.hrForCount === 1
+                ? t("They're the assigned HR for {count} employee — that assignment won't be reassigned automatically.", { count: state.hrForCount })
+                : t("They're the assigned HR for {count} employees — that assignment won't be reassigned automatically.", { count: state.hrForCount })}</div>
             )}
           </div>
         </div>
@@ -57,12 +62,13 @@ export function TransferConfirmModal({
 }
 
 export function HqConfirmModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
+  const t = useT();
   return (
     <Modal
       title={
         <>
           <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--warn)" }} />
-          Change Headquarter?
+          {t("Change Headquarter?")}
         </>
       }
       onClose={onClose}
@@ -70,13 +76,13 @@ export function HqConfirmModal({ onClose, onConfirm }: { onClose: () => void; on
       zIndex={1010}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-filled" onClick={onConfirm}>Yes, Change HQ</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
+          <button className="btn btn-filled" onClick={onConfirm}>{t("Yes, Change HQ")}</button>
         </>
       }
     >
       <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
-        Another branch is already marked as the headquarter. Setting this branch as HQ will remove the HQ status from the existing one. Do you want to continue?
+        {t("Another branch is already marked as the headquarter. Setting this branch as HQ will remove the HQ status from the existing one. Do you want to continue?")}
       </p>
     </Modal>
   );
@@ -91,12 +97,13 @@ export function DeleteConfirmModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const t = useT();
   return (
     <Modal
       title={
         <>
           <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
-          Delete Company Code?
+          {t("Delete Company Code?")}
         </>
       }
       onClose={onClose}
@@ -105,7 +112,7 @@ export function DeleteConfirmModal({
       zIndex={1010}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={deleting}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={deleting}>{t("Cancel")}</button>
           <button
             className="btn btn-filled"
             style={{ background: "var(--error-solid)" }}
@@ -113,8 +120,8 @@ export function DeleteConfirmModal({
             disabled={deleting}
           >
             {deleting
-              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Deleting…</>
-              : "Yes, Delete"}
+              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{t("Deleting…")}</>
+              : t("Yes, Delete")}
           </button>
         </>
       }
@@ -125,7 +132,7 @@ export function DeleteConfirmModal({
         </div>
       )}
       <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
-        Are you sure you want to delete <strong>{branchName}</strong>? This action cannot be undone.
+        {t("Are you sure you want to delete")} <strong>{branchName}</strong>{t("? This action cannot be undone.")}
       </p>
     </Modal>
   );

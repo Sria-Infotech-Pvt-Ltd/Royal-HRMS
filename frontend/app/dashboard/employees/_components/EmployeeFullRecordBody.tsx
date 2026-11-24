@@ -6,6 +6,7 @@
 // fields, just without the drawer's own overlay/header/footer chrome.
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -29,6 +30,7 @@ import WorkStatusPanel from "@/components/work-status/WorkStatusPanel";
  * employee.id, so a soft refetch would leave half the page still querying
  * the now-stale old ID. */
 function EditEmployeeIdControl({ employeeId }: { employeeId: string }) {
+  const t = useT();
   const canEditId = usePermission("settings.edit");
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(employeeId);
@@ -45,7 +47,7 @@ function EditEmployeeIdControl({ employeeId }: { employeeId: string }) {
           type="button"
           className="btn btn-ghost btn-sm"
           style={{ padding: "2px 6px" }}
-          title="Correct this employee's ID"
+          title={t("Correct this employee's ID")}
           onClick={() => { setValue(employeeId); setFieldError(null); setEditing(true); }}
         >
           <i className="ti ti-edit" />
@@ -65,7 +67,7 @@ function EditEmployeeIdControl({ employeeId }: { employeeId: string }) {
       window.location.href = `/dashboard/employees/${value.trim()}`;
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { data?: { employee_id?: string }; message?: string } } };
-      setFieldError(apiErr?.response?.data?.data?.employee_id ?? apiErr?.response?.data?.message ?? "Could not save this ID.");
+      setFieldError(apiErr?.response?.data?.data?.employee_id ?? apiErr?.response?.data?.message ?? t("Could not save this ID."));
       setSaving(false);
     }
   }
@@ -81,10 +83,10 @@ function EditEmployeeIdControl({ employeeId }: { employeeId: string }) {
         autoFocus
       />
       <button className="btn btn-filled btn-sm" type="button" onClick={onSave} disabled={saving}>
-        {saving ? "Saving…" : "Save"}
+        {saving ? t("Saving…") : t("Save")}
       </button>
       <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing(false)} disabled={saving}>
-        Cancel
+        {t("Cancel")}
       </button>
       {fieldError && <span className="field-error-msg">{fieldError}</span>}
     </span>
@@ -152,6 +154,7 @@ interface Props {
 }
 
 export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Props) {
+  const t = useT();
   const isAdmin = mode === "admin";
   const isSelf  = mode === "self";
   const canViewPayrollPerm = usePermission("payroll.view");
@@ -192,7 +195,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
       await clientApi.post(API.employees.bankChangeReview(employee.id, decision));
       await refetchDetail();
     } catch (err: unknown) {
-      setBankDecideErr((err as { message?: string })?.message ?? "Failed to record decision.");
+      setBankDecideErr((err as { message?: string })?.message ?? t("Failed to record decision."));
     } finally {
       setBankDeciding(false);
     }
@@ -212,7 +215,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
       // Audit Trail until the whole page/drawer is reloaded.
       refetchAuditTrail();
     } catch (err: unknown) {
-      setRevealErr((err as { message?: string })?.message ?? "Could not reveal these fields.");
+      setRevealErr((err as { message?: string })?.message ?? t("Could not reveal these fields."));
     } finally {
       setRevealing(false);
     }
@@ -225,7 +228,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
   const departmentValue = orgUnitParent ? `${orgUnitName} › ${orgUnitParent}` : orgUnitName;
 
   const dobValue = p?.date_of_birth
-    ? `${formatDate(p.date_of_birth)}${ageYears(p.date_of_birth) !== null ? ` · ${ageYears(p.date_of_birth)} yrs` : ""}`
+    ? `${formatDate(p.date_of_birth)}${ageYears(p.date_of_birth) !== null ? ` · ${t("{count} yrs", { count: ageYears(p.date_of_birth) ?? 0 })}` : ""}`
     : undefined;
   // Show the account number masked until it is explicitly revealed (the card is titled "Masked").
   const accountValue = revealed?.account_number || p?.account_number_masked;
@@ -238,88 +241,85 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
     <div className="emp-record">
       {!hasEmployeeId && (
         <div className="alert alert-info mb-16">
-          <i className="ti ti-info-circle" /> This account has no employee record on file (no
-          employee number assigned), so employment, pay, statutory, and history details below
-          are unavailable. This is expected for an admin/system login that was never onboarded
-          as an employee — sign in as an onboarded employee to see a full record.
+          <i className="ti ti-info-circle" /> {t("This account has no employee record on file (no employee number assigned), so employment, pay, statutory, and history details below are unavailable. This is expected for an admin/system login that was never onboarded as an employee — sign in as an onboarded employee to see a full record.")}
         </div>
       )}
 
       <div className="emp-record-grid">
-        <SectionCard title="Personal Details">
-          <Row label="Full legal name" value={fullName(employee)} />
-          <Row label="Date of birth" value={dobValue} />
-          <Row label="Gender" value={titleCase(p?.gender)} />
-          <Row label="Blood group" value={p?.blood_group} />
-          <Row label="Nationality" value={p?.nationality} />
-          <Row label="Marital status" value={titleCase(p?.marital_status)} />
+        <SectionCard title={t("Personal Details")}>
+          <Row label={t("Full legal name")} value={fullName(employee)} />
+          <Row label={t("Date of birth")} value={dobValue} />
+          <Row label={t("Gender")} value={titleCase(p?.gender)} />
+          <Row label={t("Blood group")} value={p?.blood_group} />
+          <Row label={t("Nationality")} value={p?.nationality} />
+          <Row label={t("Marital status")} value={titleCase(p?.marital_status)} />
         </SectionCard>
 
-        <SectionCard title="Employment & Assignment">
+        <SectionCard title={t("Employment & Assignment")}>
           <Row
-            label="Employee number"
+            label={t("Employee number")}
             valueNode={isAdmin ? <EditEmployeeIdControl employeeId={employee.code} /> : (employee.code || "—")}
           />
-          <Row label="Position" value={employee.designation} />
-          <Row label="Department" value={departmentValue} />
-          <Row label="Work location" value={detail?.work_location || employee.location} />
-          <Row label="Date of joining" value={formatDateSlash(employee.dateOfJoining)} />
-          <Row label="Reporting manager" value={reportingManagerDisplay(employee.reportingManagerName || detail?.reporting_manager?.name, employee.noManagerByDesign)} />
+          <Row label={t("Position")} value={employee.designation} />
+          <Row label={t("Department")} value={departmentValue} />
+          <Row label={t("Work location")} value={detail?.work_location || employee.location} />
+          <Row label={t("Date of joining")} value={formatDateSlash(employee.dateOfJoining)} />
+          <Row label={t("Reporting manager")} value={reportingManagerDisplay(employee.reportingManagerName || detail?.reporting_manager?.name, employee.noManagerByDesign)} />
           <Row
-            label="Status"
-            valueNode={<><span className={`chip ${STATUS_CHIP[directoryStatus] ?? ""}`}>{directoryStatus}</span>{directoryStatus === "Active" && employee.employmentStatus === "probation" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>On probation</span>}</>}
+            label={t("Status")}
+            valueNode={<><span className={`chip ${STATUS_CHIP[directoryStatus] ?? ""}`}>{t(directoryStatus)}</span>{directoryStatus === "Active" && employee.employmentStatus === "probation" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>{t("On probation")}</span>}</>}
           />
         </SectionCard>
 
         {canViewApprovers && employee.code && <ApprovalAssignmentsSection employeeCode={employee.code} />}
 
-        <SectionCard title="Contact & Address">
-          <Row label="Work email" value={employee.email} />
-          <Row label="Personal email" value={p?.personal_email} />
-          <Row label="Mobile number" value={employee.phone} />
-          <Row label="Current address" value={currentAddress} />
+        <SectionCard title={t("Contact & Address")}>
+          <Row label={t("Work email")} value={employee.email} />
+          <Row label={t("Personal email")} value={p?.personal_email} />
+          <Row label={t("Mobile number")} value={employee.phone} />
+          <Row label={t("Current address")} value={currentAddress} />
         </SectionCard>
 
-        <SectionCard title="Emergency Contact">
-          <Row label="Name" value={p?.emergency_name} />
-          <Row label="Relationship" value={p?.emergency_relationship} />
-          <Row label="Phone" value={p?.emergency_phone} />
-          <Row label="Email" value={p?.emergency_email} />
+        <SectionCard title={t("Emergency Contact")}>
+          <Row label={t("Name")} value={p?.emergency_name} />
+          <Row label={t("Relationship")} value={p?.emergency_relationship} />
+          <Row label={t("Phone")} value={p?.emergency_phone} />
+          <Row label={t("Email")} value={p?.emergency_email} />
         </SectionCard>
 
-        <SectionCard title="Basic Pay">
+        <SectionCard title={t("Basic Pay")}>
           {!canViewPayroll || salaryStatus === 403 ? (
-            <Row label="Visibility" value="Permission required" />
+            <Row label={t("Visibility")} value={t("Permission required")} />
           ) : currentSalary ? (
             <>
-              <Row label="Annual fixed CTC" value={`₹${Number(currentSalary.annual_ctc).toLocaleString("en-IN")}`} />
-              <Row label="Pay scale" value={payScale} />
-              <Row label="Valid from" value={`${formatDateSlash(currentSalary.effective_from)} → 31/12/9999`} />
+              <Row label={t("Annual fixed CTC")} value={`₹${Number(currentSalary.annual_ctc).toLocaleString("en-IN")}`} />
+              <Row label={t("Pay scale")} value={payScale} />
+              <Row label={t("Valid from")} value={t("{date} → 31/12/9999", { date: formatDateSlash(currentSalary.effective_from) })} />
             </>
           ) : (
-            <Row label="Annual fixed CTC" value="No CTC on file yet." />
+            <Row label={t("Annual fixed CTC")} value={t("No CTC on file yet.")} />
           )}
         </SectionCard>
 
-        <SectionCard title="Government IDs & Bank · Masked">
+        <SectionCard title={t("Government IDs & Bank · Masked")}>
           {revealErr && <div className="alert alert-error mb-8" style={{ fontSize: 12 }}>{revealErr}</div>}
           {isAdmin && !canViewSensitive ? (
             <>
-              <Row label="PAN" value="Permission required" />
-              <Row label="Aadhaar" value="Permission required" />
-              <Row label="Bank account" value="Permission required" />
+              <Row label={t("PAN")} value={t("Permission required")} />
+              <Row label={t("Aadhaar")} value={t("Permission required")} />
+              <Row label={t("Bank account")} value={t("Permission required")} />
             </>
           ) : (
             <>
-              <Row mono label="PAN" value={revealed?.pan_number || p?.pan_masked} />
-              <Row mono label="Aadhaar" value={p?.aadhaar_masked} />
-              <Row label="Name as per Aadhaar" value={revealed?.name_as_per_aadhar || p?.name_as_per_aadhar} />
-              <Row mono label="Bank account" value={accountValue} />
-              <Row mono label="IFSC" value={ifscValue} />
-              <Row label="Account type" value={p?.account_type ? titleCase(p.account_type) : undefined} />
-              <Row label="Bank branch" value={p?.bank_branch_name} />
-              <Row mono label="UAN" value={revealed?.uan_number || p?.uan_masked} />
-              <Row mono label="ESI number" value={p?.esi_number} />
+              <Row mono label={t("PAN")} value={revealed?.pan_number || p?.pan_masked} />
+              <Row mono label={t("Aadhaar")} value={p?.aadhaar_masked} />
+              <Row label={t("Name as per Aadhaar")} value={revealed?.name_as_per_aadhar || p?.name_as_per_aadhar} />
+              <Row mono label={t("Bank account")} value={accountValue} />
+              <Row mono label={t("IFSC")} value={ifscValue} />
+              <Row label={t("Account type")} value={p?.account_type ? titleCase(p.account_type) : undefined} />
+              <Row label={t("Bank branch")} value={p?.bank_branch_name} />
+              <Row mono label={t("UAN")} value={revealed?.uan_number || p?.uan_masked} />
+              <Row mono label={t("ESI number")} value={p?.esi_number} />
             </>
           )}
           {isAdmin && p?.bank_change_status === "pending" && (
@@ -328,16 +328,15 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
               background: "var(--warn-bg)", color: "var(--warn)", fontSize: 12,
             }}>
               <div style={{ marginBottom: 8 }}>
-                This employee submitted a bank detail change awaiting your review — their
-                previous details remain active for payroll until you decide.
+                {t("This employee submitted a bank detail change awaiting your review — their previous details remain active for payroll until you decide.")}
               </div>
               {bankDecideErr && <div style={{ color: "var(--crit)", marginBottom: 8 }}>{bankDecideErr}</div>}
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="rvbtn pri" disabled={bankDeciding} onClick={() => decideBankChange("approve")}>
-                  {bankDeciding ? <i className="ti ti-loader-2 animate-spin" /> : <i className="ti ti-check" />} Approve
+                  {bankDeciding ? <i className="ti ti-loader-2 animate-spin" /> : <i className="ti ti-check" />} {t("Approve")}
                 </button>
                 <button className="rvbtn" disabled={bankDeciding} onClick={() => decideBankChange("reject")}>
-                  <i className="ti ti-x" /> Reject
+                  <i className="ti ti-x" /> {t("Reject")}
                 </button>
               </div>
             </div>
@@ -345,9 +344,9 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
         </SectionCard>
       </div>
 
-      <SectionCard title="Action History" list={false}>
+      <SectionCard title={t("Action History")} list={false}>
         {!actionHistory || actionHistory.length === 0 ? (
-          <p className="hint">No lifecycle events on record yet.</p>
+          <p className="hint">{t("No lifecycle events on record yet.")}</p>
         ) : (
           actionHistory.map((row, i) => (
             <div key={i} className={`actrow${row.is_current ? " live" : ""}`}>
@@ -355,7 +354,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
               <div className="meta">
                 <div className="t1">
                   {row.action_type}
-                  {row.is_current && <span className="chip ok">Current</span>}
+                  {row.is_current && <span className="chip ok">{t("Current")}</span>}
                 </div>
                 <div className="t2">
                   {[row.reason_display, row.position_title, row.org_unit_name, row.status_display].filter(Boolean).join(" · ")}
@@ -363,7 +362,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
               </div>
               <div className="dates" style={{ textAlign: "right" }}>
                 {formatDateSlash(row.effective_from)}
-                <div className="actdel">to {formatDateSlash(row.effective_to)}</div>
+                <div className="actdel">{t("to {date}", { date: formatDateSlash(row.effective_to) })}</div>
               </div>
             </div>
           ))
@@ -377,37 +376,37 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
                 <span className={`chip ${r.status === "pending" ? "warn" : "crit"}`}>{r.status_display}</span>
               </div>
               <div className="t2">
-                Raised by {r.raised_by_name} · Approver: {r.status === "pending" ? r.current_step_label : r.route}
+                {t("Raised by {name}", { name: r.raised_by_name })} · {t("Approver:")} {r.status === "pending" ? r.current_step_label : r.route}
                 {r.status === "rejected" && r.decision_note ? ` · ${r.decision_note}` : ""}
                 {r.status === "failed" && r.apply_error ? ` · ${r.apply_error}` : ""}
               </div>
             </div>
             <div className="dates" style={{ textAlign: "right" }}>
-              <div className="actdel">effective {formatDateSlash(r.effective_from)}</div>
+              <div className="actdel">{t("effective {date}", { date: formatDateSlash(r.effective_from) })}</div>
             </div>
           </div>
         ))}
       </SectionCard>
 
       {(isSelf || (isAdmin && canViewSensitive)) && (
-        <SectionCard title="Sensitive Data Control" list={false}>
+        <SectionCard title={t("Sensitive Data Control")} list={false}>
           {revealErr && <div className="alert alert-error mb-8" style={{ fontSize: 12 }}>{revealErr}</div>}
           {!revealed ? (
             <button className="rvbtn" disabled={revealing} onClick={handleReveal}>
-              {revealing && <i className="ti ti-loader-2 animate-spin" />} Reveal full values
+              {revealing && <i className="ti ti-loader-2 animate-spin" />} {t("Reveal full values")}
             </button>
           ) : (
-            <p className="hint">Full values are now shown in the Government IDs &amp; Bank card above.</p>
+            <p className="hint">{t("Full values are now shown in the Government IDs & Bank card above.")}</p>
           )}
-          <div className="hint" style={{ marginTop: 7 }}>Every reveal is written to the audit log under the DPDP Act 2023.</div>
+          <div className="hint" style={{ marginTop: 7 }}>{t("Every reveal is written to the audit log under the DPDP Act 2023.")}</div>
         </SectionCard>
       )}
 
-      <SectionCard title="Consent & Retention">
-        <Row label="Consent captured" value={`Captured digitally · ${formatDateSlash(employee.dateOfJoining)}`} />
-        <Row label="Purposes" value="Payroll, statutory filing, benefits, workplace administration" />
-        <Row label="Retention" value="8 years after exit — Income Tax and EPF record-keeping" />
-        <Row label="Erasure" value="Non-statutory fields erasable on request; statutory records cannot be deleted early" />
+      <SectionCard title={t("Consent & Retention")}>
+        <Row label={t("Consent captured")} value={t("Captured digitally · {date}", { date: formatDateSlash(employee.dateOfJoining) })} />
+        <Row label={t("Purposes")} value={t("Payroll, statutory filing, benefits, workplace administration")} />
+        <Row label={t("Retention")} value={t("8 years after exit — Income Tax and EPF record-keeping")} />
+        <Row label={t("Erasure")} value={t("Non-statutory fields erasable on request; statutory records cannot be deleted early")} />
       </SectionCard>
 
       <EmployeeDrawerAuditTrail rows={auditTrail ?? null} forbidden={auditStatus === 403} loading={auditLoading} />

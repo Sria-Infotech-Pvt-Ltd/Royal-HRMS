@@ -125,25 +125,25 @@ export default function HomeTab({ onNavigate, status, isReadOnly = false }: Prop
     {
       icon: "ti-clock-check", label: tr("ATTENDANCE"),
       value: attStats ? `${attStats.days_present}/${attStats.working_days}` : "—",
-      sub: tr("days present this month"), linkText: "View details",
+      sub: tr("days present this month"), linkText: tr("View details"),
       onClick: () => onNavigate("attendance"),
     },
     {
       icon: "ti-beach", label: tr("LEAVE BALANCE"),
       value: balances ? leaveBalanceTotal.toFixed(1) : "—",
-      sub: tr("days available"), linkText: "View details",
+      sub: tr("days available"), linkText: tr("View details"),
       onClick: () => onNavigate("leave"),
     },
     {
       icon: "ti-calendar-event", label: tr("NEXT PAYDAY"),
       value: payrollSettings ? nextPayday(payrollSettings.pay_day) : "—",
-      sub: latestPayslip ? "payslip follows approval" : "no payslips yet", linkText: "View details",
+      sub: latestPayslip ? tr("payslip follows approval") : tr("no payslips yet"), linkText: tr("View details"),
       onClick: () => onNavigate("payslips"),
     },
     {
       icon: "ti-list-check", label: tr("MY REQUESTS"),
       value: String(openRequestCount),
-      sub: tr("open and recent requests"), linkText: "View all",
+      sub: tr("open and recent requests"), linkText: tr("View all"),
       onClick: () => onNavigate("requests"),
     },
   ];

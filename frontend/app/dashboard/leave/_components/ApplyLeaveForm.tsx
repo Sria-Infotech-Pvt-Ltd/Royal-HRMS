@@ -31,7 +31,11 @@ const DURATION_OPTIONS: { value: DurationKey; label: string }[] = [
 const SERVER_FIELD_TO_FORM_FIELD: Record<string, string> = {
   leave_type: "leave_type", start_date: "from_date", end_date: "to_date", reason: "reason", document: "doc",
 };
-const LEAVE_FIELD_LABELS: Record<string, string> = { start_date: "From date", end_date: "To date", document: "Supporting document" };
+const LEAVE_FIELD_LABELS: Record<string, string> = {
+  get start_date() { return tr("From date"); },
+  get end_date() { return tr("To date"); },
+  get document() { return tr("Supporting document"); },
+};
 
 /** Small uppercase field label — this compact layout's own style, distinct
  *  from the bold-sentence-case Lbl() the optional sections below still use. */
@@ -126,19 +130,19 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!isCurrentTypeAvailable)                    e.leave_type = "This leave type is not available for your profile.";
-    if (!form.from_date)                                    e.from_date = "Start date is required.";
-    if (!isHalfDay && !form.to_date)                        e.to_date   = "End date is required.";
+    if (!isCurrentTypeAvailable)                    e.leave_type = tr("This leave type is not available for your profile.");
+    if (!form.from_date)                                    e.from_date = tr("Start date is required.");
+    if (!isHalfDay && !form.to_date)                        e.to_date   = tr("End date is required.");
     if (!isHalfDay && form.from_date && form.to_date && form.to_date < form.from_date)
-                                                            e.to_date   = "End date must be on or after start date.";
-    if (!form.reason.trim())                                e.reason    = "Please provide a reason.";
-    if (form.reason.trim().length < 10)                     e.reason    = "Reason must be at least 10 characters.";
-    if (ltConfig.requiresDoc && !docFile)                   e.doc       = "Supporting document is required for this leave type.";
+                                                            e.to_date   = tr("End date must be on or after start date.");
+    if (!form.reason.trim())                                e.reason    = tr("Please provide a reason.");
+    if (form.reason.trim().length < 10)                     e.reason    = tr("Reason must be at least 10 characters.");
+    if (ltConfig.requiresDoc && !docFile)                   e.doc       = tr("Supporting document is required for this leave type.");
     // Once the server preview has loaded, it's authoritative — defer to
     // insufficientBalance below instead of this local, holiday-blind estimate.
-    if (!preview && overLimit)                              e.from_date = `Only ${available} working day(s) available.`;
-    if (workDays <= 0 && form.from_date)                    e.from_date = "Selected date range has no working days.";
-    if (insufficientBalance)                                e.from_date = "Insufficient leave balance for the selected dates.";
+    if (!preview && overLimit)                              e.from_date = tr("Only {count} working day(s) available.", { count: available });
+    if (workDays <= 0 && form.from_date)                    e.from_date = tr("Selected date range has no working days.");
+    if (insufficientBalance)                                e.from_date = tr("Insufficient leave balance for the selected dates.");
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -165,7 +169,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     } catch (err: unknown) {
       // The server's reason (e.g. insufficient balance) goes beside the field it is about, and in the alert above
       // the buttons when it names no field of this form.
-      const { fieldErrors } = handleError(err, "Failed to submit leave request. Please try again.");
+      const { fieldErrors } = handleError(err, tr("Failed to submit leave request. Please try again."));
       const mapped: Record<string, string> = {};
       for (const [serverKey, formKey] of Object.entries(SERVER_FIELD_TO_FORM_FIELD)) {
         if (fieldErrors[serverKey]) mapped[formKey] = fieldErrors[serverKey];
@@ -196,14 +200,14 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
   const requestedLabel = preview ? preview.actual_leave_days : workDays;
   const balancePreviewText = ltConfig.isLwp
-    ? "Unpaid — no balance deducted"
-    : `${available} day${available === 1 ? "" : "s"} available${pendingDays > 0 ? ` (after ${pendingDays} pending)` : ""} · ${requestedLabel} day${requestedLabel === 1 ? "" : "s"} requested`;
+    ? tr("Unpaid — no balance deducted")
+    : `${available === 1 ? tr("{count} day available", { count: available }) : tr("{count} days available", { count: available })}${pendingDays > 0 ? ` ${tr("(after {count} pending)", { count: pendingDays })}` : ""} · ${requestedLabel === 1 ? tr("{count} day requested", { count: requestedLabel }) : tr("{count} days requested", { count: requestedLabel })}`;
 
   return (
     <div className="p-6">
       <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
         <div>
-          <SmallLbl text="Leave type" />
+          <SmallLbl text={tr("Leave type")} />
           <select
             className="field-input field-select"
             value={form.leave_type}
@@ -223,7 +227,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
         </div>
 
         <div>
-          <SmallLbl text="Duration" />
+          <SmallLbl text={tr("Duration")} />
           <select
             className="field-input field-select"
             value={form.duration}
@@ -234,21 +238,21 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
         </div>
 
         <div>
-          <SmallLbl text={isHalfDay ? "Date" : "From"} />
+          <SmallLbl text={isHalfDay ? tr("Date") : tr("From")} />
           <DateInput value={form.from_date} onChange={isoDate => setField("from_date", isoDate)} className={`field-input${errors.from_date ? " field-error" : ""}`} />
           <Err msg={errors.from_date} />
         </div>
 
         {!isHalfDay && (
           <div>
-            <SmallLbl text="To" />
+            <SmallLbl text={tr("To")} />
             <DateInput value={form.to_date} min={form.from_date} onChange={isoDate => setField("to_date", isoDate)} className={`field-input${errors.to_date ? " field-error" : ""}`} />
             <Err msg={errors.to_date} />
           </div>
         )}
 
         <div>
-          <SmallLbl text="Reason" />
+          <SmallLbl text={tr("Reason")} />
           <textarea
             className={`field-input${errors.reason ? " field-error" : ""}`}
             value={form.reason}
@@ -262,11 +266,11 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
         </div>
 
         <div>
-          <SmallLbl text="Balance preview" />
+          <SmallLbl text={tr("Balance preview")} />
           <div className="field-input flex items-center" style={{ background: "var(--bg-low)", color: "var(--on-variant)", minHeight: 76 }}>
             {previewLoading && canPreview ? tr("Checking balance…") : balancePreviewText}
           </div>
-          {insufficientBalance && <Err msg="Insufficient leave balance for the selected dates." />}
+          {insufficientBalance && <Err msg={tr("Insufficient leave balance for the selected dates.")} />}
         </div>
       </div>
 

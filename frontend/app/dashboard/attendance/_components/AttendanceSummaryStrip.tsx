@@ -39,10 +39,10 @@ export default function AttendanceSummaryStrip({ cards, onJump, failure }: Props
     { status: "on_leave", label: t("On leave"), value: cards?.on_leave, sub: t("Approved leave"), colour: PALETTE.on_leave },
   ];
   return (
-    <div className="card" role="group" aria-label="Today at a glance" style={{ display: "flex", flexWrap: "wrap", marginBottom: 20 }}>
+    <div className="card" role="group" aria-label={t("Today at a glance")} style={{ display: "flex", flexWrap: "wrap", marginBottom: 20 }}>
       {items.map((item, index) => (
         <button
-          key={item.status} type="button" onClick={() => onJump(item.status)} title={`Show ${item.label.toLowerCase()}`}
+          key={item.status} type="button" onClick={() => onJump(item.status)} title={t("Show {label}", { label: item.label.toLowerCase() })}
           style={{
             flex: "1 1 180px", display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", textAlign: "left", background: "none", border: 0, cursor: "pointer",
             borderLeft: index === 0 ? "none" : "1px solid var(--outline-v)",

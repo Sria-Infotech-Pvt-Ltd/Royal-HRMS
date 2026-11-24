@@ -6,6 +6,7 @@ import { fullName, initials, avatarColor, type Employee } from "../_data";
 import Avatar from "./Avatar";
 import EmployeeFullRecordBody from "./EmployeeFullRecordBody";
 import EditRecordModal from "./EditRecordModal";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRequestCorrection, correctionLabel }: Props) {
+  const t = useT();
   const router = useRouter();
   const isAdmin = mode === "admin";
   const isSelf  = mode === "self";
@@ -44,11 +46,11 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
               color={avatarColor(employee.department)} photoUrl={employee.photoUrl}
             />
             <div style={{ minWidth: 0 }}>
-              <div className="n">{fullName(employee)}{employee.hasEditDraft && <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold align-middle" style={{ background: "var(--amber-bg, #fef3c7)", color: "var(--amber-ink, #92400e)" }} title="You have unsaved draft changes for this employee">Draft</span>}</div>
+              <div className="n">{fullName(employee)}{employee.hasEditDraft && <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold align-middle" style={{ background: "var(--amber-bg, #fef3c7)", color: "var(--amber-ink, #92400e)" }} title={t("You have unsaved draft changes for this employee")}>{t("Draft")}</span>}</div>
               <div className="i">{employee.code} · {employee.designation || "—"}</div>
             </div>
           </div>
-          <button className="xbtn" onClick={onClose} aria-label="Close">
+          <button className="xbtn" onClick={onClose} aria-label={t("Close")}>
             <i className="ti ti-x" />
           </button>
         </div>
@@ -58,19 +60,19 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
         </div>
 
         <div className="dfoot">
-          <button className="rvbtn ghost" onClick={onClose}>Close</button>
+          <button className="rvbtn ghost" onClick={onClose}>{t("Close")}</button>
           <span className="spacer" />
           {isSelf && (
             <>
-              <button className="rvbtn" onClick={() => router.push("/dashboard/leave")}>Request leave</button>
+              <button className="rvbtn" onClick={() => router.push("/dashboard/leave")}>{t("Request leave")}</button>
               <button className="rvbtn pri" onClick={onRequestCorrection ?? (() => router.push("/dashboard/profile"))}>
-                {correctionLabel ?? "Request profile correction"}
+                {correctionLabel ?? t("Request profile correction")}
               </button>
             </>
           )}
           {isAdmin && canEditRecord && (
             <button className="rvbtn pri" onClick={() => setEditOpen(true)}>
-              Edit full record
+              {t("Edit full record")}
             </button>
           )}
         </div>

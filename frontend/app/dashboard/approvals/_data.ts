@@ -2,6 +2,7 @@ import { LeaveRequest, fmtDate as fmtDateOnly } from "../leave/_data";
 import type { SeparationRequest } from "@/types/separation";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import { formatDate } from "@/lib/formatDate";
+import { tr } from "@/lib/i18n/tr";
 
 // ─── Kind-specific request shapes (as returned by their own list endpoints) ───
 
@@ -196,7 +197,7 @@ export function leaveToItem(r: LeaveRequest): ApprovalItem {
     submittedAt:    r.created_at,
     detailPrimary:  r.leave_type_display,
     detailSecondary: `${fmtDateOnly(r.start_date)} - ${fmtDateOnly(r.end_date)}`,
-    detailTertiary: `${r.total_days} Day${r.total_days === 1 ? "" : "s"}`,
+    detailTertiary: r.total_days === 1 ? tr("{count} Day", { count: r.total_days }) : tr("{count} Days", { count: r.total_days }),
     canAction:      r.can_approve ?? (r.status === "pending" || r.status === "l2_pending"),
     raw:            r,
   };
@@ -215,9 +216,9 @@ export function wfhToItem(r: WorkFromHomeRequest): ApprovalItem {
     status:         r.status,
     displayStatus:  toDisplayStatus(r.status),
     submittedAt:    r.created_at,
-    detailPrimary:  "Work From Home",
+    detailPrimary:  tr("Work From Home"),
     detailSecondary: `${fmtDateOnly(r.start_date)} - ${fmtDateOnly(r.end_date)}`,
-    detailTertiary: `${days} Day${days === 1 ? "" : "s"}`,
+    detailTertiary: days === 1 ? tr("{count} Day", { count: days }) : tr("{count} Days", { count: days }),
     canAction:      r.can_approve ?? (r.status === "pending" || r.status === "l2_pending"),
     raw:            r,
   };
@@ -234,7 +235,7 @@ export function expenseToItem(r: ExpenseRequest): ApprovalItem {
     status:         r.status,
     displayStatus:  toDisplayStatus(r.status),
     submittedAt:    r.created_at,
-    detailPrimary:  r.title || "Expense",
+    detailPrimary:  r.title || tr("Expense"),
     detailSecondary: fmtAmount(r.amount),
     canAction:      r.status === "pending",
     raw:            r,
@@ -260,7 +261,7 @@ export function correctionToItem(r: CorrectionRequest): ApprovalItem {
     status:         r.status,
     displayStatus:  toDisplayStatus(r.status),
     submittedAt:    r.created_at,
-    detailPrimary:  PUNCH_LABEL[r.punch_type] ?? "Attendance Correction",
+    detailPrimary:  tr(PUNCH_LABEL[r.punch_type] ?? "Attendance Correction"),
     detailSecondary: arrows.join("  ·  "),
     detailTertiary: fmtDateOnly(r.date),
     canAction:      r.can_action,
@@ -280,7 +281,7 @@ export function separationToItem(r: SeparationRequest): ApprovalItem {
     displayStatus:  toDisplayStatus(r.status),
     submittedAt:    r.created_at,
     detailPrimary:  r.separation_type_display,
-    detailSecondary: `Last day: ${fmtDateOnly(r.proposed_last_working_day)}`,
+    detailSecondary: tr("Last day: {date}", { date: fmtDateOnly(r.proposed_last_working_day) }),
     detailTertiary: r.reason_display,
     canAction:      r.can_approve,
     raw:            r,

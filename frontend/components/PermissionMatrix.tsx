@@ -16,6 +16,7 @@ import {
 import TriStateCheckbox from "@/components/TriStateCheckbox";
 import PermissionMatrixToolbar from "@/components/PermissionMatrixToolbar";
 import PermissionChip from "@/components/PermissionChip";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   modules: [string, PermissionCatalogueItem[]][];
@@ -42,6 +43,7 @@ function CoverageBar({ on, total }: { on: number; total: number }) {
 }
 
 export default function PermissionMatrix({ modules, granted, onToggle, onToggleMany, lockedCodenames = [], isReadOnly = false, isAdvanced = false }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<MatrixFilter>("all");
   const [isCompact, setIsCompact] = useState(false);
@@ -54,7 +56,7 @@ export default function PermissionMatrix({ modules, granted, onToggle, onToggleM
   function quickSet(preset: QuickPreset) {
     const { add, remove } = quickSetChanges(shown, granted, preset, isLocked);
     // Giving everything is the one preset that can quietly hand out delete, export and approve: ask first.
-    if (preset === "everything" && add.length > 0 && !window.confirm(`Switch ON ${add.length} more permission${add.length === 1 ? "" : "s"} in the ${shown.length} module${shown.length === 1 ? "" : "s"} shown? This includes delete, export and approve rights.`)) return;
+    if (preset === "everything" && add.length > 0 && !window.confirm(`${add.length === 1 ? t("Switch ON {count} more permission", { count: add.length }) : t("Switch ON {count} more permissions", { count: add.length })} ${shown.length === 1 ? t("in the {count} module shown?", { count: shown.length }) : t("in the {count} modules shown?", { count: shown.length })} ${t("This includes delete, export and approve rights.")}`)) return;
     if (add.length > 0) onToggleMany(add, true);
     if (remove.length > 0) onToggleMany(remove, false);
   }
@@ -74,14 +76,14 @@ export default function PermissionMatrix({ modules, granted, onToggle, onToggleM
         <table className="w-full min-w-[900px] border-collapse text-sm">
           <thead className={isAdvanced ? "sticky top-0 z-20" : undefined}>
             <tr className="border-b border-[var(--outline-v)] text-left text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--on-variant)]" style={{ background: "var(--bg-low)" }}>
-              <th className="sticky left-0 z-10 px-4 py-3" style={{ background: "var(--bg-low)" }}>Module</th>
+              <th className="sticky left-0 z-10 px-4 py-3" style={{ background: "var(--bg-low)" }}>{t("Module")}</th>
               {COMMON_ACTIONS.map(action => {
                 const items = columnItems(shown, action);
                 const changeable = items.filter(item => !isLocked(item.codename));
                 const columnCoverage = coverageOf(items, granted);
                 const columnState = stateOf(columnCoverage);
                 return (
-                  <th key={action} className="px-2 py-2 text-center" title={isAdvanced ? `${labelOf(action)}: ${ACTION_HINTS[action]}. ${columnCoverage.on} of ${columnCoverage.total} on.` : undefined}>
+                  <th key={action} className="px-2 py-2 text-center" title={isAdvanced ? `${labelOf(action)}: ${ACTION_HINTS[action]}. ${t("{on} of {total} on.", { on: columnCoverage.on, total: columnCoverage.total })}` : undefined}>
                     <div className="flex flex-col items-center gap-1">
                       <span className={isAdvanced ? "text-[12px] tracking-normal" : undefined}>{action}</span>
                       {isAdvanced && (
@@ -90,7 +92,7 @@ export default function PermissionMatrix({ modules, granted, onToggle, onToggleM
                             state={columnState}
                             onChange={() => switchColumn(action)}
                             isDisabled={changeable.length === 0}
-                            label={`Switch every ${action} permission on or off for the modules shown`}
+                            label={t("Switch every {action} permission on or off for the modules shown", { action })}
                           />
                           <span className="text-[10.5px] font-semibold normal-case tracking-normal" style={{ color: columnState === "all" ? "var(--success)" : "var(--on-variant)" }}>
                             {columnCoverage.on}/{columnCoverage.total}
@@ -101,8 +103,8 @@ export default function PermissionMatrix({ modules, granted, onToggle, onToggleM
                   </th>
                 );
               })}
-              <th className="px-4 py-3">Other</th>
-              <th className="px-3 py-3 text-center">All</th>
+              <th className="px-4 py-3">{t("Other")}</th>
+              <th className="px-3 py-3 text-center">{t("All")}</th>
             </tr>
           </thead>
           <tbody>
@@ -158,7 +160,7 @@ export default function PermissionMatrix({ modules, granted, onToggle, onToggleM
                             onChange={() => onToggle(item.codename)}
                           />
                           {labelOf(item.action)}
-                          {item.is_sensitive && <i className="ti ti-alert-triangle text-[var(--warn)]" aria-label="Sensitive permission" />}
+                          {item.is_sensitive && <i className="ti ti-alert-triangle text-[var(--warn)]" aria-label={t("Sensitive permission")} />}
                         </label>
                       ))}
                     </div>
@@ -168,7 +170,7 @@ export default function PermissionMatrix({ modules, granted, onToggle, onToggleM
                       state={rowState}
                       onChange={() => onToggleMany(changeable, rowState !== "all")}
                       isDisabled={changeable.length === 0}
-                      label={`Select all ${labelOf(module)} permissions`}
+                      label={t("Select all {module} permissions", { module: labelOf(module) })}
                     />
                   </td>
                 </tr>
@@ -177,7 +179,7 @@ export default function PermissionMatrix({ modules, granted, onToggle, onToggleM
             {shown.length === 0 && (
               <tr>
                 <td colSpan={COMMON_ACTIONS.length + 3} className="px-4 py-10 text-center text-sm text-[var(--on-variant)]">
-                  No module matches. Clear the search or choose &ldquo;All modules&rdquo;.
+                  {t("No module matches. Clear the search or choose “All modules”.")}
                 </td>
               </tr>
             )}
@@ -186,9 +188,9 @@ export default function PermissionMatrix({ modules, granted, onToggle, onToggleM
       </div>
       {isAdvanced && (
         <p className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[11.5px] text-[var(--on-variant)]">
-          <span><i className="ti ti-alert-triangle text-[var(--warn)]" /> Sensitive permission: handle with care</span>
-          <span>A dash in a box means some, not all, are on</span>
-          <span>The checkbox at the top of a column switches that action for every module shown</span>
+          <span><i className="ti ti-alert-triangle text-[var(--warn)]" /> {t("Sensitive permission: handle with care")}</span>
+          <span>{t("A dash in a box means some, not all, are on")}</span>
+          <span>{t("The checkbox at the top of a column switches that action for every module shown")}</span>
         </p>
       )}
     </div>

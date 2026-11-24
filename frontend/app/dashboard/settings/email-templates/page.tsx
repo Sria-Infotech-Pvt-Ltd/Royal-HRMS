@@ -8,6 +8,7 @@ import { buildEmailPreview, type CompanyInfo } from "@/lib/emailPreview";
 import EditTemplateModal from "./_components/EditTemplateModal";
 import BirthdayWishesCard from "./_components/BirthdayWishesCard";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import {
   EMAIL_TEMPLATES_BASE, EMAIL_TEMPLATE_CATEGORIES, emailTemplateDetail, emailTemplatePreview,
   flattenTemplates, TYPE_META, catValue,
@@ -32,6 +33,7 @@ const EMPTY_BRANDING: BrandingForm = {
 
 export default function EmailTemplatesPage() {
   const router = useRouter();
+  const t = useT();
 
   const [templates,    setTemplates]    = useState<ApiEmailTemplate[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -101,7 +103,7 @@ export default function EmailTemplatesPage() {
       const grouped  = (envelope?.results ?? envelope) as ApiEmailTemplatesResponse;
       setTemplates(flattenTemplates(grouped));
     } catch (err: unknown) {
-      setError((err as { message?: string }).message ?? "Failed to load email templates");
+      setError((err as { message?: string }).message ?? t("Failed to load email templates"));
     } finally {
       setLoading(false);
     }
@@ -139,9 +141,9 @@ export default function EmailTemplatesPage() {
       setLogoFile(null);
       setLogoPreview(null);
       setBrandingOpen(false);
-      showToast("Email branding updated");
+      showToast(t("Email branding updated"));
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Failed to save branding", false);
+      showToast((err as { message?: string }).message ?? t("Failed to save branding"), false);
     } finally {
       setBrandingSaving(false);
     }
@@ -195,9 +197,9 @@ export default function EmailTemplatesPage() {
       const created: ApiEmailTemplate = res.data.data ?? res.data;
       setTemplates(prev => [...prev, created]);
       setEditing(null);
-      showToast("Email template created");
+      showToast(t("Email template created"));
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Failed to create template", false);
+      showToast((err as { message?: string }).message ?? t("Failed to create template"), false);
     } finally {
       setSaving(false);
     }
@@ -216,9 +218,9 @@ export default function EmailTemplatesPage() {
       await clientApi.patch(emailTemplateDetail(target.id), fd);
       setTemplates(prev => prev.map(t => t.id === target.id ? { ...t, subject: form.subject, body: form.body } : t));
       setEditing(null);
-      showToast("Email template updated");
+      showToast(t("Email template updated"));
     } catch (err: unknown) {
-      showToast((err as { message?: string }).message ?? "Failed to update template", false);
+      showToast((err as { message?: string }).message ?? t("Failed to update template"), false);
     } finally {
       setSaving(false);
     }
@@ -229,10 +231,10 @@ export default function EmailTemplatesPage() {
     setTemplates(prev => prev.map(t => t.id === template.id ? { ...t, is_active: next } : t));
     try {
       await clientApi.patch(emailTemplateDetail(template.id), { is_active: next });
-      showToast(`Template ${next ? "activated" : "deactivated"}`);
+      showToast(next ? t("Template activated") : t("Template deactivated"));
     } catch (err: unknown) {
       setTemplates(prev => prev.map(t => t.id === template.id ? { ...t, is_active: !next } : t));
-      showToast((err as { message?: string }).message ?? "Failed to update template", false);
+      showToast((err as { message?: string }).message ?? t("Failed to update template"), false);
     }
   }
 
@@ -286,15 +288,15 @@ export default function EmailTemplatesPage() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <div className="page-title">Email Templates</div>
-          <div className="page-sub">Customize transactional email messages sent by Aira HRMS</div>
+          <div className="page-title">{t("Email Templates")}</div>
+          <div className="page-sub">{t("Customize transactional email messages sent by Aira HRMS")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} suppressHydrationWarning>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
           <button className="btn btn-filled btn-sm" onClick={() => setEditing("add")} suppressHydrationWarning>
-            <i className="ti ti-plus" /> Add Template
+            <i className="ti ti-plus" /> {t("Add Template")}
           </button>
         </div>
       </div>
@@ -305,12 +307,12 @@ export default function EmailTemplatesPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--outline-v)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <i className="ti ti-palette" style={{ fontSize: 16, color: "var(--primary)" }} />
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Email Header &amp; Footer</span>
-            <span style={{ fontSize: 11, color: "var(--on-variant)", marginLeft: 4 }}>Applied to every outgoing email</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{t("Email Header & Footer")}</span>
+            <span style={{ fontSize: 11, color: "var(--on-variant)", marginLeft: 4 }}>{t("Applied to every outgoing email")}</span>
           </div>
           {!brandingOpen && (
             <button className="btn btn-ghost btn-sm" onClick={() => setBrandingOpen(true)} suppressHydrationWarning>
-              <i className="ti ti-pencil" style={{ fontSize: 13 }} /> Edit
+              <i className="ti ti-pencil" style={{ fontSize: 13 }} /> {t("Edit")}
             </button>
           )}
         </div>
@@ -319,19 +321,19 @@ export default function EmailTemplatesPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
           {/* Header preview */}
           <div style={{ padding: "20px 24px", borderRight: "1px solid var(--outline-v)" }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Header</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>{t("Header")}</div>
             <div style={{ background: "var(--surface)", borderRadius: 6, padding: "16px 20px", textAlign: "center", borderBottom: "3px solid #4f46e5", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               {currentLogo ? (
-                <img src={currentLogo} alt={company?.company_name ?? "Logo"} style={{ maxHeight: 60, maxWidth: 200, objectFit: "contain" }} />
+                <img src={currentLogo} alt={company?.company_name ?? t("Logo")} style={{ maxHeight: 60, maxWidth: 200, objectFit: "contain" }} />
               ) : (
-                <span style={{ fontSize: 16, fontWeight: 700, color: "#1a1a2e" }}>{company?.company_name ?? "[Company Name]"}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#1a1a2e" }}>{company?.company_name ?? t("[Company Name]")}</span>
               )}
             </div>
           </div>
 
           {/* Footer preview */}
           <div style={{ padding: "20px 24px" }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Footer</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>{t("Footer")}</div>
             <div style={{ background: "#f8f8fb", borderRadius: 6, padding: "14px 20px", textAlign: "center", border: "1px solid #eee", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
               <span style={{ fontSize: 12, color: "#888", lineHeight: 1.6 }}>{footerText}</span>
             </div>
@@ -341,18 +343,18 @@ export default function EmailTemplatesPage() {
         {/* Inline edit form */}
         {brandingOpen && (
           <div style={{ padding: "20px 24px", borderTop: "1px solid var(--outline-v)", background: "var(--bg)" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "var(--on-bg)" }}>Edit Email Branding</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "var(--on-bg)" }}>{t("Edit Email Branding")}</div>
 
             {/* Logo upload */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 6 }}>Logo</label>
+              <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 6 }}>{t("Logo")}</label>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {currentLogo && (
-                  <img src={currentLogo} alt="Logo" style={{ height: 44, maxWidth: 140, objectFit: "contain", borderRadius: 4, border: "1px solid var(--outline-v)", background: "var(--surface)", padding: 4 }} />
+                  <img src={currentLogo} alt={t("Logo")} style={{ height: 44, maxWidth: 140, objectFit: "contain", borderRadius: 4, border: "1px solid var(--outline-v)", background: "var(--surface)", padding: 4 }} />
                 )}
                 <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoChange} />
                 <button className="btn btn-ghost btn-sm" onClick={() => logoInputRef.current?.click()} suppressHydrationWarning>
-                  <i className="ti ti-upload" style={{ fontSize: 13 }} /> {currentLogo ? "Change Logo" : "Upload Logo"}
+                  <i className="ti ti-upload" style={{ fontSize: 13 }} /> {currentLogo ? t("Change Logo") : t("Upload Logo")}
                 </button>
                 {logoFile && <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{logoFile.name}</span>}
               </div>
@@ -370,7 +372,7 @@ export default function EmailTemplatesPage() {
                 ["pin_code",       "PIN Code",       "text"],
               ] as [keyof BrandingForm, string, string][]).map(([field, label, type]) => (
                 <div key={field}>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>{label}</label>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>{t(label)}</label>
                   <input
                     type={type}
                     className="field-input"
@@ -383,9 +385,9 @@ export default function EmailTemplatesPage() {
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 18, justifyContent: "flex-end" }}>
-              <button className="btn btn-ghost btn-sm" onClick={cancelBranding} disabled={brandingSaving} suppressHydrationWarning>Cancel</button>
+              <button className="btn btn-ghost btn-sm" onClick={cancelBranding} disabled={brandingSaving} suppressHydrationWarning>{t("Cancel")}</button>
               <button className="btn btn-filled btn-sm" onClick={saveBranding} disabled={brandingSaving} suppressHydrationWarning>
-                {brandingSaving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</> : "Save Branding"}
+                {brandingSaving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</> : t("Save Branding")}
               </button>
             </div>
           </div>
@@ -398,7 +400,7 @@ export default function EmailTemplatesPage() {
       <div style={{ marginBottom: 20 }}>
         <div className="et-search-wrap" style={{ position: "relative" }}>
           <i className="ti ti-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 15, color: "var(--outline)", pointerEvents: "none" }} />
-          <input className="field-input" placeholder="Search templates…" value={search}
+          <input className="field-input" placeholder={t("Search templates…")} value={search}
             onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 36 }} suppressHydrationWarning />
         </div>
       </div>
@@ -406,7 +408,7 @@ export default function EmailTemplatesPage() {
       {/* Loading */}
       {loading && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 260, gap: 10, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "spin 1s linear infinite" }} /> Loading templates…
+          <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "spin 1s linear infinite" }} /> {t("Loading templates…")}
         </div>
       )}
 
@@ -415,8 +417,8 @@ export default function EmailTemplatesPage() {
         <div className="alert alert-error mb-24">
           <i className="ti ti-alert-circle" />
           <div>
-            <strong>Failed to load</strong> — {error}
-            <div style={{ marginTop: 8 }}><button className="btn btn-ghost btn-sm" onClick={loadData} suppressHydrationWarning>Retry</button></div>
+            <strong>{t("Failed to load")}</strong> — {error}
+            <div style={{ marginTop: 8 }}><button className="btn btn-ghost btn-sm" onClick={loadData} suppressHydrationWarning>{t("Retry")}</button></div>
           </div>
         </div>
       )}
@@ -425,7 +427,7 @@ export default function EmailTemplatesPage() {
       {!loading && !error && templates.length > 0 && filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: "32px", color: "var(--on-variant)" }}>
           <i className="ti ti-search-off" style={{ fontSize: 32, opacity: 0.3, display: "block", marginBottom: 10 }} />
-          No templates match &quot;{search}&quot;
+          {t("No templates match \"{search}\"", { search })}
         </div>
       )}
 
@@ -441,9 +443,9 @@ export default function EmailTemplatesPage() {
               <div key={type}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", marginBottom: 12, background: meta.color, borderRadius: "var(--radius)" }}>
                   <i className={`ti ${meta.icon}`} style={{ fontSize: 16, color: "#fff" }} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{meta.label} Templates</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{t("{label} Templates", { label: t(meta.label) })}</span>
                   <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(255,255,255,0.75)" }}>
-                    {group.length} template{group.length !== 1 ? "s" : ""}
+                    {group.length !== 1 ? t("{count} templates", { count: group.length }) : t("{count} template", { count: group.length })}
                   </span>
                 </div>
 
@@ -471,14 +473,14 @@ export default function EmailTemplatesPage() {
                         </div>
                       </div>
                       <div className="et-card-actions" style={{ display: "flex", gap: 3, flexShrink: 0, marginTop: 2, alignItems: "center" }}>
-                        <button className="btn btn-ghost btn-sm" title="Preview" onClick={() => openPreview(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning aria-label="Preview">
+                        <button className="btn btn-ghost btn-sm" title={t("Preview")} onClick={() => openPreview(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning aria-label={t("Preview")}>
                           <i className="ti ti-eye" style={{ fontSize: 14 }} />
                         </button>
-                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => setEditing(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning aria-label="Edit">
+                        <button className="btn btn-ghost btn-sm" title={t("Edit")} onClick={() => setEditing(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning aria-label={t("Edit")}>
                           <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                         </button>
                         <button
-                          title={template.is_active ? "Deactivate" : "Activate"}
+                          title={template.is_active ? t("Deactivate") : t("Activate")}
                           onClick={() => handleToggleActive(template)}
                           suppressHydrationWarning
                           style={{
@@ -517,29 +519,29 @@ export default function EmailTemplatesPage() {
       {/* Preview modal */}
       {viewing && (
         <Modal
-          title={<>Preview — {viewing.display_name}<div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2, fontWeight: 400 }}>Subject: <strong>{viewing.subject}</strong></div></>}
+          title={<>{t("Preview")} — {viewing.display_name}<div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2, fontWeight: 400 }}>{t("Subject:")} <strong>{viewing.subject}</strong></div></>}
           onClose={() => setViewing(null)}
           size="lg"
           maxWidth={680}
           footer={
             <>
-              <button className="btn btn-ghost" onClick={() => setViewing(null)} suppressHydrationWarning>Close</button>
+              <button className="btn btn-ghost" onClick={() => setViewing(null)} suppressHydrationWarning>{t("Close")}</button>
               <button className="btn btn-filled" onClick={() => { setViewing(null); setEditing(viewing); }} suppressHydrationWarning>
-                <i className="ti ti-pencil" /> Edit Template
+                <i className="ti ti-pencil" /> {t("Edit Template")}
               </button>
             </>
           }
         >
           {previewLoading ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "24px 0", color: "var(--on-variant)", justifyContent: "center" }}>
-              <i className="ti ti-loader-2" style={{ fontSize: 20, animation: "spin 1s linear infinite" }} /> Loading preview…
+              <i className="ti ti-loader-2" style={{ fontSize: 20, animation: "spin 1s linear infinite" }} /> {t("Loading preview…")}
             </div>
           ) : (
             <iframe
               srcDoc={previewHtml ?? buildEmailPreview(viewing.body, company)}
               sandbox="allow-same-origin"
               style={{ width: "100%", height: 420, border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", display: "block" }}
-              title="Email preview"
+              title={t("Email preview")}
             />
           )}
         </Modal>

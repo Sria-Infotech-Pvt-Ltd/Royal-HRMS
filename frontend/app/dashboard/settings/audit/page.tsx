@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import { useAuditLog } from "@/hooks/useAuditLog";
 import AuditFilters from "./_components/AuditFilters";
 import AuditTable from "./_components/AuditTable";
@@ -20,6 +21,7 @@ export default function AuditLogPage() {
 // production build: see AGENTS.md, this Next.js build is stricter here.
 function AuditLogPageInner() {
   const router = useRouter();
+  const t = useT();
   const searchParams = useSearchParams();
   const todayISO = localISODate();
   const defaults = rangeDates("30d", todayISO);
@@ -31,12 +33,12 @@ function AuditLogPageInner() {
     <>
       <div className="page-header">
         <div>
-          <div className="page-title">Audit Log</div>
-          <div className="page-sub">Immutable record of all system actions across every module</div>
+          <div className="page-title">{t("Audit Log")}</div>
+          <div className="page-sub">{t("Immutable record of all system actions across every module")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
         </div>
       </div>

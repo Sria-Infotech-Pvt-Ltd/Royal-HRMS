@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { useMemo, useState, type ReactNode } from "react";
+import { useT } from "@/hooks/useI18n";
 import { confirmDialog } from "@/components/DialogProvider";
 
 const PURPLE = "#6D28D9";
@@ -142,6 +143,7 @@ function Pill({ children, tone = "grey" }: { children: ReactNode; tone?: "grey" 
 }
 
 function SuggestButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -149,17 +151,18 @@ function SuggestButton({ onClick }: { onClick: () => void }) {
       className="ml-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold"
       style={{ borderColor: PURPLE, color: PURPLE }}
     >
-      ✦ Suggest
+      {t("✦ Suggest")}
     </button>
   );
 }
 
 function Label({ children, required, tag, onSuggest }: { children: ReactNode; required?: boolean; tag?: string; onSuggest?: () => void }) {
+  const t = useT();
   return (
     <label className="flex items-center flex-wrap gap-1 text-[12.5px] font-medium text-slate-700 mb-1">
       {children}
       {required && <span className="text-red-500">*</span>}
-      {tag && <Pill>{tag}</Pill>}
+      {tag && <Pill>{t(tag)}</Pill>}
       {onSuggest && <SuggestButton onClick={onSuggest} />}
     </label>
   );
@@ -174,12 +177,13 @@ const inputBase =
   "w-full h-11 rounded-lg border border-slate-200 px-3 text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2";
 
 function TextInput(props: { value: string; onChange: (v: string) => void; placeholder?: string; readOnly?: boolean; type?: string }) {
+  const t = useT();
   return (
     <input
       type={props.type ?? "text"}
       value={props.value}
       onChange={e => props.onChange(e.target.value)}
-      placeholder={props.placeholder}
+      placeholder={props.placeholder ? t(props.placeholder) : undefined}
       readOnly={props.readOnly}
       className={`${inputBase} ${props.readOnly ? "bg-slate-50 text-slate-500" : "bg-white"}`}
       style={{ outlineColor: PURPLE }}
@@ -201,8 +205,9 @@ function DateInput(props: { value: string; onChange: (v: string) => void; readOn
 }
 
 function Select(props: { value: string; onChange: (v: string) => void; options: string[]; placeholder?: string; readOnly?: boolean }) {
+  const t = useT();
   if (props.readOnly) {
-    return <div className={`${inputBase} bg-slate-50 text-slate-500 flex items-center`}>{props.value || "—"}</div>;
+    return <div className={`${inputBase} bg-slate-50 text-slate-500 flex items-center`}>{props.value ? t(props.value) : "—"}</div>;
   }
   return (
     <select
@@ -210,13 +215,14 @@ function Select(props: { value: string; onChange: (v: string) => void; options: 
       onChange={e => props.onChange(e.target.value)}
       className={`${inputBase} bg-white appearance-none`}
     >
-      <option value="">{props.placeholder ?? "Select"}</option>
-      {props.options.map(o => <option key={o} value={o}>{o}</option>)}
+      <option value="">{t(props.placeholder ?? "Select")}</option>
+      {props.options.map(o => <option key={o} value={o}>{t(o)}</option>)}
     </select>
   );
 }
 
 function Toggle({ value, onChange }: { value: "yes" | "no"; onChange: (v: "yes" | "no") => void }) {
+  const t = useT();
   return (
     <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden">
       {(["yes", "no"] as const).map(v => (
@@ -227,7 +233,7 @@ function Toggle({ value, onChange }: { value: "yes" | "no"; onChange: (v: "yes" 
           className="px-4 py-1.5 text-[12.5px] font-semibold"
           style={value === v ? { background: PURPLE, color: "#fff" } : { background: "#fff", color: "#475569" }}
         >
-          {v === "yes" ? "Yes" : "No"}
+          {v === "yes" ? t("Yes") : t("No")}
         </button>
       ))}
     </div>
@@ -235,6 +241,7 @@ function Toggle({ value, onChange }: { value: "yes" | "no"; onChange: (v: "yes" 
 }
 
 function RevealField({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const t = useT();
   const [revealed, setRevealed] = useState(false);
   const masked = value ? value.replace(/./g, "•").slice(0, Math.max(0, value.length - 4)) + value.slice(-4) : "";
   return (
@@ -244,14 +251,14 @@ function RevealField({ value, onChange, placeholder }: { value: string; onChange
         value={revealed ? value : masked}
         onChange={e => onChange(e.target.value)}
         readOnly={!revealed}
-        placeholder={placeholder}
+        placeholder={placeholder ? t(placeholder) : undefined}
         className={`${inputBase} pr-9 ${revealed ? "bg-white" : "bg-slate-50 text-slate-500"}`}
       />
       <button
         type="button"
         onClick={() => setRevealed(r => !r)}
         className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-        title={revealed ? "Hide — this reveal is audit-logged" : "Reveal — logged to the audit trail"}
+        title={revealed ? t("Hide — this reveal is audit-logged") : t("Reveal — logged to the audit trail")}
       >
         <i className={`ti ${revealed ? "ti-eye-off" : "ti-eye"}`} />
       </button>
@@ -260,14 +267,16 @@ function RevealField({ value, onChange, placeholder }: { value: string; onChange
 }
 
 function AttachButton({ label }: { label: string }) {
+  const t = useT();
   return (
     <button type="button" className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-dashed border-slate-300 text-[11px] text-slate-500">
-      <i className="ti ti-paperclip text-[12px]" /> {label}
+      <i className="ti ti-paperclip text-[12px]" /> {t(label)}
     </button>
   );
 }
 
 function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -275,25 +284,27 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
       className="w-full py-2.5 rounded-lg text-[13px] font-semibold border border-dashed"
       style={{ color: PURPLE, borderColor: "#ddd6fe", background: "#faf7ff" }}
     >
-      + {label}
+      + {t(label)}
     </button>
   );
 }
 
 function RemoveButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
   return (
     <button type="button" onClick={onClick} className="px-2.5 py-1 rounded-md border border-red-200 text-red-600 text-[11px] font-semibold">
-      Remove
+      {t("Remove")}
     </button>
   );
 }
 
 function RepeatCard({ label, onRemove, extra, children }: { label: string; onRemove: () => void; extra?: ReactNode; children: ReactNode }) {
+  const t = useT();
   return (
     <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-bold tracking-wide uppercase text-slate-400">{label}</span>
+          <span className="text-[10px] font-bold tracking-wide uppercase text-slate-400">{t(label)}</span>
           {extra}
         </div>
         <RemoveButton onClick={onRemove} />
@@ -316,12 +327,13 @@ function Grid3({ children }: { children: ReactNode }) {
 }
 
 function SectionTitle({ a, b, sub }: { a: string; b: string; sub: string }) {
+  const t = useT();
   return (
     <div className="sticky top-0 bg-white/95 backdrop-blur z-10 pb-3 pt-1 border-b border-slate-100 mb-5">
       <h2 className="text-[19px] font-bold text-slate-800">
-        {a} <em className="italic" style={{ color: PURPLE }}>{b}</em>
+        {t(a)} <em className="italic" style={{ color: PURPLE }}>{t(b)}</em>
       </h2>
-      <p className="text-[12px] text-slate-400 mt-0.5">{sub}</p>
+      <p className="text-[12px] text-slate-400 mt-0.5">{t(sub)}</p>
     </div>
   );
 }
@@ -346,6 +358,7 @@ const NAV: NavItem[] = [
 // ───────────────────────── Main component ─────────────────────────
 
 export default function EditRecordModalMock({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const [r, setR] = useState<DemoRecord>(() => seedDemoRecord());
   const [step, setStep] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -446,7 +459,7 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
   }, [r.experiences, r.dateOfJoining]);
 
   async function handleClose() {
-    if (dirty && !(await confirmDialog("Discard unsaved changes?"))) return;
+    if (dirty && !(await confirmDialog(t("Discard unsaved changes?")))) return;
     onClose();
   }
 
@@ -457,10 +470,10 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
         <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100">
           <div>
             <h1 className="text-[20px] font-bold text-slate-800">
-              Edit <em className="italic" style={{ color: PURPLE }}>record</em>
+              {t("Edit")} <em className="italic" style={{ color: PURPLE }}>{t("record")}</em>
             </h1>
             <p className="text-[12.5px] text-slate-400 mt-1 max-w-[56ch]">
-              Jump to any section, change what you need, and save. Nothing else has to be re-entered.
+              {t("Jump to any section, change what you need, and save. Nothing else has to be re-entered.")}
             </p>
           </div>
           <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 text-[20px] leading-none">×</button>
@@ -473,7 +486,7 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
             {NAV.map((item, i) => (
               <div key={item.label}>
                 {item.group && (
-                  <div className="text-[9.5px] font-bold tracking-widest uppercase text-slate-400 px-2 pt-4 pb-1.5">{item.group}</div>
+                  <div className="text-[9.5px] font-bold tracking-widest uppercase text-slate-400 px-2 pt-4 pb-1.5">{t(item.group)}</div>
                 )}
                 <button
                   onClick={() => setStep(i)}
@@ -481,10 +494,10 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                   style={i === step ? { background: "#f3e8ff" } : undefined}
                 >
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[12.5px] font-semibold" style={{ color: i === step ? PURPLE : "#334155" }}>{item.label}</span>
-                    {item.tag && <Pill tone={item.tag.tone}>{item.tag.text}</Pill>}
+                    <span className="text-[12.5px] font-semibold" style={{ color: i === step ? PURPLE : "#334155" }}>{t(item.label)}</span>
+                    {item.tag && <Pill tone={item.tag.tone}>{t(item.tag.text)}</Pill>}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">{item.sub}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">{t(item.sub)}</div>
                 </button>
               </div>
             ))}
@@ -493,13 +506,13 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
               className="mt-4 rounded-lg p-3 text-[11.5px]"
               style={missing.length === 0 ? { background: "#ecfdf5", color: "#065f46" } : { background: "#fff7ed", color: "#9a3412" }}
             >
-              <div className="font-bold mb-1">{missing.length === 0 ? "Nothing outstanding" : `${missing.length} item${missing.length === 1 ? "" : "s"} need attention`}</div>
+              <div className="font-bold mb-1">{missing.length === 0 ? t("Nothing outstanding") : (missing.length === 1 ? t("{count} item needs attention", { count: missing.length }) : t("{count} items need attention", { count: missing.length }))}</div>
               {missing.length === 0 ? (
-                <div>All required fields are complete. Optional sections can be finished after joining.</div>
+                <div>{t("All required fields are complete. Optional sections can be finished after joining.")}</div>
               ) : (
                 <ul className="list-disc list-inside space-y-0.5">
-                  {missing.slice(0, 5).map(m => <li key={m}>{m}</li>)}
-                  {missing.length > 5 && <li>+{missing.length - 5} more</li>}
+                  {missing.slice(0, 5).map(m => <li key={m}>{t(m)}</li>)}
+                  {missing.length > 5 && <li>{t("+{count} more", { count: missing.length - 5 })}</li>}
                 </ul>
               )}
             </div>
@@ -512,18 +525,18 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
               <>
                 <SectionTitle a="Personal" b="identity" sub="Name, photo, date of birth and a few basics." />
                 <Grid3>
-                  <div><Label required>Full legal name</Label><TextInput value={r.fullName} onChange={v => patch({ fullName: v })} placeholder="Full name" /></div>
-                  <div><Label required>Date of birth</Label><DateInput value={r.dateOfBirth} onChange={v => patch({ dateOfBirth: v })} /></div>
+                  <div><Label required>{t("Full legal name")}</Label><TextInput value={r.fullName} onChange={v => patch({ fullName: v })} placeholder={t("Full name")} /></div>
+                  <div><Label required>{t("Date of birth")}</Label><DateInput value={r.dateOfBirth} onChange={v => patch({ dateOfBirth: v })} /></div>
                   <div>
-                    <Label>Photo</Label>
+                    <Label>{t("Photo")}</Label>
                     <AttachButton label="Upload photo" />
                   </div>
-                  <div><Label tag="OPTIONAL">Personal email</Label><TextInput type="email" value={r.personalEmail} onChange={v => patch({ personalEmail: v })} placeholder="name@example.com" /></div>
-                  <div><Label required>Personal phone</Label><TextInput value={r.personalPhone} onChange={v => patch({ personalPhone: v })} placeholder="+91 90000 00000" /></div>
+                  <div><Label tag="OPTIONAL">{t("Personal email")}</Label><TextInput type="email" value={r.personalEmail} onChange={v => patch({ personalEmail: v })} placeholder={t("name@example.com")} /></div>
+                  <div><Label required>{t("Personal phone")}</Label><TextInput value={r.personalPhone} onChange={v => patch({ personalPhone: v })} placeholder="+91 90000 00000" /></div>
                 </Grid3>
 
-                <SubHead>Emergency contacts</SubHead>
-                <Helper>Add at least two, in case the first is unreachable.</Helper>
+                <SubHead>{t("Emergency contacts")}</SubHead>
+                <Helper>{t("Add at least two, in case the first is unreachable.")}</Helper>
                 <div className="mt-3">
                   {r.emergencyContacts.map(c => (
                     <RepeatCard
@@ -538,18 +551,18 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                               emergencyContacts: r.emergencyContacts.map(x => ({ ...x, isPrimary: x.id === c.id })),
                             })}
                           />
-                          Primary
+                          {t("Primary")}
                         </label>
                       }
                       onRemove={() => patch({ emergencyContacts: r.emergencyContacts.filter(x => x.id !== c.id) })}
                     >
                       <Grid3>
-                        <div><Label>Name</Label><TextInput value={c.name} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, name: v } : x) })} placeholder="Full name" /></div>
-                        <div><Label>Relationship</Label><Select value={c.relationship} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, relationship: v } : x) })} options={RELATIONSHIPS} /></div>
-                        <div><Label>Phone</Label><TextInput value={c.phone} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, phone: v } : x) })} placeholder="+91 90000 00000" /></div>
-                        <div><Label tag="OPTIONAL">Alternate phone</Label><TextInput value={c.altPhone} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, altPhone: v } : x) })} /></div>
-                        <div><Label tag="OPTIONAL">Email</Label><TextInput value={c.email} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, email: v } : x) })} /></div>
-                        <div><Label tag="OPTIONAL">Address</Label><TextInput value={c.address} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, address: v } : x) })} /></div>
+                        <div><Label>{t("Name")}</Label><TextInput value={c.name} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, name: v } : x) })} placeholder={t("Full name")} /></div>
+                        <div><Label>{t("Relationship")}</Label><Select value={c.relationship} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, relationship: v } : x) })} options={RELATIONSHIPS} /></div>
+                        <div><Label>{t("Phone")}</Label><TextInput value={c.phone} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, phone: v } : x) })} placeholder="+91 90000 00000" /></div>
+                        <div><Label tag="OPTIONAL">{t("Alternate phone")}</Label><TextInput value={c.altPhone} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, altPhone: v } : x) })} /></div>
+                        <div><Label tag="OPTIONAL">{t("Email")}</Label><TextInput value={c.email} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, email: v } : x) })} /></div>
+                        <div><Label tag="OPTIONAL">{t("Address")}</Label><TextInput value={c.address} onChange={v => patch({ emergencyContacts: r.emergencyContacts.map(x => x.id === c.id ? { ...x, address: v } : x) })} /></div>
                       </Grid3>
                     </RepeatCard>
                   ))}
@@ -565,46 +578,46 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
               <>
                 <SectionTitle a="Employment" b="details" sub="Role, reporting line, work setup and pay." />
                 <Grid3>
-                  <div><Label required>Date of joining</Label><DateInput value={r.dateOfJoining} onChange={v => patch({ dateOfJoining: v })} /></div>
+                  <div><Label required>{t("Date of joining")}</Label><DateInput value={r.dateOfJoining} onChange={v => patch({ dateOfJoining: v })} /></div>
                   <div>
-                    <Label tag="ASSIGN WHEN READY">Work email</Label>
-                    <TextInput value={r.workEmail} onChange={v => patch({ workEmail: v })} placeholder="name@company.com" />
-                    <Helper>Separate from the personal email used for preboarding.</Helper>
+                    <Label tag="ASSIGN WHEN READY">{t("Work email")}</Label>
+                    <TextInput value={r.workEmail} onChange={v => patch({ workEmail: v })} placeholder={t("name@company.com")} />
+                    <Helper>{t("Separate from the personal email used for preboarding.")}</Helper>
                   </div>
-                  <div><Label required>Employment type</Label><Select value={r.employmentType} onChange={v => patch({ employmentType: v })} options={["Permanent", "Contract", "Part-Time", "Intern", "Consultant"]} /></div>
+                  <div><Label required>{t("Employment type")}</Label><Select value={r.employmentType} onChange={v => patch({ employmentType: v })} options={["Permanent", "Contract", "Part-Time", "Intern", "Consultant"]} /></div>
 
-                  <div><Label>Probation period</Label><Select value={r.probationMonths ? `${r.probationMonths} months` : ""} onChange={v => patch({ probationMonths: v.split(" ")[0] })} options={["3 months", "6 months", "12 months"]} /></div>
-                  <div><Label tag="AUTO">Confirmation date</Label><DateInput readOnly value={addMonths(r.dateOfJoining, Number(r.probationMonths) || 0)} onChange={() => {}} /></div>
-                  <div><Label>Notice period</Label><Select value={r.noticeDays ? `${r.noticeDays} days` : ""} onChange={v => patch({ noticeDays: v.split(" ")[0] })} options={["30 days", "60 days", "90 days"]} /></div>
+                  <div><Label>{t("Probation period")}</Label><Select value={r.probationMonths ? `${r.probationMonths} months` : ""} onChange={v => patch({ probationMonths: v.split(" ")[0] })} options={["3 months", "6 months", "12 months"]} /></div>
+                  <div><Label tag="AUTO">{t("Confirmation date")}</Label><DateInput readOnly value={addMonths(r.dateOfJoining, Number(r.probationMonths) || 0)} onChange={() => {}} /></div>
+                  <div><Label>{t("Notice period")}</Label><Select value={r.noticeDays ? `${r.noticeDays} days` : ""} onChange={v => patch({ noticeDays: v.split(" ")[0] })} options={["30 days", "60 days", "90 days"]} /></div>
                 </Grid3>
 
                 <SubHead>Position &amp; reporting</SubHead>
                 <Grid3>
-                  <div><Label required>Position</Label><Select value={r.position} onChange={v => patch({ position: v })} options={["VP, Engineering", "Engineering Manager", "Senior Software Engineer", "Software Engineer"]} /></div>
-                  <div><Label tag="FROM POSITION">Org unit</Label><Select readOnly value="Software Services › Leadership" onChange={() => {}} options={[]} /></div>
-                  <div><Label tag="FROM POSITION">Grade / band</Label><Select readOnly value="L2 · Associate" onChange={() => {}} options={[]} /></div>
+                  <div><Label required>{t("Position")}</Label><Select value={r.position} onChange={v => patch({ position: v })} options={["VP, Engineering", "Engineering Manager", "Senior Software Engineer", "Software Engineer"]} /></div>
+                  <div><Label tag="FROM POSITION">{t("Org unit")}</Label><Select readOnly value="Software Services › Leadership" onChange={() => {}} options={[]} /></div>
+                  <div><Label tag="FROM POSITION">{t("Grade / band")}</Label><Select readOnly value="L2 · Associate" onChange={() => {}} options={[]} /></div>
 
                   <div>
-                    <Label required tag="FROM UNIT">Reporting manager</Label>
+                    <Label required tag="FROM UNIT">{t("Reporting manager")}</Label>
                     <Select value={r.reportingManager} onChange={v => patch({ reportingManager: v })} options={["CEO Office", "VP, Engineering", "Engineering Manager"]} />
-                    {!r.reportingManager && <Helper tone="red">No manager mapped to this unit — assign later and HR will set it.</Helper>}
+                    {!r.reportingManager && <Helper tone="red">{t("No manager mapped to this unit — assign later and HR will set it.")}</Helper>}
                   </div>
                   <div>
-                    <Label tag="OPTIONAL">Dotted-line manager</Label>
+                    <Label tag="OPTIONAL">{t("Dotted-line manager")}</Label>
                     <Select value={r.dottedLineManager} onChange={v => patch({ dottedLineManager: v })} options={["CEO Office", "VP, Engineering"]} />
-                    <Helper>Any unit — cross-functional reporting.</Helper>
+                    <Helper>{t("Any unit — cross-functional reporting.")}</Helper>
                   </div>
-                  <div><Label tag="FROM UNIT">Cost center</Label><Select readOnly value="CC-ENG-004" onChange={() => {}} options={[]} /></div>
+                  <div><Label tag="FROM UNIT">{t("Cost center")}</Label><Select readOnly value="CC-ENG-004" onChange={() => {}} options={[]} /></div>
                 </Grid3>
 
-                <SubHead>Work setup</SubHead>
+                <SubHead>{t("Work setup")}</SubHead>
                 <Grid3>
-                  <div><Label required>Work location</Label><Select value={r.workLocation} onChange={v => patch({ workLocation: v })} options={["Gachibowli", "Bengaluru", "Pune", "Remote"]} /></div>
-                  <div><Label>Work mode</Label><Select value={r.workMode} onChange={v => patch({ workMode: v })} options={["Office", "Hybrid", "Remote"]} /></div>
-                  <div><Label>Shift</Label><Select value={r.shift} onChange={v => patch({ shift: v })} options={["General 09:30–18:30", "Early 07:00–15:30", "Night 22:00–06:00"]} /></div>
+                  <div><Label required>{t("Work location")}</Label><Select value={r.workLocation} onChange={v => patch({ workLocation: v })} options={["Gachibowli", "Bengaluru", "Pune", "Remote"]} /></div>
+                  <div><Label>{t("Work mode")}</Label><Select value={r.workMode} onChange={v => patch({ workMode: v })} options={["Office", "Hybrid", "Remote"]} /></div>
+                  <div><Label>{t("Shift")}</Label><Select value={r.shift} onChange={v => patch({ shift: v })} options={["General 09:30–18:30", "Early 07:00–15:30", "Night 22:00–06:00"]} /></div>
 
                   <div>
-                    <Label>Weekly off</Label>
+                    <Label>{t("Weekly off")}</Label>
                     <div className="flex flex-wrap gap-2">
                       {["Saturday", "Sunday", "Friday"].map(day => (
                         <button
@@ -619,16 +632,16 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                       ))}
                     </div>
                   </div>
-                  <div><Label required>Attendance scheme</Label><Select value={r.attendanceScheme} onChange={v => patch({ attendanceScheme: v })} options={["Standard – Office", "Flexible", "Shift-based"]} /></div>
-                  <div><Label required>Leave plan</Label><Select value={r.leavePlan} onChange={v => patch({ leavePlan: v })} options={["Standard India Leave Policy", "Senior Leadership Leave Policy"]} /></div>
+                  <div><Label required>{t("Attendance scheme")}</Label><Select value={r.attendanceScheme} onChange={v => patch({ attendanceScheme: v })} options={["Standard – Office", "Flexible", "Shift-based"]} /></div>
+                  <div><Label required>{t("Leave plan")}</Label><Select value={r.leavePlan} onChange={v => patch({ leavePlan: v })} options={["Standard India Leave Policy", "Senior Leadership Leave Policy"]} /></div>
                 </Grid3>
 
-                <SubHead>Compensation</SubHead>
+                <SubHead>{t("Compensation")}</SubHead>
                 <Grid3>
-                  <div><Label>Pay group</Label><Select readOnly value="Monthly – India" onChange={() => {}} options={[]} /></div>
-                  <div><Label tag="OPTIONAL">Salary structure</Label><Select value={r.salaryStructure} onChange={v => patch({ salaryStructure: v })} options={["Standard India CTC", "Leadership CTC"]} /></div>
+                  <div><Label>{t("Pay group")}</Label><Select readOnly value="Monthly – India" onChange={() => {}} options={[]} /></div>
+                  <div><Label tag="OPTIONAL">{t("Salary structure")}</Label><Select value={r.salaryStructure} onChange={v => patch({ salaryStructure: v })} options={["Standard India CTC", "Leadership CTC"]} /></div>
                   <div>
-                    <Label tag="HR" onSuggest={() => patch({ annualCtc: "3420000" })}>Annual fixed CTC</Label>
+                    <Label tag="HR" onSuggest={() => patch({ annualCtc: "3420000" })}>{t("Annual fixed CTC")}</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[13px]">₹</span>
                       <input
@@ -638,7 +651,7 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                         className={`${inputBase} pl-6 bg-white`}
                       />
                     </div>
-                    <Helper>Total fixed cost to company per year, before any statutory deductions.</Helper>
+                    <Helper>{t("Total fixed cost to company per year, before any statutory deductions.")}</Helper>
                   </div>
                 </Grid3>
               </>
@@ -649,40 +662,39 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
               <>
                 <SectionTitle a="Basic" b="pay" sub="Pay scale and the wage types that make up the monthly salary." />
                 <div className="flex flex-wrap items-center gap-3 mb-5 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
-                  <span className="font-bold uppercase tracking-wide text-[10px] text-slate-400">Who maintains:</span>
-                  <span className="flex items-center gap-1"><Pill tone="purple">HR</Pill> pay structure and amounts</span>
-                  <span className="flex items-center gap-1"><Pill tone="blue">HR / Employee</Pill> employee may self-declare</span>
-                  <span className="flex items-center gap-1"><Pill tone="amber">Admin</Pill> configuration, locked</span>
+                  <span className="font-bold uppercase tracking-wide text-[10px] text-slate-400">{t("Who maintains:")}</span>
+                  <span className="flex items-center gap-1"><Pill tone="purple">HR</Pill> {t("pay structure and amounts")}</span>
+                  <span className="flex items-center gap-1"><Pill tone="blue">{t("HR / Employee")}</Pill> {t("employee may self-declare")}</span>
+                  <span className="flex items-center gap-1"><Pill tone="amber">{t("Admin")}</Pill> {t("configuration, locked")}</span>
                 </div>
 
-                <SubHead>Validity <Pill tone="purple">HR</Pill></SubHead>
+                <SubHead>{t("Validity")} <Pill tone="purple">HR</Pill></SubHead>
                 <Grid3>
-                  <div><Label tag="FROM JOINING DATE">Valid from</Label><DateInput readOnly value={r.dateOfJoining} onChange={() => {}} /></div>
-                  <div><Label>Valid to</Label><DateInput readOnly value="9999-12-31" onChange={() => {}} /></div>
-                  <div><Label>Reason</Label><TextInput readOnly value="Initial basic pay" onChange={() => {}} /></div>
+                  <div><Label tag="FROM JOINING DATE">{t("Valid from")}</Label><DateInput readOnly value={r.dateOfJoining} onChange={() => {}} /></div>
+                  <div><Label>{t("Valid to")}</Label><DateInput readOnly value="9999-12-31" onChange={() => {}} /></div>
+                  <div><Label>{t("Reason")}</Label><TextInput readOnly value="Initial basic pay" onChange={() => {}} /></div>
                 </Grid3>
 
-                <SubHead>Pay scale &amp; payroll area <Pill tone="amber">Admin</Pill></SubHead>
+                <SubHead>Pay scale &amp; payroll area <Pill tone="amber">{t("Admin")}</Pill></SubHead>
                 <Grid3>
-                  <div><Label>Payroll area</Label><TextInput readOnly value="IN01 — India Monthly" onChange={() => {}} /></div>
-                  <div><Label>Working hours / period</Label><TextInput readOnly value="180.00" onChange={() => {}} /></div>
-                  <div><Label>Capacity utilisation</Label><TextInput readOnly value="100%" onChange={() => {}} /></div>
-                  <div><Label tag="HR">Pay scale group</Label><Select value={r.payScaleGroup} onChange={v => patch({ payScaleGroup: v })} options={["L1", "L2", "L3", "L4"]} /></div>
-                  <div><Label tag="HR">Pay scale level</Label><Select value={r.payScaleLevel} onChange={v => patch({ payScaleLevel: v })} options={["Associate", "Senior Associate", "Lead"]} /></div>
+                  <div><Label>{t("Payroll area")}</Label><TextInput readOnly value="IN01 — India Monthly" onChange={() => {}} /></div>
+                  <div><Label>{t("Working hours / period")}</Label><TextInput readOnly value="180.00" onChange={() => {}} /></div>
+                  <div><Label>{t("Capacity utilisation")}</Label><TextInput readOnly value="100%" onChange={() => {}} /></div>
+                  <div><Label tag="HR">{t("Pay scale group")}</Label><Select value={r.payScaleGroup} onChange={v => patch({ payScaleGroup: v })} options={["L1", "L2", "L3", "L4"]} /></div>
+                  <div><Label tag="HR">{t("Pay scale level")}</Label><Select value={r.payScaleLevel} onChange={v => patch({ payScaleLevel: v })} options={["Associate", "Senior Associate", "Lead"]} /></div>
                   <div>
-                    <Label tag="HR">Basic as % of CTC</Label>
+                    <Label tag="HR">{t("Basic as % of CTC")}</Label>
                     <Select value={`${r.basicPctOfCtc}%`} onChange={v => patch({ basicPctOfCtc: v.replace("%", "") })} options={["35%", "40%", "45%", "50%"]} />
-                    <Helper>The Code on Wages moves this floor toward 50%.</Helper>
+                    <Helper>{t("The Code on Wages moves this floor toward 50%.")}</Helper>
                   </div>
                 </Grid3>
 
                 <div className="mt-5 text-[11.5px] text-slate-500 bg-violet-50 rounded-lg px-3 py-2.5">
-                  Monthly amounts derived from the annual CTC in Employment. Any earning can be overridden; Special Allowance
-                  balances back to CTC and the statutory rows recalculate.
+                  {t("Monthly amounts derived from the annual CTC in Employment. Any earning can be overridden; Special Allowance balances back to CTC and the statutory rows recalculate.")}
                 </div>
 
                 <PayTable
-                  title="Earnings"
+                  title={t("Earnings")}
                   tag={{ text: "HR", tone: "purple" }}
                   rows={[
                     ["1000", "Basic Pay", pay.basic, "40% of CTC"],
@@ -695,7 +707,7 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                   ]}
                 />
                 <PayTable
-                  title="Employer contributions"
+                  title={t("Employer contributions")}
                   tag={{ text: "Statutory", tone: "amber" }}
                   rows={[
                     ["5000", "Employer PF (EPF)", pay.employerPf, "3.67% of Basic+DA, ₹15,000 ceiling", true],
@@ -705,7 +717,7 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                   ]}
                 />
                 <PayTable
-                  title="Statutory deductions"
+                  title={t("Statutory deductions")}
                   tag={{ text: "Statutory", tone: "amber" }}
                   rows={[
                     ["6000", "Employee PF", pay.employeePf, "12% of Basic+DA, ₹15,000 ceiling", true],
@@ -725,8 +737,8 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                   ].map(([label, amt, note]) => (
                     <div key={label as string} className="flex items-center justify-between px-4 py-2.5">
                       <div>
-                        <span className="text-[12.5px] text-slate-700">{label}</span>
-                        {note ? <span className="text-[11px] text-slate-400 ml-2">{note as string}</span> : null}
+                        <span className="text-[12.5px] text-slate-700">{t(String(label))}</span>
+                        {note ? <span className="text-[11px] text-slate-400 ml-2">{t(note as string)}</span> : null}
                       </div>
                       <span className={`text-[13px] font-bold ${Number(amt) < 0 ? "text-red-500" : "text-slate-800"}`}>
                         {Number(amt) < 0 ? `–${inr(Math.abs(Number(amt)))}` : inr(Number(amt))}
@@ -740,13 +752,13 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                   onClick={() => patch({ basicPctOfCtc: "40" })}
                   className="w-full mt-4 py-2.5 rounded-lg border border-slate-200 text-[12.5px] font-semibold text-slate-600"
                 >
-                  Reset to derived amounts
+                  {t("Reset to derived amounts")}
                 </button>
 
-                <SubHead>Employee declarations <Pill tone="blue">HR / Employee</Pill></SubHead>
+                <SubHead>{t("Employee declarations")} <Pill tone="blue">{t("HR / Employee")}</Pill></SubHead>
                 <Grid3>
-                  <div><Label>Tax regime</Label><Select value={r.taxRegime} onChange={v => patch({ taxRegime: v })} options={["New regime (115BAC)", "Old regime"]} /></div>
-                  <div><Label>Payment method</Label><TextInput readOnly value="Bank transfer – NEFT" onChange={() => {}} /></div>
+                  <div><Label>{t("Tax regime")}</Label><Select value={r.taxRegime} onChange={v => patch({ taxRegime: v })} options={["New regime (115BAC)", "Old regime"]} /></div>
+                  <div><Label>{t("Payment method")}</Label><TextInput readOnly value="Bank transfer – NEFT" onChange={() => {}} /></div>
                 </Grid3>
               </>
             )}
@@ -756,92 +768,92 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
               <>
                 <SectionTitle a="Statutory &amp;" b="accounts" sub="Government IDs, provident fund, ESI and bank details." />
                 <div className="mb-5 rounded-lg px-3.5 py-3 text-[12px]" style={{ background: "#f3e8ff", color: "#5b21b6" }}>
-                  <b>Handled as sensitive data —</b> Government IDs and bank details are stored encrypted, masked in the UI by
+                  <b>{t("Handled as sensitive data —")}</b> Government IDs and bank details are stored encrypted, masked in the UI by
                   default, and every reveal is written to the audit log under the DPDP Act 2023.
                 </div>
 
-                <SubHead>Government IDs</SubHead>
+                <SubHead>{t("Government IDs")}</SubHead>
                 <Grid3>
                   <div>
                     <Label required>PAN</Label>
-                    <RevealField value={r.pan} onChange={v => patch({ pan: v.toUpperCase() })} placeholder="ABCDE1234F" />
+                    <RevealField value={r.pan} onChange={v => patch({ pan: v.toUpperCase() })} placeholder={t("ABCDE1234F")} />
                     <AttachButton label="Attach PAN card" />
                   </div>
                   <div>
-                    <Label required>Aadhaar</Label>
-                    <RevealField value={r.aadhaar} onChange={v => patch({ aadhaar: v.replace(/\D/g, "") })} placeholder="XXXX XXXX XXXX" />
+                    <Label required>{t("Aadhaar")}</Label>
+                    <RevealField value={r.aadhaar} onChange={v => patch({ aadhaar: v.replace(/\D/g, "") })} placeholder={t("XXXX XXXX XXXX")} />
                     <AttachButton label="Attach Aadhaar" />
                   </div>
-                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ nameAsPerPan: r.fullName })}>Name as per PAN</Label><TextInput value={r.nameAsPerPan} onChange={v => patch({ nameAsPerPan: v })} /></div>
+                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ nameAsPerPan: r.fullName })}>{t("Name as per PAN")}</Label><TextInput value={r.nameAsPerPan} onChange={v => patch({ nameAsPerPan: v })} /></div>
 
                   <div>
-                    <Label tag="OPTIONAL">Passport number</Label>
+                    <Label tag="OPTIONAL">{t("Passport number")}</Label>
                     <TextInput value={r.passportNumber} onChange={v => patch({ passportNumber: v })} />
                     <AttachButton label="Attach passport" />
                   </div>
-                  <div><Label tag="OPTIONAL">Passport expiry</Label><DateInput value={r.passportExpiry} onChange={v => patch({ passportExpiry: v })} disabled={!r.passportNumber} /></div>
-                  <div><Label>Residential status</Label><Select value={r.residentialStatus} onChange={v => patch({ residentialStatus: v })} options={["Resident", "Non-resident"]} /></div>
+                  <div><Label tag="OPTIONAL">{t("Passport expiry")}</Label><DateInput value={r.passportExpiry} onChange={v => patch({ passportExpiry: v })} disabled={!r.passportNumber} /></div>
+                  <div><Label>{t("Residential status")}</Label><Select value={r.residentialStatus} onChange={v => patch({ residentialStatus: v })} options={["Resident", "Non-resident"]} /></div>
                 </Grid3>
 
-                <SubHead>Provident fund</SubHead>
+                <SubHead>{t("Provident fund")}</SubHead>
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="text-[12.5px] text-slate-700">Covered under PF</span>
+                  <span className="text-[12.5px] text-slate-700">{t("Covered under PF")}</span>
                   <Toggle value={r.pfCovered} onChange={v => patch({ pfCovered: v })} />
                 </div>
                 <Grid3>
                   <div>
                     <Label tag="OPTIONAL">UAN</Label>
                     <TextInput value={r.uan} onChange={v => patch({ uan: v.replace(/\D/g, "") })} />
-                    <Helper>Leave blank for a first job — EPFO will allot one.</Helper>
+                    <Helper>{t("Leave blank for a first job — EPFO will allot one.")}</Helper>
                   </div>
-                  <div><Label tag="OPTIONAL">PF number</Label><TextInput value={r.pfNumber} onChange={v => patch({ pfNumber: v })} /></div>
-                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ nameOnPf: r.fullName })}>Name on PF account</Label><TextInput value={r.nameOnPf} onChange={v => patch({ nameOnPf: v })} /></div>
-                  <div><Label>Contribution</Label><Select value={r.pfContribution} onChange={v => patch({ pfContribution: v })} options={["EPF + EPS", "EPF only"]} /></div>
-                  <div><Label tag="COMPANY">Employer PF code</Label><TextInput readOnly value="BGPF0012345" onChange={() => {}} /></div>
+                  <div><Label tag="OPTIONAL">{t("PF number")}</Label><TextInput value={r.pfNumber} onChange={v => patch({ pfNumber: v })} /></div>
+                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ nameOnPf: r.fullName })}>{t("Name on PF account")}</Label><TextInput value={r.nameOnPf} onChange={v => patch({ nameOnPf: v })} /></div>
+                  <div><Label>{t("Contribution")}</Label><Select value={r.pfContribution} onChange={v => patch({ pfContribution: v })} options={["EPF + EPS", "EPF only"]} /></div>
+                  <div><Label tag="COMPANY">{t("Employer PF code")}</Label><TextInput readOnly value="BGPF0012345" onChange={() => {}} /></div>
                 </Grid3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-5 pt-5 border-t border-slate-100">
                   <div>
                     <div className="text-[10.5px] font-bold tracking-wider uppercase text-slate-400 mb-3">ESI</div>
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="text-[12.5px] text-slate-700">Covered under ESI</span>
+                      <span className="text-[12.5px] text-slate-700">{t("Covered under ESI")}</span>
                       <Toggle value={r.esiCovered} onChange={v => patch({ esiCovered: v })} />
                     </div>
-                    <Helper>Switches on automatically when gross wage falls below the ESI threshold.</Helper>
+                    <Helper>{t("Switches on automatically when gross wage falls below the ESI threshold.")}</Helper>
                   </div>
                   <div>
                     <div className="text-[10.5px] font-bold tracking-wider uppercase text-slate-400 mb-3">Professional tax &amp; LWF</div>
-                    <div className="mb-3"><Label tag="FROM LOCATION">PT state</Label><TextInput readOnly value={r.workLocation ? "Telangana" : ""} onChange={() => {}} /></div>
+                    <div className="mb-3"><Label tag="FROM LOCATION">{t("PT state")}</Label><TextInput readOnly value={r.workLocation ? "Telangana" : ""} onChange={() => {}} /></div>
                     <div className="flex items-center gap-3">
-                      <span className="text-[12.5px] text-slate-700">LWF applicable</span>
+                      <span className="text-[12.5px] text-slate-700">{t("LWF applicable")}</span>
                       <Toggle value={r.lwfApplicable} onChange={v => patch({ lwfApplicable: v })} />
                     </div>
                   </div>
                 </div>
 
-                <SubHead>Bank account</SubHead>
+                <SubHead>{t("Bank account")}</SubHead>
                 <Grid3>
-                  <div><Label required onSuggest={() => patch({ accountHolderName: r.fullName })}>Account holder name</Label><TextInput value={r.accountHolderName} onChange={v => patch({ accountHolderName: v })} /></div>
+                  <div><Label required onSuggest={() => patch({ accountHolderName: r.fullName })}>{t("Account holder name")}</Label><TextInput value={r.accountHolderName} onChange={v => patch({ accountHolderName: v })} /></div>
                   <div>
-                    <Label required>Account number</Label>
+                    <Label required>{t("Account number")}</Label>
                     <RevealField value={r.accountNumber} onChange={v => patch({ accountNumber: v.replace(/\D/g, "") })} />
                     <AttachButton label="Attach cancelled cheque" />
                   </div>
                   <div>
-                    <Label required>Confirm account number</Label>
+                    <Label required>{t("Confirm account number")}</Label>
                     <TextInput value={r.confirmAccountNumber} onChange={v => patch({ confirmAccountNumber: v.replace(/\D/g, "") })} />
                     {r.confirmAccountNumber && (
                       r.confirmAccountNumber === r.accountNumber
-                        ? <Helper tone="green">Matches</Helper>
+                        ? <Helper tone="green">{t("Matches")}</Helper>
                         : <Helper tone="red">Account numbers don&apos;t match.</Helper>
                     )}
                   </div>
                   <div>
-                    <Label required>IFSC code</Label>
+                    <Label required>{t("IFSC code")}</Label>
                     <TextInput value={r.ifscCode} onChange={v => patch({ ifscCode: v.toUpperCase() })} />
-                    {/^[A-Z]{4}0[A-Z0-9]{6}$/.test(r.ifscCode) && <Helper tone="green">Detected: HDFC Bank</Helper>}
+                    {/^[A-Z]{4}0[A-Z0-9]{6}$/.test(r.ifscCode) && <Helper tone="green">{t("Detected: HDFC Bank")}</Helper>}
                   </div>
-                  <div><Label tag="FROM IFSC">Bank</Label><TextInput readOnly value={/^[A-Z]{4}0[A-Z0-9]{6}$/.test(r.ifscCode) ? "HDFC Bank" : ""} onChange={() => {}} /></div>
+                  <div><Label tag="FROM IFSC">{t("Bank")}</Label><TextInput readOnly value={/^[A-Z]{4}0[A-Z0-9]{6}$/.test(r.ifscCode) ? "HDFC Bank" : ""} onChange={() => {}} /></div>
                 </Grid3>
               </>
             )}
@@ -851,45 +863,45 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
               <>
                 <SectionTitle a="Family &amp;" b="nomination" sub="Dependants, EPF nominees and guardian details." />
 
-                <SubHead>Family members</SubHead>
+                <SubHead>{t("Family members")}</SubHead>
                 <Helper>Nominees are chosen from this list, and the parents&apos; names on step 1 are filled from it. Add family before setting nominations.</Helper>
                 <div className="mt-3">
                   {r.familyMembers.map(m => (
                     <RepeatCard key={m.id} label="Family member" onRemove={() => patch({ familyMembers: r.familyMembers.filter(x => x.id !== m.id), nominees: r.nominees.filter(n => n.familyMemberId !== m.id) })}>
                       <Grid3>
-                        <div><Label>Name</Label><TextInput value={m.name} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, name: v } : x) })} placeholder="Full name" /></div>
-                        <div><Label>Relationship</Label><Select value={m.relationship} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, relationship: v } : x) })} options={RELATIONSHIPS} /></div>
-                        <div><Label>Date of birth</Label><DateInput value={m.dob} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, dob: v } : x) })} /></div>
-                        <div><Label>Gender</Label><Select value={m.gender} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, gender: v } : x) })} options={["Male", "Female", "Other"]} /></div>
-                        <div><Label>Blood group</Label><TextInput value={m.bloodGroup} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, bloodGroup: v } : x) })} placeholder="e.g. O+" /></div>
-                        <div><Label>Dependent</Label><Select value={m.isDependent === "yes" ? "Yes" : "No"} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, isDependent: v === "Yes" ? "yes" : "no" } : x) })} options={["Yes", "No"]} /></div>
+                        <div><Label>{t("Name")}</Label><TextInput value={m.name} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, name: v } : x) })} placeholder={t("Full name")} /></div>
+                        <div><Label>{t("Relationship")}</Label><Select value={m.relationship} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, relationship: v } : x) })} options={RELATIONSHIPS} /></div>
+                        <div><Label>{t("Date of birth")}</Label><DateInput value={m.dob} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, dob: v } : x) })} /></div>
+                        <div><Label>{t("Gender")}</Label><Select value={m.gender} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, gender: v } : x) })} options={["Male", "Female", "Other"]} /></div>
+                        <div><Label>{t("Blood group")}</Label><TextInput value={m.bloodGroup} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, bloodGroup: v } : x) })} placeholder={t("e.g. O+")} /></div>
+                        <div><Label>{t("Dependent")}</Label><Select value={m.isDependent === "yes" ? "Yes" : "No"} onChange={v => patch({ familyMembers: r.familyMembers.map(x => x.id === m.id ? { ...x, isDependent: v === "Yes" ? "yes" : "no" } : x) })} options={["Yes", "No"]} /></div>
                       </Grid3>
                     </RepeatCard>
                   ))}
                   <AddButton label="Add family member" onClick={() => patch({ familyMembers: [...r.familyMembers, { id: nextId(), name: "", relationship: "", dob: "", gender: "", bloodGroup: "", isDependent: "no" }] })} />
                 </div>
 
-                <SubHead>Nomination</SubHead>
-                <Helper>Required for EPF Form 2. Nominees are picked from the family list, so a name is only typed once. Each scheme should total 100%.</Helper>
+                <SubHead>{t("Nomination")}</SubHead>
+                <Helper>{t("Required for EPF Form 2. Nominees are picked from the family list, so a name is only typed once. Each scheme should total 100%.")}</Helper>
                 <div className="mt-3">
                   {r.nominees.map(n => (
                     <RepeatCard key={n.id} label="Nominee" onRemove={() => patch({ nominees: r.nominees.filter(x => x.id !== n.id) })}>
                       <Grid3>
                         <div>
-                          <Label>Nominee</Label>
-                          <Select value={familyName(n.familyMemberId)} onChange={() => {}} options={r.familyMembers.map(m => `${m.name} (${m.relationship})`)} placeholder="Select from family" />
+                          <Label>{t("Nominee")}</Label>
+                          <Select value={familyName(n.familyMemberId)} onChange={() => {}} options={r.familyMembers.map(m => `${m.name} (${m.relationship})`)} placeholder={t("Select from family")} />
                           <select
                             className="sr-only"
                             value={n.familyMemberId}
                             onChange={e => patch({ nominees: r.nominees.map(x => x.id === n.id ? { ...x, familyMemberId: e.target.value } : x) })}
                           >
-                            <option value="">Select from family</option>
+                            <option value="">{t("Select from family")}</option>
                             {r.familyMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({m.relationship})</option>)}
                           </select>
                         </div>
-                        <div><Label tag="AUTO">Relationship</Label><TextInput readOnly value={familyRelationship(n.familyMemberId) ? `From family record — ${familyRelationship(n.familyMemberId)}` : "From family record"} onChange={() => {}} /></div>
-                        <div><Label>Scheme</Label><Select value={n.scheme} onChange={v => patch({ nominees: r.nominees.map(x => x.id === n.id ? { ...x, scheme: v } : x) })} options={SCHEMES} /></div>
-                        <div><Label>Share %</Label><TextInput type="number" value={n.sharePercent} onChange={v => patch({ nominees: r.nominees.map(x => x.id === n.id ? { ...x, sharePercent: v } : x) })} /></div>
+                        <div><Label tag="AUTO">{t("Relationship")}</Label><TextInput readOnly value={familyRelationship(n.familyMemberId) ? `From family record — ${familyRelationship(n.familyMemberId)}` : "From family record"} onChange={() => {}} /></div>
+                        <div><Label>{t("Scheme")}</Label><Select value={n.scheme} onChange={v => patch({ nominees: r.nominees.map(x => x.id === n.id ? { ...x, scheme: v } : x) })} options={SCHEMES} /></div>
+                        <div><Label>{t("Share %")}</Label><TextInput type="number" value={n.sharePercent} onChange={v => patch({ nominees: r.nominees.map(x => x.id === n.id ? { ...x, sharePercent: v } : x) })} /></div>
                       </Grid3>
                     </RepeatCard>
                   ))}
@@ -901,12 +913,12 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                   </div>
                 </div>
 
-                <SubHead>Guardian</SubHead>
-                <Helper>Only required if a nominee above is under 18.</Helper>
+                <SubHead>{t("Guardian")}</SubHead>
+                <Helper>{t("Only required if a nominee above is under 18.")}</Helper>
                 <Grid3>
-                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ guardianName: "" })}>Guardian name</Label><TextInput value={r.guardianName} onChange={v => patch({ guardianName: v })} /></div>
-                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ guardianRelationship: "" })}>Relationship</Label><TextInput value={r.guardianRelationship} onChange={v => patch({ guardianRelationship: v })} /></div>
-                  <div><Label tag="OPTIONAL">Guardian address</Label><TextInput value={r.guardianAddress} onChange={v => patch({ guardianAddress: v })} /></div>
+                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ guardianName: "" })}>{t("Guardian name")}</Label><TextInput value={r.guardianName} onChange={v => patch({ guardianName: v })} /></div>
+                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ guardianRelationship: "" })}>{t("Relationship")}</Label><TextInput value={r.guardianRelationship} onChange={v => patch({ guardianRelationship: v })} /></div>
+                  <div><Label tag="OPTIONAL">{t("Guardian address")}</Label><TextInput value={r.guardianAddress} onChange={v => patch({ guardianAddress: v })} /></div>
                 </Grid3>
               </>
             )}
@@ -914,7 +926,7 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
             {/* 6. Education & experience */}
             {step === 5 && (
               <>
-                <SectionTitle a="Education &amp;" b="experience" sub="Qualifications and previous employers." />
+                <SectionTitle a="Education &" b="experience" sub="Qualifications and previous employers." />
 
                 <SummaryStrip items={[
                   ["Qualifications", String(r.qualifications.length)],
@@ -924,7 +936,7 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                   ["Grade", r.qualifications.find(q => q.isHighest)?.gradeOrPercentage ?? "—"],
                   ["Completed", r.qualifications.find(q => q.isHighest)?.endDate ?? "—"],
                 ]} />
-                <Helper>Add at least one qualification. Mark the highest so reports can group by it.</Helper>
+                <Helper>{t("Add at least one qualification. Mark the highest so reports can group by it.")}</Helper>
                 <div className="mt-3">
                   {r.qualifications.map(q => (
                     <RepeatCard
@@ -932,18 +944,18 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                       extra={
                         <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
                           <input type="checkbox" checked={q.isHighest} onChange={() => patch({ qualifications: r.qualifications.map(x => ({ ...x, isHighest: x.id === q.id })) })} />
-                          Highest
+                          {t("Highest")}
                         </label>
                       }
                       onRemove={() => patch({ qualifications: r.qualifications.filter(x => x.id !== q.id) })}
                     >
                       <Grid3>
-                        <div><Label>Education level</Label><Select value={q.level} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, level: v } : x) })} options={["Bachelor's", "Master's", "Doctorate", "Diploma"]} /></div>
-                        <div><Label>Institution</Label><TextInput value={q.institution} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, institution: v } : x) })} placeholder="Institution name" /></div>
-                        <div><Label tag="OPTIONAL">Specialization</Label><TextInput value={q.specialization} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, specialization: v } : x) })} /></div>
-                        <div><Label>Percentage / grade</Label><TextInput value={q.gradeOrPercentage} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, gradeOrPercentage: v } : x) })} placeholder="e.g. 72% or CGPA" /></div>
-                        <div><Label>Start date</Label><DateInput value={q.startDate} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, startDate: v } : x) })} /></div>
-                        <div><Label>End date</Label><DateInput value={q.endDate} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, endDate: v } : x) })} /></div>
+                        <div><Label>{t("Education level")}</Label><Select value={q.level} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, level: v } : x) })} options={["Bachelor's", "Master's", "Doctorate", "Diploma"]} /></div>
+                        <div><Label>{t("Institution")}</Label><TextInput value={q.institution} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, institution: v } : x) })} placeholder={t("Institution name")} /></div>
+                        <div><Label tag="OPTIONAL">{t("Specialization")}</Label><TextInput value={q.specialization} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, specialization: v } : x) })} /></div>
+                        <div><Label>{t("Percentage / grade")}</Label><TextInput value={q.gradeOrPercentage} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, gradeOrPercentage: v } : x) })} placeholder={t("e.g. 72% or CGPA")} /></div>
+                        <div><Label>{t("Start date")}</Label><DateInput value={q.startDate} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, startDate: v } : x) })} /></div>
+                        <div><Label>{t("End date")}</Label><DateInput value={q.endDate} onChange={v => patch({ qualifications: r.qualifications.map(x => x.id === q.id ? { ...x, endDate: v } : x) })} /></div>
                       </Grid3>
                       <AttachButton label="Attach certificate" />
                     </RepeatCard>
@@ -951,28 +963,28 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                   <AddButton label="Add qualification" onClick={() => patch({ qualifications: [...r.qualifications, { id: nextId(), level: "", institution: "", specialization: "", gradeOrPercentage: "", startDate: "", endDate: "", isHighest: false }] })} />
                 </div>
 
-                <SubHead>Work experience</SubHead>
+                <SubHead>{t("Work experience")}</SubHead>
                 <SummaryStrip items={[
                   ["Employers", String(r.experiences.length)],
                   ["Total experience", totalExperienceLabel],
                   ["Most recent", r.experiences[0] ? `${r.experiences[0].designation} · ${r.experiences[0].employer}` : "—"],
                   ["Last working day", r.experiences[0]?.lastWorkingDay ?? "—"],
                 ]} />
-                <Helper>Leave empty for a fresher — total experience reads zero. Experience is counted up to the joining date.</Helper>
+                <Helper>{t("Leave empty for a fresher — total experience reads zero. Experience is counted up to the joining date.")}</Helper>
                 <div className="mt-3">
                   {r.experiences.map(e => (
                     <RepeatCard key={e.id} label="Experience" onRemove={() => patch({ experiences: r.experiences.filter(x => x.id !== e.id) })}>
                       <Grid3>
-                        <div><Label>Employer</Label><TextInput value={e.employer} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, employer: v } : x) })} placeholder="Company name" /></div>
-                        <div><Label>Designation</Label><TextInput value={e.designation} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, designation: v } : x) })} placeholder="Job title" /></div>
-                        <div><Label>Employment type</Label><Select value={e.employmentType} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, employmentType: v } : x) })} options={["Full-time", "Part-time", "Contract", "Internship"]} /></div>
-                        <div><Label>Start date</Label><DateInput value={e.startDate} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, startDate: v } : x) })} /></div>
+                        <div><Label>{t("Employer")}</Label><TextInput value={e.employer} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, employer: v } : x) })} placeholder={t("Company name")} /></div>
+                        <div><Label>{t("Designation")}</Label><TextInput value={e.designation} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, designation: v } : x) })} placeholder={t("Job title")} /></div>
+                        <div><Label>{t("Employment type")}</Label><Select value={e.employmentType} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, employmentType: v } : x) })} options={["Full-time", "Part-time", "Contract", "Internship"]} /></div>
+                        <div><Label>{t("Start date")}</Label><DateInput value={e.startDate} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, startDate: v } : x) })} /></div>
                         <div>
-                          <Label>Last working day</Label>
+                          <Label>{t("Last working day")}</Label>
                           <DateInput value={e.lastWorkingDay} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, lastWorkingDay: v } : x) })} />
-                          <Helper>Actual, or expected if serving notice.</Helper>
+                          <Helper>{t("Actual, or expected if serving notice.")}</Helper>
                         </div>
-                        <div><Label tag="OPTIONAL">Reason for leaving</Label><TextInput value={e.reason} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, reason: v } : x) })} /></div>
+                        <div><Label tag="OPTIONAL">{t("Reason for leaving")}</Label><TextInput value={e.reason} onChange={v => patch({ experiences: r.experiences.map(x => x.id === e.id ? { ...x, reason: v } : x) })} /></div>
                       </Grid3>
                       <AttachButton label="Attach experience letter" />
                     </RepeatCard>
@@ -983,11 +995,11 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
                 <SubHead>Skills &amp; certifications</SubHead>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div className="md:col-span-2">
-                    <Label tag="OPTIONAL">Core skills</Label>
-                    <TextInput value={r.coreSkills} onChange={v => patch({ coreSkills: v })} placeholder="e.g. React, payroll operations, team leadership" />
+                    <Label tag="OPTIONAL">{t("Core skills")}</Label>
+                    <TextInput value={r.coreSkills} onChange={v => patch({ coreSkills: v })} placeholder={t("e.g. React, payroll operations, team leadership")} />
                     <Helper>Use comma-separated skills; keep this relevant to the role.</Helper>
                   </div>
-                  <div><Label tag="OPTIONAL">Certifications</Label><TextInput value={r.certifications} onChange={v => patch({ certifications: v })} placeholder="Certification and year" /></div>
+                  <div><Label tag="OPTIONAL">{t("Certifications")}</Label><TextInput value={r.certifications} onChange={v => patch({ certifications: v })} placeholder={t("Certification and year")} /></div>
                 </div>
               </>
             )}
@@ -997,33 +1009,32 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
               <>
                 <SectionTitle a="Joining" b="documents" sub="Upload the paperwork needed to complete onboarding." />
                 <Helper>
-                  PDF, JPG or PNG, max 5 MB each. Anything already attached beside its field in an earlier step shows here
-                  automatically — no need to upload it twice. Remaining items can also be completed after the record is created.
+                  {t("PDF, JPG or PNG, max 5 MB each. Anything already attached beside its field in an earlier step shows here automatically — no need to upload it twice. Remaining items can also be completed after the record is created.")}
                 </Helper>
 
-                <DocGroup title="Identity" docs={[
+                <DocGroup title={t("Identity")} docs={[
                   { name: "PAN Card", required: true, uploaded: !!r.pan },
                   { name: "Aadhaar Card", required: true, uploaded: !!r.aadhaar },
                   { name: "Passport", required: false, uploaded: !!r.passportNumber },
                 ]} />
-                <DocGroup title="Education & experience" docs={[
+                <DocGroup title={t("Education & experience")} docs={[
                   { name: "Degree Certificate", required: true, uploaded: r.qualifications.length > 0 },
                   { name: "Experience Letter", required: false, uploaded: false },
                 ]} />
-                <DocGroup title="Financial" docs={[
+                <DocGroup title={t("Financial")} docs={[
                   { name: "Cancelled Cheque", required: true, uploaded: !!r.accountNumber },
                   { name: "Latest Payslips", required: false, uploaded: false },
                 ]} />
-                <DocGroup title="Onboarding" docs={[
+                <DocGroup title={t("Onboarding")} docs={[
                   { name: "Signed Offer Letter", required: true, uploaded: false },
                   { name: "Address Proof", required: false, uploaded: false },
                 ]} />
 
-                <SubHead>Background verification</SubHead>
+                <SubHead>{t("Background verification")}</SubHead>
                 <Grid3>
-                  <div><Label>Verification status</Label><Select value={r.verificationStatus} onChange={v => patch({ verificationStatus: v })} options={["Not initiated", "In progress", "Verified", "Failed"]} /></div>
-                  <div><Label tag="IF VERIFIED">Completed on</Label><DateInput value={r.verificationCompletedOn} onChange={v => patch({ verificationCompletedOn: v })} disabled={r.verificationStatus !== "Verified"} /></div>
-                  <div><Label tag="OPTIONAL">Provider / case reference</Label><TextInput value={r.verificationProvider} onChange={v => patch({ verificationProvider: v })} placeholder="Agency and reference" /></div>
+                  <div><Label>{t("Verification status")}</Label><Select value={r.verificationStatus} onChange={v => patch({ verificationStatus: v })} options={["Not initiated", "In progress", "Verified", "Failed"]} /></div>
+                  <div><Label tag="IF VERIFIED">{t("Completed on")}</Label><DateInput value={r.verificationCompletedOn} onChange={v => patch({ verificationCompletedOn: v })} disabled={r.verificationStatus !== "Verified"} /></div>
+                  <div><Label tag="OPTIONAL">{t("Provider / case reference")}</Label><TextInput value={r.verificationProvider} onChange={v => patch({ verificationProvider: v })} placeholder={t("Agency and reference")} /></div>
                 </Grid3>
               </>
             )}
@@ -1032,25 +1043,25 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
             {step === 7 && (
               <>
                 <SectionTitle a="Assets" b="to issue" sub="Laptop, phone and access card for day one." />
-                <Helper>Optional at hiring time — assets are usually issued on the joining date.</Helper>
+                <Helper>{t("Optional at hiring time — assets are usually issued on the joining date.")}</Helper>
                 <div className="mt-3">
                   {r.assets.map(a => (
                     <RepeatCard key={a.id} label="Asset" onRemove={() => patch({ assets: r.assets.filter(x => x.id !== a.id) })}>
                       <Grid3>
-                        <div><Label>Asset</Label><Select value={a.assetType} onChange={v => patch({ assets: r.assets.map(x => x.id === a.id ? { ...x, assetType: v } : x) })} options={["Laptop", "Phone", "Monitor", "Headset", "SIM card"]} /></div>
-                        <div><Label>Tag / serial</Label><TextInput value={a.tagNumber} onChange={v => patch({ assets: r.assets.map(x => x.id === a.id ? { ...x, tagNumber: v } : x) })} /></div>
-                        <div><Label>Condition</Label><Select value={a.condition} onChange={v => patch({ assets: r.assets.map(x => x.id === a.id ? { ...x, condition: v } : x) })} options={["New", "Refurbished", "Used"]} /></div>
+                        <div><Label>{t("Asset")}</Label><Select value={a.assetType} onChange={v => patch({ assets: r.assets.map(x => x.id === a.id ? { ...x, assetType: v } : x) })} options={["Laptop", "Phone", "Monitor", "Headset", "SIM card"]} /></div>
+                        <div><Label>{t("Tag / serial")}</Label><TextInput value={a.tagNumber} onChange={v => patch({ assets: r.assets.map(x => x.id === a.id ? { ...x, tagNumber: v } : x) })} /></div>
+                        <div><Label>{t("Condition")}</Label><Select value={a.condition} onChange={v => patch({ assets: r.assets.map(x => x.id === a.id ? { ...x, condition: v } : x) })} options={["New", "Refurbished", "Used"]} /></div>
                       </Grid3>
                     </RepeatCard>
                   ))}
                   <AddButton label="Issue an asset" onClick={() => patch({ assets: [...r.assets, { id: nextId(), assetType: "", tagNumber: "", condition: "New" }] })} />
                 </div>
 
-                <SubHead>Access card</SubHead>
+                <SubHead>{t("Access card")}</SubHead>
                 <Grid3>
-                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ cardNumber: "AC-" + Math.floor(Math.random() * 90000 + 10000) })}>Card number</Label><TextInput value={r.cardNumber} onChange={v => patch({ cardNumber: v })} placeholder="Auto-generated if left blank" /></div>
-                  <div><Label>Valid from</Label><DateInput value={r.cardValidFrom} onChange={v => patch({ cardValidFrom: v })} /></div>
-                  <div><Label>Valid till</Label><DateInput value={r.cardValidTill} onChange={v => patch({ cardValidTill: v })} /></div>
+                  <div><Label tag="OPTIONAL" onSuggest={() => patch({ cardNumber: "AC-" + Math.floor(Math.random() * 90000 + 10000) })}>{t("Card number")}</Label><TextInput value={r.cardNumber} onChange={v => patch({ cardNumber: v })} placeholder={t("Auto-generated if left blank")} /></div>
+                  <div><Label>{t("Valid from")}</Label><DateInput value={r.cardValidFrom} onChange={v => patch({ cardValidFrom: v })} /></div>
+                  <div><Label>{t("Valid till")}</Label><DateInput value={r.cardValidTill} onChange={v => patch({ cardValidTill: v })} /></div>
                 </Grid3>
               </>
             )}
@@ -1059,14 +1070,14 @@ export default function EditRecordModalMock({ onClose }: { onClose: () => void }
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-3.5 border-t border-slate-100 bg-slate-50/60">
-          <button onClick={() => { setR(seedDemoRecord()); setDirty(false); }} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-slate-600">Discard</button>
-          <button onClick={handleClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-slate-600">Cancel</button>
+          <button onClick={() => { setR(seedDemoRecord()); setDirty(false); }} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-slate-600">{t("Discard")}</button>
+          <button onClick={handleClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold text-slate-600">{t("Cancel")}</button>
           <button
             onClick={() => setDirty(false)}
             className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white"
             style={{ background: PURPLE }}
           >
-            Save changes
+            {t("Save changes")}
           </button>
         </div>
       </div>
@@ -1084,28 +1095,29 @@ function addMonths(dateStr: string, months: number): string {
 }
 
 function PayTable({ title, tag, rows }: { title: string; tag: { text: string; tone: "purple" | "amber" }; rows: [string, string, number, string, boolean?][] }) {
+  const t = useT();
   const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
   return (
     <div className="mt-5">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[10.5px] font-bold tracking-wider uppercase text-slate-400">{title}</span>
-        <Pill tone={tag.tone}>{tag.text}</Pill>
+        <Pill tone={tag.tone}>{t(tag.text)}</Pill>
       </div>
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         <div className="grid grid-cols-[60px_1fr_120px_1fr_70px] gap-2 px-3 py-2 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-          <span>Code</span><span>Description</span><span className="text-right">Amount (₹)</span><span>Basis</span><span />
+          <span>{t("Code")}</span><span>{t("Description")}</span><span className="text-right">{t("Amount (₹)")}</span><span>{t("Basis")}</span><span />
         </div>
         {rows.map(([code, desc, amt, basis, readOnly]) => (
           <div key={code} className="grid grid-cols-[60px_1fr_120px_1fr_70px] gap-2 px-3 py-2 border-t border-slate-100 items-center">
             <span className="text-[12px] font-semibold" style={{ color: PURPLE }}>{code}</span>
-            <span className="text-[12.5px] text-slate-700">{desc}</span>
+            <span className="text-[12.5px] text-slate-700">{t(desc)}</span>
             {readOnly ? (
               <span className="text-[12.5px] text-slate-500 text-right">{inr(amt)}</span>
             ) : (
               <input type="number" defaultValue={Math.round(amt)} className="h-8 rounded-md border border-slate-200 px-2 text-[12.5px] text-right" />
             )}
-            <span className="text-[11px] text-slate-400">{basis}</span>
-            <span className="flex justify-end"><Pill tone={readOnly ? "amber" : "purple"}>{readOnly ? "Auto" : "HR"}</Pill></span>
+            <span className="text-[11px] text-slate-400">{t(basis)}</span>
+            <span className="flex justify-end"><Pill tone={readOnly ? "amber" : "purple"}>{readOnly ? t("Auto") : "HR"}</Pill></span>
           </div>
         ))}
       </div>
@@ -1114,11 +1126,12 @@ function PayTable({ title, tag, rows }: { title: string; tag: { text: string; to
 }
 
 function SummaryStrip({ items }: { items: [string, string][] }) {
+  const t = useT();
   return (
     <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg px-3.5 py-2.5 mb-2" style={{ background: "#f3e8ff" }}>
       {items.map(([label, value]) => (
         <div key={label}>
-          <div className="text-[9px] font-bold tracking-wider uppercase" style={{ color: PURPLE }}>{label}</div>
+          <div className="text-[9px] font-bold tracking-wider uppercase" style={{ color: PURPLE }}>{t(label)}</div>
           <div className="text-[12.5px] font-semibold text-slate-700">{value}</div>
         </div>
       ))}
@@ -1127,6 +1140,7 @@ function SummaryStrip({ items }: { items: [string, string][] }) {
 }
 
 function DocGroup({ title, docs }: { title: string; docs: { name: string; required: boolean; uploaded: boolean }[] }) {
+  const t = useT();
   return (
     <div className="mt-4">
       <div className="text-[10.5px] font-bold tracking-wider uppercase text-slate-400 mb-2">{title}</div>
@@ -1134,12 +1148,12 @@ function DocGroup({ title, docs }: { title: string; docs: { name: string; requir
         {docs.map(d => (
           <div key={d.name} className="flex items-center justify-between rounded-lg border border-slate-200 px-3.5 py-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-[12.5px] text-slate-700">{d.name}</span>
-              <Pill tone={d.required ? "red" : "grey"}>{d.required ? "Required" : "Optional"}</Pill>
+              <span className="text-[12.5px] text-slate-700">{t(d.name)}</span>
+              <Pill tone={d.required ? "red" : "grey"}>{d.required ? t("Required") : t("Optional")}</Pill>
             </div>
             <div className="flex items-center gap-3">
-              <Pill tone={d.uploaded ? "green" : "amber"}>{d.uploaded ? "Uploaded" : "Pending"}</Pill>
-              <button type="button" className="px-2.5 py-1 rounded-md border border-slate-200 text-[11px] text-slate-600">Choose file</button>
+              <Pill tone={d.uploaded ? "green" : "amber"}>{d.uploaded ? t("Uploaded") : t("Pending")}</Pill>
+              <button type="button" className="px-2.5 py-1 rounded-md border border-slate-200 text-[11px] text-slate-600">{t("Choose file")}</button>
             </div>
           </div>
         ))}

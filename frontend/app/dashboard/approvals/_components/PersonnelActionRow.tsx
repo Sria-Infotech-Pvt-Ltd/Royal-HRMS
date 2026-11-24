@@ -5,6 +5,8 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import type { PersonnelActionRequest } from "@/types/personnelAction";
 import { personnelEffective, personnelValuesSummary } from "./personnelActionFormat";
 
@@ -19,10 +21,11 @@ const STATE_CLASS: Record<string, string> = {
 
 function errorMessage(error: unknown): string {
   return (error as { response?: { data?: { message?: string } } })?.response?.data?.message
-    ?? "Something went wrong. Please try again.";
+    ?? tr("Something went wrong. Please try again.");
 }
 
 export default function PersonnelActionRow({ request: r, onChanged }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
   const [rejecting, setRejecting] = useState(false);
@@ -35,9 +38,9 @@ export default function PersonnelActionRow({ request: r, onChanged }: Props) {
       const { data } = await clientApi.post<{ data: PersonnelActionRequest }>(API.actionRequests.approve(r.id), {});
       const status = data.data.status;
       showToast(
-        status === "applied" ? `${r.action_label} approved and applied.`
-          : status === "failed" ? "Approved, but the change could not be applied — see the request."
-          : `Approved. Now with ${data.data.current_step_label}.`,
+        status === "applied" ? t("{action} approved and applied.", { action: r.action_label })
+          : status === "failed" ? t("Approved, but the change could not be applied — see the request.")
+          : t("Approved. Now with {step}.", { step: data.data.current_step_label }),
         status === "failed" ? "error" : "success",
       );
       onChanged();
@@ -49,11 +52,11 @@ export default function PersonnelActionRow({ request: r, onChanged }: Props) {
   }
 
   async function reject() {
-    if (!note.trim()) { setNoteError("Add a reason so the person who raised it knows what to change."); return; }
+    if (!note.trim()) { setNoteError(t("Add a reason so the person who raised it knows what to change.")); return; }
     setBusy(true);
     try {
       await clientApi.post(API.actionRequests.reject(r.id), { note: note.trim() });
-      showToast(`${r.action_label} rejected.`, "success");
+      showToast(t("{action} rejected.", { action: r.action_label }), "success");
       setRejecting(false);
       setNote("");
       onChanged();
@@ -68,7 +71,7 @@ export default function PersonnelActionRow({ request: r, onChanged }: Props) {
     setBusy(true);
     try {
       await clientApi.post(API.actionRequests.cancel(r.id), {});
-      showToast(`${r.action_label} cancelled.`, "success");
+      showToast(t("{action} cancelled.", { action: r.action_label }), "success");
       onChanged();
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -86,11 +89,11 @@ export default function PersonnelActionRow({ request: r, onChanged }: Props) {
       <span>
         {r.action_label}
         <br /><small style={{ color: "var(--muted)" }}>{personnelValuesSummary(r) || r.reason}</small>
-        <br /><small style={{ color: "var(--faint)" }}>Route: {r.route}</small>
+        <br /><small style={{ color: "var(--faint)" }}>{t("Route: {route}", { route: r.route })}</small>
       </span>
       <span>{personnelEffective(r.effective_from)}</span>
       <span>
-        {r.status === "pending" ? r.current_step_label : `Raised by ${r.raised_by_name}`}
+        {r.status === "pending" ? r.current_step_label : t("Raised by {name}", { name: r.raised_by_name })}
         <br /><span className={`state ${STATE_CLASS[r.status] ?? ""}`}>{r.status_display}</span>
         {r.status === "rejected" && r.decision_note && <><br /><small style={{ color: "var(--crit)" }}>{r.decision_note}</small></>}
         {r.status === "failed" && r.apply_error && <><br /><small style={{ color: "var(--crit)" }}>{r.apply_error}</small></>}
@@ -98,31 +101,31 @@ export default function PersonnelActionRow({ request: r, onChanged }: Props) {
       <span className="case-actions" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {r.can_decide && (
           <>
-            <button className="btn btn-filled btn-sm" disabled={busy} onClick={approve} type="button">Approve</button>
-            <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => setRejecting(true)} type="button">Reject</button>
+            <button className="btn btn-filled btn-sm" disabled={busy} onClick={approve} type="button">{t("Approve")}</button>
+            <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => setRejecting(true)} type="button">{t("Reject")}</button>
           </>
         )}
         {r.can_cancel && !r.can_decide && (
-          <button className="btn btn-outline btn-sm" disabled={busy} onClick={cancel} type="button">Cancel request</button>
+          <button className="btn btn-outline btn-sm" disabled={busy} onClick={cancel} type="button">{t("Cancel request")}</button>
         )}
       </span>
 
       {rejecting && (
         <Modal
-          title={<h2 className="modal-title">Reject <em style={{ color: "var(--brand-ink)" }}>{r.action_label.toLowerCase()}</em></h2>}
+          title={<h2 className="modal-title">{t("Reject")} <em style={{ color: "var(--brand-ink)" }}>{r.action_label.toLowerCase()}</em></h2>}
           onClose={() => { setRejecting(false); setNoteError(""); }}
           closeDisabled={busy}
           footer={
             <>
-              <button className="btn btn-ghost" disabled={busy} onClick={() => setRejecting(false)} type="button">Cancel</button>
-              <button className="btn btn-filled" disabled={busy} onClick={reject} type="button">{busy ? "Rejecting…" : "Reject request"}</button>
+              <button className="btn btn-ghost" disabled={busy} onClick={() => setRejecting(false)} type="button">{t("Cancel")}</button>
+              <button className="btn btn-filled" disabled={busy} onClick={reject} type="button">{busy ? t("Rejecting…") : t("Reject request")}</button>
             </>
           }
         >
           <p className="hint" style={{ marginBottom: 10 }}>{r.employee.name} · {r.employee.code} — {personnelValuesSummary(r)}</p>
           <div className="f">
-            <label>Reason <span className="req">*</span></label>
-            <textarea className="finput" rows={3} value={note} onChange={e => { setNote(e.target.value); setNoteError(""); }} placeholder="What should be changed or reconsidered?" />
+            <label>{t("Reason")} <span className="req">*</span></label>
+            <textarea className="finput" rows={3} value={note} onChange={e => { setNote(e.target.value); setNoteError(""); }} placeholder={t("What should be changed or reconsidered?")} />
             {noteError && <span className="errtxt" style={{ display: "block" }}>{noteError}</span>}
           </div>
         </Modal>

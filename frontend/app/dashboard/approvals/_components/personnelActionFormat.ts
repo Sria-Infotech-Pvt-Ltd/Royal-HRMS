@@ -1,10 +1,11 @@
 import { formatDate } from "@/lib/formatDate";
+import { tr } from "@/lib/i18n/tr";
 import type { PersonnelActionRequest } from "@/types/personnelAction";
 
 export function personnelValuesSummary(r: PersonnelActionRequest): string {
   const labels: Record<string, string> = {
-    position: "Position", annual_ctc: "Annual CTC", reporting_manager: "Reporting manager",
-    work_location: "Work location", employment_status: "Status",
+    position: tr("Position"), annual_ctc: tr("Annual CTC"), reporting_manager: tr("Reporting manager"),
+    work_location: tr("Work location"), employment_status: tr("Status"),
   };
   return Object.entries(r.after).map(([key, value]) => {
     const before = r.before[key as keyof typeof r.before] ?? "—";

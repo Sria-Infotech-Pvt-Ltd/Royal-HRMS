@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { SendWishModal, type SendWishTarget } from "./SendWishModal";
@@ -38,6 +39,7 @@ function EntryRow({
   sentIds:     Set<string>;
   onOpenModal: (target: SendWishTarget) => void;
 }) {
+  const t = useT();
   const alreadySent = sentIds.has(entry.employee_id);
 
   return (
@@ -62,8 +64,8 @@ function EntryRow({
         <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
           {entry.designation} · {entry.department}
           {isToday
-            ? ` · Turning ${getAge(entry.date_of_birth)}`
-            : ` · In ${entry.days_until} day${entry.days_until === 1 ? "" : "s"}`}
+            ? ` · ${t("Turning {age}", { age: getAge(entry.date_of_birth) })}`
+            : ` · ${entry.days_until === 1 ? t("In {count} day", { count: entry.days_until }) : t("In {count} days", { count: entry.days_until })}`}
         </div>
       </div>
 
@@ -83,7 +85,7 @@ function EntryRow({
           })}
         >
           <i className={`ti ${alreadySent ? "ti-send" : "ti-cake"}`} />
-          {alreadySent ? "Resend" : "Send Wish"}
+          {alreadySent ? t("Resend") : t("Send Wish")}
         </button>
       </div>
     </div>
@@ -91,6 +93,7 @@ function EntryRow({
 }
 
 export default function BirthdayWidget() {
+  const t = useT();
   const [data,    setData]    = useState<{ today: BirthdayEntry[]; upcoming: BirthdayEntry[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [sentIds,     setSentIds]     = useState<Set<string>>(new Set());
@@ -117,11 +120,11 @@ export default function BirthdayWidget() {
       {/* Today's Birthdays */}
       <div className="card mb-16">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-cake" /> Today&apos;s Birthdays</div>
+          <div className="card-title"><i className="ti ti-cake" /> {t("Today's Birthdays")}</div>
           {!loading && todayList.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="badge" style={{ background: "rgba(229,62,62,0.12)", color: "#e53e3e" }}>
-                {todayList.length} today
+                {t("{count} today", { count: todayList.length })}
               </span>
               <button
                 className="btn btn-outline btn-sm"
@@ -129,7 +132,7 @@ export default function BirthdayWidget() {
                 onClick={() => setShowSendAll(true)}
                 suppressHydrationWarning
               >
-                <i className="ti ti-confetti" /> Send All
+                <i className="ti ti-confetti" /> {t("Send All")}
               </button>
             </div>
           )}
@@ -137,12 +140,12 @@ export default function BirthdayWidget() {
 
         {loading ? (
           <div style={{ padding: "20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-            <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+            <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
           </div>
         ) : todayList.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
             <i className="ti ti-cake" style={{ fontSize: 24, display: "block", marginBottom: 6, opacity: 0.3 }} />
-            No birthdays today
+            {t("No birthdays today")}
           </div>
         ) : (
           <div style={{ padding: 0 }}>
@@ -156,20 +159,20 @@ export default function BirthdayWidget() {
       {/* Upcoming Birthdays */}
       <div className="card mb-16">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-confetti" /> Upcoming Birthdays</div>
+          <div className="card-title"><i className="ti ti-confetti" /> {t("Upcoming Birthdays")}</div>
           {!loading && upcomingList.length > 0 && (
-            <span className="badge badge-primary">{upcomingList.length} upcoming</span>
+            <span className="badge badge-primary">{t("{count} upcoming", { count: upcomingList.length })}</span>
           )}
         </div>
 
         {loading ? (
           <div style={{ padding: "20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-            <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+            <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
           </div>
         ) : upcomingList.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
             <i className="ti ti-calendar-event" style={{ fontSize: 24, display: "block", marginBottom: 6, opacity: 0.3 }} />
-            No upcoming birthdays in the next 30 days
+            {t("No upcoming birthdays in the next 30 days")}
           </div>
         ) : (
           <div style={{ padding: 0 }}>

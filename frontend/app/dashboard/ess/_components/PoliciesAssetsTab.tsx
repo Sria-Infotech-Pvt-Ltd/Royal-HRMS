@@ -21,6 +21,7 @@
 //   called out in the design as demo copy, not sourced from any policy
 //   engine).
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
@@ -68,13 +69,13 @@ export default function PoliciesAssetsTab() {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Policies &amp; assets</h2>
+          <h2 style={{ margin: 0, fontSize: 20 }}>{tr("Policies & assets")}</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--on-variant)" }}>
-            Access company guidance and track assigned equipment.
+            {tr("Access company guidance and track assigned equipment.")}
           </p>
         </div>
         <button className="btn btn-filled" onClick={() => setIsRequestModalOpen(true)}>
-          <i className="ti ti-plus" /> Request an asset
+          <i className="ti ti-plus" /> {tr("Request an asset")}
         </button>
       </div>
 
@@ -111,21 +112,21 @@ function CompanyPoliciesCard({ policies, loading, error }: {
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="card-title"><i className="ti ti-file-text" /> Company policies</div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Read the current published version before raising an exception.</div>
+          <div className="card-title"><i className="ti ti-file-text" /> {tr("Company policies")}</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>{tr("Read the current published version before raising an exception.")}</div>
         </div>
       </div>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
           <i className="ti ti-loader-2 spin" />
-          <h3>Loading policies…</h3>
+          <h3>{tr("Loading policies…")}</h3>
         </div>
       ) : policies.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-file-text" />
-          <h3>No policy documents yet</h3>
-          <p>Policy documents uploaded to the Document Center will appear here.</p>
+          <h3>{tr("No policy documents yet")}</h3>
+          <p>{tr("Policy documents uploaded to the Document Center will appear here.")}</p>
         </div>
       ) : (
         <div style={{ padding: "4px 24px 16px" }}>
@@ -139,12 +140,12 @@ function CompanyPoliciesCard({ policies, loading, error }: {
                     version set, rather than fabricating one. */}
                 <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
                   {doc.version
-                    ? <>v{doc.version}{doc.effective_date && <> · Effective {formatMonthYear(doc.effective_date)}</>}</>
-                    : CATEGORY_META[doc.category].label}
+                    ? <>v{doc.version}{doc.effective_date && <> · {tr("Effective {date}", { date: formatMonthYear(doc.effective_date) })}</>}</>
+                    : tr(CATEGORY_META[doc.category].label)}
                 </div>
               </div>
               <a className="btn btn-ghost btn-sm" href={doc.file_url} target="_blank" rel="noreferrer">
-                <i className="ti ti-download" /> Download
+                <i className="ti ti-download" /> {tr("Download")}
               </a>
             </div>
           ))}
@@ -161,21 +162,21 @@ function AssignedAssetsCard({ assets, loading, error, onReportIssue }: {
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="card-title"><i className="ti ti-device-laptop" /> Assigned assets</div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Report a missing or damaged asset through an IT request.</div>
+          <div className="card-title"><i className="ti ti-device-laptop" /> {tr("Assigned assets")}</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>{tr("Report a missing or damaged asset through an IT request.")}</div>
         </div>
       </div>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
           <i className="ti ti-loader-2 spin" />
-          <h3>Loading assets…</h3>
+          <h3>{tr("Loading assets…")}</h3>
         </div>
       ) : assets.length === 0 ? (
         <div style={{ padding: "4px 24px 20px" }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>No assets issued yet</div>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{tr("No assets issued yet")}</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
-            Equipment issued to you (laptop, phone, access card) will be listed here.
+            {tr("Equipment issued to you (laptop, phone, access card) will be listed here.")}
           </div>
         </div>
       ) : (
@@ -187,7 +188,7 @@ function AssignedAssetsCard({ assets, loading, error, onReportIssue }: {
             // hasn't shipped yet.
             const pendingIssue = !a.returned_at && !a.issued_at;
             const badgeClass = a.returned_at ? "badge-neutral" : pendingIssue ? "badge-warn" : "badge-success";
-            const badgeLabel = a.returned_at ? "RETURNED" : pendingIssue ? "PENDING ISSUE" : "ASSIGNED";
+            const badgeLabel = a.returned_at ? tr("RETURNED") : pendingIssue ? tr("PENDING ISSUE") : tr("ASSIGNED");
             return (
               <div
                 key={a.id}
@@ -201,8 +202,8 @@ function AssignedAssetsCard({ assets, loading, error, onReportIssue }: {
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{a.asset_type_display}</div>
                   <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
                     {pendingIssue
-                      ? "Awaiting issue from IT"
-                      : <>Asset tag {a.tag_number || "—"} · Assigned {formatDate(a.issued_at) || "—"}</>}
+                      ? tr("Awaiting issue from IT")
+                      : tr("Asset tag {tag} · Assigned {date}", { tag: a.tag_number || "—", date: formatDate(a.issued_at) || "—" })}
                   </div>
                 </div>
                 <span className={`badge ${badgeClass}`}>{badgeLabel}</span>
@@ -213,7 +214,7 @@ function AssignedAssetsCard({ assets, loading, error, onReportIssue }: {
       )}
       <div style={{ padding: "12px 24px 20px" }}>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onReportIssue}>
-          <i className="ti ti-alert-triangle" /> Report asset issue
+          <i className="ti ti-alert-triangle" /> {tr("Report asset issue")}
         </button>
       </div>
     </div>
@@ -226,27 +227,27 @@ function AssetRequestsCard({ requests, loading, error }: {
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-clipboard-list" /> Asset requests</div>
+        <div className="card-title"><i className="ti ti-clipboard-list" /> {tr("Asset requests")}</div>
       </div>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
           <i className="ti ti-loader-2 spin" />
-          <h3>Loading requests…</h3>
+          <h3>{tr("Loading requests…")}</h3>
         </div>
       ) : requests.length === 0 ? (
         <div style={{ padding: "4px 24px 20px" }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>No asset requests</div>
-          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>IT &amp; Facilities will track requests here.</div>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{tr("No asset requests")}</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>{tr("IT & Facilities will track requests here.")}</div>
         </div>
       ) : (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Request</th>
-                <th>Status</th>
-                <th>Submitted</th>
+                <th>{tr("Request")}</th>
+                <th>{tr("Status")}</th>
+                <th>{tr("Submitted")}</th>
               </tr>
             </thead>
             <tbody>
@@ -279,16 +280,16 @@ function PolicyQuickReferenceGrid() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-info-circle" /> Policy quick reference</div>
+        <div className="card-title"><i className="ti ti-info-circle" /> {tr("Policy quick reference")}</div>
       </div>
       <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-        A short summary only — the published policy document above is the authority if the two differ.
+        {tr("A short summary only — the published policy document above is the authority if the two differ.")}
       </p>
       <div className="ess-pair" style={{ padding: "4px 24px 24px", gap: 14 }}>
         {QUICK_REFERENCE.map(tile => (
           <div key={tile.label} style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tile.label}</div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)", marginTop: 4 }}>{tile.text}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tr(tile.label)}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)", marginTop: 4 }}>{tr(tile.text)}</div>
           </div>
         ))}
       </div>

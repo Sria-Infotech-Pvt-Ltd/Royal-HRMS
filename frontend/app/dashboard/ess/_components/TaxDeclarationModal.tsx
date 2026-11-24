@@ -11,6 +11,7 @@
 //      item afterwards from the Tax page (TaxProofsCard).
 // What can be declared, and each limit, comes from the server's schema.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import Modal from "@/components/Modal";
 import { useTaxDeclarationActions, useTaxDeclarationSchema } from "@/hooks/useTaxDeclaration";
@@ -51,7 +52,7 @@ export default function TaxDeclarationModal({ current, onClose, onSaved }: Props
   }
 
   function findProblem(): string | null {
-    if (!schema) return "The form is still loading.";
+    if (!schema) return tr("The form is still loading.");
     const previousProblem = previousEmployerTdsError(form.previousEmployer.income, form.previousEmployer.tds);
     if (previousProblem) return previousProblem;
     return isOldRegime ? validateRent(form, schema) ?? validateHomeLoan(form) : null;
@@ -66,23 +67,23 @@ export default function TaxDeclarationModal({ current, onClose, onSaved }: Props
   async function handleSubmit() {
     const problem = findProblem();
     if (problem) { setError(problem); return; }
-    if (!isConfirmed) { setError("Please confirm that the information you have declared is correct."); return; }
+    if (!isConfirmed) { setError(tr("Please confirm that the information you have declared is correct.")); return; }
     if (await saveAndSubmit(buildInput())) onSaved();
   }
 
   return (
     <Modal
-      title={<><i className="ti ti-receipt-tax" style={{ marginRight: 8 }} />Tax declaration — FY {current?.financial_year ?? ""}</>}
+      title={<><i className="ti ti-receipt-tax" style={{ marginRight: 8 }} />{tr("Tax declaration — FY {year}", { year: current?.financial_year ?? "" })}</>}
       onClose={onClose}
       closeDisabled={isBusy}
       maxWidth={820}
       scrollBody
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={isBusy}>Cancel</button>
-          <button className="btn btn-ghost" onClick={handleSave} disabled={isBusy || !schema}>Save draft</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={isBusy}>{tr("Cancel")}</button>
+          <button className="btn btn-ghost" onClick={handleSave} disabled={isBusy || !schema}>{tr("Save draft")}</button>
           <button className="btn btn-filled" onClick={handleSubmit} disabled={isBusy || !schema}>
-            {isBusy ? "Saving…" : "Submit for review"}
+            {isBusy ? tr("Saving…") : tr("Submit for review")}
           </button>
         </>
       }
@@ -90,14 +91,13 @@ export default function TaxDeclarationModal({ current, onClose, onSaved }: Props
       <div className="alert alert-info" style={{ marginBottom: 16 }}>
         <i className="ti ti-info-circle" />
         <span>
-          Tell payroll what you plan to claim this year so the right tax is deducted each month. You can submit the
-          proofs (receipts, certificates) item by item on the Tax page after you submit.
+          {tr("Tell payroll what you plan to claim this year so the right tax is deducted each month. You can submit the proofs (receipts, certificates) item by item on the Tax page after you submit.")}
         </span>
       </div>
 
       {(error || schemaError) && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error ?? schemaError}</div>}
 
-      <h4 style={{ margin: "0 0 8px", fontSize: 14 }}>Tax regime</h4>
+      <h4 style={{ margin: "0 0 8px", fontSize: 14 }}>{tr("Tax regime")}</h4>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: 12, marginBottom: 20 }}>
         {REGIME_OPTIONS.map(option => {
           const isSelected = form.regime === option.value;
@@ -112,15 +112,15 @@ export default function TaxDeclarationModal({ current, onClose, onSaved }: Props
             >
               <input type="radio" name="tax-regime" checked={isSelected} onChange={() => setForm({ ...form, regime: option.value })} />
               <span>
-                <span style={{ display: "block", fontWeight: 600, fontSize: 14 }}>{option.title}</span>
-                <span style={{ display: "block", fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>{option.description}</span>
+                <span style={{ display: "block", fontWeight: 600, fontSize: 14 }}>{tr(option.title)}</span>
+                <span style={{ display: "block", fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>{tr(option.description)}</span>
               </span>
             </label>
           );
         })}
       </div>
 
-      {isLoadingSchema && <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>Loading form…</h3></div>}
+      {isLoadingSchema && <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>{tr("Loading form…")}</h3></div>}
 
       {schema && isOldRegime && (
         <>
@@ -131,7 +131,7 @@ export default function TaxDeclarationModal({ current, onClose, onSaved }: Props
       {schema && !isOldRegime && (
         <div className="alert alert-info" style={{ marginBottom: 16 }}>
           <i className="ti ti-info-circle" />
-          <span>No investments or rent to declare under the new regime. Switch to the old regime if you want to claim deductions.</span>
+          <span>{tr("No investments or rent to declare under the new regime. Switch to the old regime if you want to claim deductions.")}</span>
         </div>
       )}
 
@@ -139,7 +139,7 @@ export default function TaxDeclarationModal({ current, onClose, onSaved }: Props
 
       <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, marginTop: 4 }}>
         <input type="checkbox" checked={isConfirmed} onChange={event => setIsConfirmed(event.target.checked)} style={{ marginTop: 3 }} />
-        I declare that the information given above is true and complete, and I will submit proofs when payroll asks for them.
+        {tr("I declare that the information given above is true and complete, and I will submit proofs when payroll asks for them.")}
       </label>
     </Modal>
   );

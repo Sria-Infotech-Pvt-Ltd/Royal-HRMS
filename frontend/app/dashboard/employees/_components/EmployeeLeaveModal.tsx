@@ -5,6 +5,7 @@
 // someone's behalf (leave.record), and this leave year's history. Reads are scoped server-side: a Reporting
 // Manager only gets their direct reports, branch-scoped roles only their own branch.
 
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { DURATION_OPTIONS, useRecordEmployeeLeave, type LeaveDuration } from "@/hooks/useRecordEmployeeLeave";
@@ -57,6 +58,7 @@ const num = (value: string | number) => {
 };
 
 export default function EmployeeLeaveModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  const t = useT();
   const canRecord = usePermission("leave.record");
   const balances = useFetch<BalanceRow[]>(`${API.leave.balance}?employee_id=${encodeURIComponent(employee.code)}`);
   const history = useFetch<{ results: LeaveHistoryRow[] }>(
@@ -75,25 +77,27 @@ export default function EmployeeLeaveModal({ employee, onClose }: { employee: Em
 
   return (
     <RefModal
-      title="Leave" accent="management"
+      title={t("Leave")} accent={t("management")}
       subtitle={`${fullName(employee)} · ${employee.code} — ${employee.designation || "—"}`}
       onClose={onClose}
       note={<span style={lopDays > 0 ? { color: "var(--crit)" } : undefined}>
-        {lopDays > 0 ? `${num(lopDays)} day${lopDays === 1 ? "" : "s"} loss of pay — deducted in the next payroll run.` : "No loss of pay this leave year."}
+        {lopDays > 0
+          ? (lopDays === 1 ? t("{count} day loss of pay — deducted in the next payroll run.", { count: num(lopDays) }) : t("{count} days loss of pay — deducted in the next payroll run.", { count: num(lopDays) }))
+          : t("No loss of pay this leave year.")}
       </span>}
-      actions={<button className="rvbtn" type="button" onClick={onClose}>Close</button>}
+      actions={<button className="rvbtn" type="button" onClick={onClose}>{t("Close")}</button>}
     >
-      <div className="sechead">BALANCES <span className="own hr">HR</span></div>
-      <div className="hint">Standard India Leave Policy · leave year {yearLabel || thisYear || "—"} · balances in days</div>
+      <div className="sechead">{t("BALANCES")} <span className="own hr">{t("HR")}</span></div>
+      <div className="hint">{t("Standard India Leave Policy · leave year {year} · balances in days", { year: yearLabel || thisYear || "—" })}</div>
       {balances.error && <div className="alert alert-error">{balances.error}</div>}
       <div className="lv-h">
-        <div>LEAVE TYPE</div><div className="lv-num">ENTITLED</div><div className="lv-num">OPENING</div>
-        <div className="lv-num">ACCRUED</div><div className="lv-num">AVAILED</div><div className="lv-bal">BALANCE</div>
+        <div>{t("LEAVE TYPE")}</div><div className="lv-num">{t("ENTITLED")}</div><div className="lv-num">{t("OPENING")}</div>
+        <div className="lv-num">{t("ACCRUED")}</div><div className="lv-num">{t("AVAILED")}</div><div className="lv-bal">{t("BALANCE")}</div>
       </div>
       {balances.loading ? (
-        <div className="hint">Loading balances…</div>
+        <div className="hint">{t("Loading balances…")}</div>
       ) : rows.length === 0 ? (
-        <div className="hint">No leave balances have been credited for this employee yet.</div>
+        <div className="hint">{t("No leave balances have been credited for this employee yet.")}</div>
       ) : (
         rows.map(({ type, code, basis, row }) => {
           const isEvent = EVENT_TYPES.has(type);
@@ -101,7 +105,7 @@ export default function EmployeeLeaveModal({ employee, onClose }: { employee: Em
           const tone = balance <= 0 ? " zero" : balance < 3 && !isEvent ? " low" : "";
           return (
             <div className="lv-r" key={type}>
-              <div><div className="nm">{row.leave_type_display} <span className="tag">{code}</span></div><div className="sub">{basis}</div></div>
+              <div><div className="nm">{row.leave_type_display} <span className="tag">{code}</span></div><div className="sub">{t(basis)}</div></div>
               <div className="lv-num">{row.annual_entitlement ? num(row.annual_entitlement) : "—"}</div>
               <div className="lv-num">{num(row.carried_forward)}</div>
               <div className="lv-num">{isEvent ? "—" : num(Number(row.total_days) - Number(row.carried_forward))}</div>
@@ -115,51 +119,53 @@ export default function EmployeeLeaveModal({ employee, onClose }: { employee: Em
       {canRecord && (
         <>
           <div className="divider" />
-          <div className="sechead">RECORD LEAVE <span className="own emp">HR / EMPLOYEE</span></div>
+          <div className="sechead">{t("RECORD LEAVE")} <span className="own emp">{t("HR / EMPLOYEE")}</span></div>
           {form.error && <div className="alert alert-error">{form.error}</div>}
           <div className="g3">
             <div className="f">
-              <label>Leave type</label>
+              <label>{t("Leave type")}</label>
               <select className="finput" value={form.type} onChange={event => form.setLeaveType(event.target.value)}>
                 {rows.map(entry => <option key={entry.type} value={entry.type}>{entry.row.leave_type_display}</option>)}
               </select>
             </div>
-            <div className="f"><label>From</label><DateInput className="finput" value={form.from} onChange={isoDate => form.setFrom(isoDate)} /></div>
-            <div className="f"><label>To</label><DateInput className="finput" value={form.to} onChange={isoDate => form.setTo(isoDate)} /></div>
+            <div className="f"><label>{t("From")}</label><DateInput className="finput" value={form.from} onChange={isoDate => form.setFrom(isoDate)} /></div>
+            <div className="f"><label>{t("To")}</label><DateInput className="finput" value={form.to} onChange={isoDate => form.setTo(isoDate)} /></div>
             <div className="f">
-              <label>Duration</label>
+              <label>{t("Duration")}</label>
               <select className="finput" value={form.duration} onChange={event => form.setDuration(event.target.value as LeaveDuration)}>
-                {DURATION_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                {DURATION_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
               </select>
-              <div className="hint">Half day applies to single-day requests only.</div>
+              <div className="hint">{t("Half day applies to single-day requests only.")}</div>
             </div>
             <div className="f" style={{ gridColumn: "span 2" }}>
-              <label>Reason</label>
-              <input className="finput" value={form.reason} placeholder="Optional" onChange={event => form.setReason(event.target.value)} />
+              <label>{t("Reason")}</label>
+              <input className="finput" value={form.reason} placeholder={t("Optional")} onChange={event => form.setReason(event.target.value)} />
             </div>
           </div>
           <div className="hint">
-            {form.days ? `${form.days} day${form.days === 1 ? "" : "s"} — weekly offs (Saturday and Sunday) excluded.` : "Weekly offs (Saturday and Sunday) are excluded from the day count."}
+            {form.days
+              ? (form.days === 1 ? t("{count} day — weekly offs (Saturday and Sunday) excluded.", { count: form.days }) : t("{count} days — weekly offs (Saturday and Sunday) excluded.", { count: form.days }))
+              : t("Weekly offs (Saturday and Sunday) are excluded from the day count.")}
           </div>
-          <div><button className="rvbtn pri" type="button" onClick={form.record} disabled={form.saving}>{form.saving ? "Recording…" : "Record leave"}</button></div>
+          <div><button className="rvbtn pri" type="button" onClick={form.record} disabled={form.saving}>{form.saving ? t("Recording…") : t("Record leave")}</button></div>
         </>
       )}
 
       <div className="divider" />
-      <div className="sechead">LEAVE HISTORY</div>
+      <div className="sechead">{t("LEAVE HISTORY")}</div>
       {recorded.length === 0 ? (
-        <div className="hint">No leave recorded in this leave year.</div>
+        <div className="hint">{t("No leave recorded in this leave year.")}</div>
       ) : (
         recorded.map(item => (
           <div className="actrow live" key={item.id}>
             <span className="bar" />
             <div className="meta">
-              <div className="t1">{item.leave_type_display} <span className="chip ok">{num(item.total_days)} day{Number(item.total_days) === 1 ? "" : "s"}</span></div>
-              <div className="t2">{item.reason || "No reason recorded"} · recorded {formatDateSlash(item.created_at)}</div>
+              <div className="t1">{item.leave_type_display} <span className="chip ok">{Number(item.total_days) === 1 ? t("{count} day", { count: num(item.total_days) }) : t("{count} days", { count: num(item.total_days) })}</span></div>
+              <div className="t2">{item.reason || t("No reason recorded")} · {t("recorded {date}", { date: formatDateSlash(item.created_at) })}</div>
             </div>
             <div className="dates" style={{ textAlign: "right" }}>
               {formatDateSlash(item.start_date)}
-              <div className="actdel">to {formatDateSlash(item.end_date)}</div>
+              <div className="actdel">{t("to {date}", { date: formatDateSlash(item.end_date) })}</div>
             </div>
           </div>
         ))

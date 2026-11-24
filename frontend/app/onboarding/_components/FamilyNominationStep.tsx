@@ -13,6 +13,7 @@
 // scheme on the entry that just appeared, so no caller had to change.
 
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import FamilyMemberCard from "./FamilyMemberCard";
 import NominationLane from "./NominationLane";
 import { RELATIONSHIPS, RELATIONSHIP_LABELS, SCHEMES, type FamilyEntry, type NomineeEntry } from "./familyNominationTypes";
@@ -40,6 +41,7 @@ const DOT: Record<string, string> = { short: "var(--warn, #d97706)", complete: "
 export default function FamilyNominationStep({
   familyEntries, nomineeEntries, onAddFamily, onFamilyFieldChange, onRemoveFamily, onAddNominee, onNomineeFieldChange, onRemoveNominee, error,
 }: Props) {
+  const t = useT();
   // Cards the person has opened. A card with no name is always open, and one that already has a name starts closed.
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(new Set());
 
@@ -106,41 +108,41 @@ export default function FamilyNominationStep({
     <div style={{ display: "grid", gap: 18 }}>
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div role="status" aria-label="Summary" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <span style={PILL}>{people.length} family {people.length === 1 ? "member" : "members"}</span>
-        <span style={PILL}>{dependants} {dependants === 1 ? "dependant" : "dependants"}</span>
+      <div role="status" aria-label={t("Summary")} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <span style={PILL}>{people.length === 1 ? t("{count} family member", { count: people.length }) : t("{count} family members", { count: people.length })}</span>
+        <span style={PILL}>{dependants === 1 ? t("{count} dependant", { count: dependants }) : t("{count} dependants", { count: dependants })}</span>
         {SCHEMES.map(scheme => {
           const list = sharesIn(nomineeEntries, scheme.value);
           const total = schemeTotal(nomineeEntries, scheme.value);
           const state = schemeState(total, list.length);
           return list.length === 0 ? null : (
-            <span key={scheme.value} style={PILL}><span aria-hidden="true" style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: DOT[state], marginRight: 6 }} />{scheme.label} {total}%</span>
+            <span key={scheme.value} style={PILL}><span aria-hidden="true" style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: DOT[state], marginRight: 6 }} />{t(scheme.label)} {total}%</span>
           );
         })}
       </div>
 
       <div ref={familySection}>
-        <h4 style={{ fontSize: "0.95rem", margin: "0 0 4px" }}>Family members</h4>
+        <h4 style={{ fontSize: "0.95rem", margin: "0 0 4px" }}>{t("Family members")}</h4>
         <p style={{ color: "var(--on-variant)", fontSize: ".85rem", margin: "0 0 12px" }}>
-          Add the people who depend on the employee or who may be nominated below. A person is added once and can be picked as a nominee.
+          {t("Add the people who depend on the employee or who may be nominated below. A person is added once and can be picked as a nominee.")}
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>Quick add</span>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{t("Quick add")}</span>
           {RELATIONSHIPS.filter(relationship => relationship !== "sibling").map(relationship => (
             <button key={relationship} type="button" className="rvbtn" onClick={() => quickAdd(relationship)}>
-              <i className="ti ti-plus" aria-hidden="true" /> {RELATIONSHIP_LABELS[relationship]}
+              <i className="ti ti-plus" aria-hidden="true" /> {t(RELATIONSHIP_LABELS[relationship])}
             </button>
           ))}
-          <button type="button" className="rvbtn ghost" onClick={() => quickAdd()}>Someone else</button>
+          <button type="button" className="rvbtn ghost" onClick={() => quickAdd()}>{t("Someone else")}</button>
         </div>
         {familyEntries.length === 0 && (
-          <p style={{ color: "var(--on-variant)", fontSize: ".9rem", margin: 0 }}>No family members yet. This is optional; use the buttons above to add someone.</p>
+          <p style={{ color: "var(--on-variant)", fontSize: ".9rem", margin: 0 }}>{t("No family members yet. This is optional; use the buttons above to add someone.")}</p>
         )}
         <div style={{ display: "grid", gap: 10 }}>
           {familyEntries.map(entry => (
             <FamilyMemberCard
               key={entry.id} entry={entry} isOpen={openIds.has(entry.id)} isNominee={nominatedIds.has(entry.id)}
-              roleNote={duplicates.has(entry.id) ? `Another ${RELATIONSHIP_LABELS[entry.relationship].toLowerCase()} is already listed.` : null}
+              roleNote={duplicates.has(entry.id) ? t("Another {relationship} is already listed.", { relationship: t(RELATIONSHIP_LABELS[entry.relationship]).toLowerCase() }) : null}
               onToggle={() => toggle(entry.id, openIds.has(entry.id))} onChange={(field, value) => changeFamily(entry.id, field, value)} onRemove={() => onRemoveFamily(entry.id)}
             />
           ))}
@@ -148,14 +150,14 @@ export default function FamilyNominationStep({
       </div>
 
       <div style={{ borderTop: "1px solid var(--line, #e5e7eb)", paddingTop: 16 }}>
-        <h4 style={{ fontSize: "0.95rem", margin: "0 0 4px" }}>EPF / Gratuity nomination</h4>
+        <h4 style={{ fontSize: "0.95rem", margin: "0 0 4px" }}>{t("EPF / Gratuity nomination")}</h4>
         <p style={{ color: "var(--on-variant)", fontSize: ".85rem", margin: "0 0 12px" }}>
-          Each scheme&apos;s shares should add up to 100% across its nominees. Pick nominees from the family list above.
+          {t("Each scheme's shares should add up to 100% across its nominees. Pick nominees from the family list above.")}
         </p>
         {people.length === 0 && (
           wasBlocked
-            ? <div role="alert" className="alert alert-error" style={{ margin: "0 0 12px" }}><i className="ti ti-alert-circle" /><div>A nominee is picked from the family list, and there is nobody in it yet. Add a family member with a name above, then add the nominee.</div></div>
-            : <p style={{ color: "var(--warn)", fontSize: ".85rem", margin: "0 0 12px" }}>Add a family member with a name above before adding a nominee.</p>
+            ? <div role="alert" className="alert alert-error" style={{ margin: "0 0 12px" }}><i className="ti ti-alert-circle" /><div>{t("A nominee is picked from the family list, and there is nobody in it yet. Add a family member with a name above, then add the nominee.")}</div></div>
+            : <p style={{ color: "var(--warn)", fontSize: ".85rem", margin: "0 0 12px" }}>{t("Add a family member with a name above before adding a nominee.")}</p>
         )}
         <div style={{ display: "grid", gap: 10 }}>
           {SCHEMES.map(scheme => (

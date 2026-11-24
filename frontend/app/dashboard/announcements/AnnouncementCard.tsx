@@ -2,6 +2,7 @@
 
 import { avatarColor, initials, timeAgo, CAT_BADGE, CAT_LABEL, type Announcement } from "./_data";
 import { AnnouncementMediaPreview } from "./AnnouncementMedia";
+import { useT } from "@/hooks/useI18n";
 
 const BODY_PREVIEW = 220;
 
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function AnnouncementCard({ ann, onOpen, onEdit, onDelete, onToggleReact }: Props) {
+  const t = useT();
   const av = avatarColor(ann.posted_by_name);
 
   return (
@@ -41,11 +43,11 @@ export default function AnnouncementCard({ ann, onOpen, onEdit, onDelete, onTogg
               )}
               {ann.is_pinned && (
                 <span className="badge badge-warn" style={{ fontSize: 10 }}>
-                  <i className="ti ti-pin" /> Pinned
+                  <i className="ti ti-pin" /> {t("Pinned")}
                 </span>
               )}
               <span className={`badge ${CAT_BADGE[ann.category]}`} style={{ fontSize: 10, textTransform: "capitalize" }}>
-                {CAT_LABEL[ann.category]}
+                {t(CAT_LABEL[ann.category])}
               </span>
               {ann.visibility !== "all" && (
                 <span className="badge badge-neutral" style={{ fontSize: 10 }}>
@@ -56,22 +58,22 @@ export default function AnnouncementCard({ ann, onOpen, onEdit, onDelete, onTogg
             </div>
             <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>
               {timeAgo(ann.created_at)}
-              {ann.updated_at !== ann.created_at && " · edited"}
+              {ann.updated_at !== ann.created_at && ` · ${t("edited")}`}
             </div>
           </div>
 
           {ann.can_edit && (
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-              <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => onEdit(ann)} suppressHydrationWarning aria-label="Edit">
+              <button className="btn btn-ghost btn-sm" title={t("Edit")} onClick={() => onEdit(ann)} suppressHydrationWarning aria-label={t("Edit")}>
                 <i className="ti ti-pencil" />
               </button>
               <button
                 className="btn btn-ghost btn-sm"
-                title="Delete"
+                title={t("Delete")}
                 style={{ color: "var(--error)" }}
                 onClick={() => onDelete(ann.id)}
                 suppressHydrationWarning
-               aria-label="Delete">
+               aria-label={t("Delete")}>
                 <i className="ti ti-trash" />
               </button>
             </div>
@@ -88,7 +90,7 @@ export default function AnnouncementCard({ ann, onOpen, onEdit, onDelete, onTogg
           {ann.body.length <= BODY_PREVIEW ? ann.body : ann.body.slice(0, BODY_PREVIEW) + "…"}
         </div>
         {ann.body.length > BODY_PREVIEW && (
-          <span className="ann-read-more">Read more</span>
+          <span className="ann-read-more">{t("Read more")}</span>
         )}
 
         {/* ── Picture and attachment counts ─────────────────── */}

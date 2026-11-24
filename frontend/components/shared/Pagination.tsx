@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+
 // Generic page-number pagination — pairs with any backend list endpoint
 // using core.pagination's PageNumberPagination (page_size=20 convention).
 // Only renders once there's more than one page; a single real page of
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export default function Pagination({ page, totalPages, totalCount, pageSize, itemLabel, onPageChange }: Props) {
+  const t = useT();
   if (totalCount <= 0) return null;
 
   const rangeStart = (page - 1) * pageSize + 1;
@@ -24,15 +27,15 @@ export default function Pagination({ page, totalPages, totalCount, pageSize, ite
 
   return (
     <div className="pager">
-      <span className="txt">Showing {rangeStart}–{rangeEnd} of {totalCount} {itemLabel}</span>
+      <span className="txt">{t("Showing {start}–{end} of {total} {label}", { start: rangeStart, end: rangeEnd, total: totalCount, label: t(itemLabel) })}</span>
       <div className="pgbtns">
-        <button className="pgbtn" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} suppressHydrationWarning>‹ Prev</button>
+        <button className="pgbtn" type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} suppressHydrationWarning>‹ {t("Prev")}</button>
         {Array.from({ length: lastPage }, (_, index) => index + 1).map(number => (
           <button key={number} type="button" className={`pgbtn${number === page ? " on" : ""}`} onClick={() => onPageChange(number)} suppressHydrationWarning>
             {number}
           </button>
         ))}
-        <button className="pgbtn" type="button" disabled={page >= lastPage} onClick={() => onPageChange(page + 1)} suppressHydrationWarning>Next ›</button>
+        <button className="pgbtn" type="button" disabled={page >= lastPage} onClick={() => onPageChange(page + 1)} suppressHydrationWarning>{t("Next")} ›</button>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@
 // times, plain-words banners for anything unusual, and Punches / Corrections / History tabs. The pieces are the Detail*.tsx files here.
 
 import { useRef, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useAttendanceDetail } from "@/hooks/useAttendanceDetail";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export default function AttendanceDetailDrawer({ recordId, date, onClose, onRecordChanged }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const canReview = usePermission("attendance.create");
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -42,10 +44,10 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
     setReviewingId(correctionId);
     try {
       await clientApi.patch(API.attendance.correctionReview(correctionId), { action });
-      showToast(action === "approve" ? "Correction approved. Attendance record updated." : "Correction rejected.", "success");
+      showToast(action === "approve" ? t("Correction approved. Attendance record updated.") : t("Correction rejected."), "success");
       refetchCorrections();
     } catch (err: unknown) {
-      showToast((err as { message?: string })?.message ?? "Failed to review correction.", "error");
+      showToast((err as { message?: string })?.message ?? t("Failed to review correction."), "error");
     } finally {
       setReviewingId(null);
     }
@@ -63,12 +65,12 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
     >
       <div className="drawer open" onClick={event => event.stopPropagation()}>
         <div className="drawer-header">
-          <span className="drawer-title">Attendance Detail</span>
-          <button className="drawer-close" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
+          <span className="drawer-title">{t("Attendance Detail")}</span>
+          <button className="drawer-close" onClick={onClose} aria-label={t("Close")}><i className="ti ti-x" /></button>
         </div>
 
         <div className="drawer-body">
-          {loading && <p style={{ color: "var(--on-variant)", fontSize: 13 }}>Loading…</p>}
+          {loading && <p style={{ color: "var(--on-variant)", fontSize: 13 }}>{t("Loading…")}</p>}
           {error && <div className="alert alert-error"><i className="ti ti-alert-circle" /> {error}</div>}
 
           {record && (
@@ -78,7 +80,7 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
               {editing && (
                 <div style={{ background: "var(--surface)", border: "1.5px solid var(--primary)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
                   <div style={{ fontWeight: 700, fontSize: 12, color: "var(--primary)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 12 }}>
-                    <i className="ti ti-edit" style={{ marginRight: 5 }} /> Edit Attendance
+                    <i className="ti ti-edit" style={{ marginRight: 5 }} /> {t("Edit Attendance")}
                   </div>
                   <AttendanceEditForm
                     recordId={recordId}
@@ -98,9 +100,9 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
               <DetailTabs
                 active={tab} onChange={setTab}
                 tabs={[
-                  { id: "punches", label: "Punches", count: record.punches.length },
-                  { id: "corrections", label: "Corrections", count: corrections.length },
-                  { id: "history", label: "History", count: auditEntries.length },
+                  { id: "punches", label: t("Punches"), count: record.punches.length },
+                  { id: "corrections", label: t("Corrections"), count: corrections.length },
+                  { id: "history", label: t("History"), count: auditEntries.length },
                 ]}
               />
               {tab === "punches" && <DetailPunchTimeline punches={record.punches} />}
@@ -111,7 +113,7 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
         </div>
 
         <div className="drawer-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Close</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>
         </div>
       </div>
     </div>

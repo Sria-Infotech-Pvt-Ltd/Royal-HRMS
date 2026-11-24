@@ -13,6 +13,7 @@ import { HeadcountTrendCard, LeaveTrendCard, PayrollCostTrendCard } from "@/comp
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { useRouter } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
+import { useT } from "@/hooks/useI18n";
 
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : null);
 
@@ -36,6 +37,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 ];
 
 export default function AdminDashboard({ session }: Props) {
+  const t = useT();
   const firstName = session.name.split(" ")[0];
   const router = useRouter();
   // Same company-wide workforce analytics the Workforce (HR) Dashboard
@@ -58,20 +60,20 @@ export default function AdminDashboard({ session }: Props) {
       {/* Company-wide workforce analytics — headcount, attendance, payroll readiness */}
       <div className="wf-stats mb-20">
         <KpiCard
-          label="TOTAL HEADCOUNT" icon={WfIcon.people} tone="brand" loading={overviewLoading}
-          value={totalHeadcount} sub="company-wide"
+          label={t("TOTAL HEADCOUNT")} icon={WfIcon.people} tone="brand" loading={overviewLoading}
+          value={totalHeadcount} sub={t("company-wide")}
           onClick={() => router.push("/dashboard/employees")}
         />
         <KpiCard
-          label="PRESENT TODAY" icon={WfIcon.check} tone="ok" loading={overviewLoading}
-          value={presentToday} sub={`${attendancePct}% attendance`}
+          label={t("PRESENT TODAY")} icon={WfIcon.check} tone="ok" loading={overviewLoading}
+          value={presentToday} sub={t("{percent}% attendance", { percent: attendancePct })}
           progress={attendancePct}
           onClick={() => router.push("/dashboard/attendance")}
         />
         <KpiCard
-          label="PAYROLL READY" icon={WfIcon.wallet} tone="info" loading={overviewLoading}
-          value={payrollReady} sub={`${payrollBlocked} records blocked`}
-          trend={payrollBlocked > 0 ? { text: "Action", tone: "warn" } : null}
+          label={t("PAYROLL READY")} icon={WfIcon.wallet} tone="info" loading={overviewLoading}
+          value={payrollReady} sub={t("{count} records blocked", { count: payrollBlocked })}
+          trend={payrollBlocked > 0 ? { text: t("Action"), tone: "warn" } : null}
           progress={pct(payrollReady, payrollTotal)}
           onClick={() => router.push("/dashboard/payroll")}
         />
@@ -79,7 +81,7 @@ export default function AdminDashboard({ session }: Props) {
 
       <div className="card mb-20">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-chart-line" /> Attendance this week</div>
+          <div className="card-title"><i className="ti ti-chart-line" /> {t("Attendance this week")}</div>
         </div>
         <div className="card-body wf-week">
           <AttendanceTrend data={overview?.weekly_attendance ?? []} total={totalHeadcount} loading={overviewLoading} />
@@ -104,7 +106,7 @@ export default function AdminDashboard({ session }: Props) {
       {/* Quick Actions */}
       <div className="card mb-20">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-bolt" /> Quick Actions</div>
+          <div className="card-title"><i className="ti ti-bolt" /> {t("Quick Actions")}</div>
         </div>
         <div className="card-body">
           <div className="qa-grid">
@@ -113,7 +115,7 @@ export default function AdminDashboard({ session }: Props) {
                 <div className="qa-icon" style={{ background: a.bg, color: a.color }}>
                   <i className={`ti ${a.icon}`} />
                 </div>
-                <span className="qa-label">{a.label}</span>
+                <span className="qa-label">{t(a.label)}</span>
               </a>
             ))}
           </div>

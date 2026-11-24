@@ -9,6 +9,7 @@ import DateInput from "@/components/shared/DateInput";
 import type { SalaryStructureListItem } from "@/types/payroll";
 import type { SalarySetupRow } from "@/types/salarySetup";
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   employee: SalarySetupRow;
@@ -21,6 +22,7 @@ interface Props {
 const formatRupees = (amount: number | string) => `₹${Number(amount).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
 export default function SalaryAssignModal({ employee, structures, onClose, onSave }: Props) {
+  const t = useT();
   const current = employee.salary;
   const [annualCtc, setAnnualCtc] = useState(current ? String(Math.round(Number(current.annual_ctc))) : "");
   const [effectiveFrom, setEffectiveFrom] = useState(current?.effective_from ?? new Date().toISOString().split("T")[0]);
@@ -30,29 +32,29 @@ export default function SalaryAssignModal({ employee, structures, onClose, onSav
 
   async function submit() {
     const amount = Number(annualCtc);
-    if (annualCtc.trim() === "") { setError("Enter the annual CTC."); return; }
-    if (!Number.isFinite(amount) || amount <= 0) { setError("Annual CTC must be a number greater than 0."); return; }
-    if (!effectiveFrom) { setError("Choose the date this takes effect."); return; }
+    if (annualCtc.trim() === "") { setError(t("Enter the annual CTC.")); return; }
+    if (!Number.isFinite(amount) || amount <= 0) { setError(t("Annual CTC must be a number greater than 0.")); return; }
+    if (!effectiveFrom) { setError(t("Choose the date this takes effect.")); return; }
     setError(null);
     setIsSaving(true);
     try {
       await onSave({ annual_ctc: annualCtc, effective_from: effectiveFrom, salary_structure: structure || null });
     } catch (err: unknown) {
-      setError((err as { message?: string })?.message || "Failed to save the salary.");
+      setError((err as { message?: string })?.message || t("Failed to save the salary."));
       setIsSaving(false);
     }
   }
 
   return (
     <Modal
-      title={<><i className="ti ti-currency-rupee" style={{ marginRight: 8 }} />{current ? "Update CTC" : "Assign CTC"} — {employee.full_name}</>}
+      title={<><i className="ti ti-currency-rupee" style={{ marginRight: 8 }} />{current ? t("Update CTC") : t("Assign CTC")} — {employee.full_name}</>}
       onClose={onClose}
       maxWidth={480}
       footer={
         <>
-          <button className="btn btn-ghost" type="button" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" type="button" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" type="button" onClick={submit} disabled={isSaving}>
-            {isSaving ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</> : <><i className="ti ti-check" /> Save CTC</>}
+            {isSaving ? <><i className="ti ti-loader-2 animate-spin" /> {t("Saving…")}</> : <><i className="ti ti-check" /> {t("Save CTC")}</>}
           </button>
         </>
       }
@@ -65,25 +67,25 @@ export default function SalaryAssignModal({ employee, structures, onClose, onSav
         {current && (
           <div className="alert alert-info" style={{ marginBottom: 0 }}>
             <i className="ti ti-info-circle" />
-            <span>Current CTC: <strong>{formatRupees(current.annual_ctc)}/year</strong> (effective {formatDate(current.effective_from)}). Saving a different amount adds a new record; saving the same amount changes nothing.</span>
+            <span>{t("Current CTC:")} <strong>{formatRupees(current.annual_ctc)}{t("/year")}</strong> {t("(effective {date}). Saving a different amount adds a new record; saving the same amount changes nothing.", { date: formatDate(current.effective_from) })}</span>
           </div>
         )}
         <div className="form-row cols-2">
           <div className="field-group">
-            <label className="field-label">Annual CTC (₹) *</label>
-            <input type="number" className="field-input" min={0} step={1000} placeholder="e.g. 600000" value={annualCtc} onChange={event => setAnnualCtc(event.target.value)} />
-            {annualCtc && Number(annualCtc) > 0 && <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>Monthly: {formatRupees(Number(annualCtc) / 12)}</span>}
+            <label className="field-label">{t("Annual CTC (₹) *")}</label>
+            <input type="number" className="field-input" min={0} step={1000} placeholder={t("e.g. 600000")} value={annualCtc} onChange={event => setAnnualCtc(event.target.value)} />
+            {annualCtc && Number(annualCtc) > 0 && <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>{t("Monthly: {amount}", { amount: formatRupees(Number(annualCtc) / 12) })}</span>}
           </div>
           <div className="field-group">
-            <label className="field-label">Effective From *</label>
+            <label className="field-label">{t("Effective From *")}</label>
             <DateInput className="field-input" value={effectiveFrom} onChange={setEffectiveFrom} />
           </div>
         </div>
         <div className="field-group">
-          <label className="field-label">Salary Structure Override</label>
+          <label className="field-label">{t("Salary Structure Override")}</label>
           <select className="field-input field-select" value={structure} onChange={event => setStructure(event.target.value)}>
-            <option value="">— Use Company Code / company default —</option>
-            {structures.filter(item => item.is_active).map(item => <option key={item.id} value={item.id}>{item.name}{item.is_default ? " (Default)" : ""}</option>)}
+            <option value="">{t("— Use Company Code / company default —")}</option>
+            {structures.filter(item => item.is_active).map(item => <option key={item.id} value={item.id}>{item.name}{item.is_default ? ` ${t("(Default)")}` : ""}</option>)}
           </select>
         </div>
       </div>

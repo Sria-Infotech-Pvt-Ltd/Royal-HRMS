@@ -1,6 +1,7 @@
 // Pure helpers for the OT Entry tab: the overtime types, the live duration, the form check and the colours of the records table. No React.
 
 import type { OvertimeCreatePayload } from "@/types/attendance";
+import { tr } from "@/lib/i18n/tr";
 import { PALETTE } from "./attendancePalette";
 
 export interface OtTypeOption { value: OvertimeCreatePayload["ot_type"]; label: string; multiplier: string; icon: string; colour: string; hint: string }
@@ -34,9 +35,9 @@ export function durationLabel(minutes: number): string {
 
 /** The message for the first thing wrong with the form, or null when it can be sent. The wording is the form's long-standing wording. */
 export function validateOtForm(form: Pick<OvertimeCreatePayload, "employee_id" | "date" | "ot_start" | "ot_end">): string | null {
-  if (!form.employee_id) return "Please select an employee.";
-  if (!form.date) return "Please select a date.";
-  if (form.ot_end <= form.ot_start) return "OT end time must be after OT start time.";
+  if (!form.employee_id) return tr("Please select an employee.");
+  if (!form.date) return tr("Please select a date.");
+  if (form.ot_end <= form.ot_start) return tr("OT end time must be after OT start time.");
   return null;
 }
 

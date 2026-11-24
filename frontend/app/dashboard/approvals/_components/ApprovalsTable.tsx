@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { ApprovalItem, fmtSubmitted, initials, toSortableTime } from "../_data";
 import { TypeBadge, StatusChip } from "./Badges";
 
@@ -42,10 +43,11 @@ interface Props {
 function SortHeader({
   label, sortKey, active, dir, onClick,
 }: { label: string; sortKey: SortKey; active: boolean; dir: SortDir; onClick: (k: SortKey) => void }) {
+  const t = useT();
   return (
     <th>
       <span className="ta-th-sort" onClick={() => onClick(sortKey)}>
-        {label}
+        {t(label)}
         <i className={`ti ${active ? (dir === "asc" ? "ti-arrow-up" : "ti-arrow-down") : "ti-arrows-sort"}`} />
       </span>
     </th>
@@ -71,6 +73,7 @@ export default function ApprovalsTable({
   onToggleSelect, onToggleSelectMany, onView, onApprove, onReject,
   onBulkApprove, onBulkReject, bulkBusy, onShowAll, onRefresh,
 }: Props) {
+  const t = useT();
   const [sortKey, setSortKey] = useState<SortKey>("submittedAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page,    setPage]    = useState(1);
@@ -111,24 +114,24 @@ export default function ApprovalsTable({
     <>
       {selectedCount > 0 && (
         <div className="ta-bulk-bar">
-          <span className="ta-bulk-count">{selectedCount} selected</span>
+          <span className="ta-bulk-count">{t("{count} selected", { count: selectedCount })}</span>
           {!allFilteredSelected && (
             <button
               className="ta-page-btn"
               onClick={() => onToggleSelectMany(sorted.map(i => i.key), true)}
               suppressHydrationWarning
             >
-              Select all {sorted.length}
+              {t("Select all {count}", { count: sorted.length })}
             </button>
           )}
           <button className="ta-bulk-btn ta-bulk-approve" onClick={onBulkApprove} disabled={bulkBusy} suppressHydrationWarning>
-            <i className="ti ti-check" /> Approve Selected
+            <i className="ti ti-check" /> {t("Approve Selected")}
           </button>
           <button className="ta-bulk-btn ta-bulk-reject" onClick={onBulkReject} disabled={bulkBusy} suppressHydrationWarning>
-            <i className="ti ti-x" /> Reject Selected
+            <i className="ti ti-x" /> {t("Reject Selected")}
           </button>
           <button className="ta-bulk-clear" onClick={() => onToggleSelectMany(sorted.map(i => i.key), false)} suppressHydrationWarning>
-            Clear
+            {t("Clear")}
           </button>
         </div>
       )}
@@ -137,15 +140,15 @@ export default function ApprovalsTable({
         {isEmpty ? (
           <div className="ta-empty">
             <div className="ta-empty-icon"><i className="ti ti-check" /></div>
-            <div className="ta-empty-title">You&rsquo;re all caught up!</div>
-            <div className="ta-empty-sub">No approval requests are waiting for your action.</div>
+            <div className="ta-empty-title">{t("You’re all caught up!")}</div>
+            <div className="ta-empty-sub">{t("No approval requests are waiting for your action.")}</div>
             <div className="tv-empty-actions">
-              {onRefresh && <button type="button" className="btn btn-outline btn-sm" onClick={onRefresh}><i className="ti ti-refresh" /> Check again</button>}
-              {onShowAll && <button type="button" className="btn btn-ghost btn-sm" onClick={onShowAll}><i className="ti ti-history" /> See past decisions</button>}
+              {onRefresh && <button type="button" className="btn btn-outline btn-sm" onClick={onRefresh}><i className="ti ti-refresh" /> {t("Check again")}</button>}
+              {onShowAll && <button type="button" className="btn btn-ghost btn-sm" onClick={onShowAll}><i className="ti ti-history" /> {t("See past decisions")}</button>}
             </div>
             <div className="tv-empty-tips">
-              <span><i className="ti ti-bell" />New requests show up here and in your notifications.</span>
-              <span><i className="ti ti-checks" />Tick several rows to approve or reject in one go.</span>
+              <span><i className="ti ti-bell" />{t("New requests show up here and in your notifications.")}</span>
+              <span><i className="ti ti-checks" />{t("Tick several rows to approve or reject in one go.")}</span>
             </div>
           </div>
         ) : (
@@ -164,12 +167,12 @@ export default function ApprovalsTable({
                       />
                     </th>
                     <SortHeader label="Employee" sortKey="employeeName" active={sortKey === "employeeName"} dir={sortDir} onClick={handleSort} />
-                    <th>Employee ID</th>
-                    <th>Request Type</th>
-                    <th>Request Details</th>
+                    <th>{t("Employee ID")}</th>
+                    <th>{t("Request Type")}</th>
+                    <th>{t("Request Details")}</th>
                     <SortHeader label="Submitted Date" sortKey="submittedAt" active={sortKey === "submittedAt"} dir={sortDir} onClick={handleSort} />
                     <SortHeader label="Status" sortKey="status" active={sortKey === "status"} dir={sortDir} onClick={handleSort} />
-                    <th style={{ textAlign: "right" }}>Actions</th>
+                    <th style={{ textAlign: "right" }}>{t("Actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -211,33 +214,33 @@ export default function ApprovalsTable({
                         <td>
                           <div className="ta-mono">{fmtSubmitted(item.submittedAt)}</div>
                           {waiting && (
-                            <span className={`tv-wait is-${waiting.tone}`} title="How long this request has been waiting">
-                              <i className="ti ti-hourglass" /> {waiting.days === 0 ? "Today" : `${waiting.days} day${waiting.days === 1 ? "" : "s"}`}
+                            <span className={`tv-wait is-${waiting.tone}`} title={t("How long this request has been waiting")}>
+                              <i className="ti ti-hourglass" /> {waiting.days === 0 ? t("Today") : waiting.days === 1 ? t("{count} day", { count: waiting.days }) : t("{count} days", { count: waiting.days })}
                             </span>
                           )}
                         </td>
                         <td><StatusChip status={item.displayStatus} /></td>
                         <td onClick={e => e.stopPropagation()}>
                           <div className="ta-actions" style={{ justifyContent: "flex-end" }}>
-                            <button className="ta-icon-btn view" title="View" onClick={() => onView(item)} suppressHydrationWarning aria-label="View">
+                            <button className="ta-icon-btn view" title={t("View")} onClick={() => onView(item)} suppressHydrationWarning aria-label={t("View")}>
                               <i className="ti ti-eye" />
                             </button>
                             <button
                               className="ta-icon-btn approve"
-                              title="Approve"
+                              title={t("Approve")}
                               disabled={!item.canAction}
                               onClick={() => onApprove(item)}
                               suppressHydrationWarning
-                             aria-label="Approve">
+                             aria-label={t("Approve")}>
                               <i className="ti ti-check" />
                             </button>
                             <button
                               className="ta-icon-btn reject"
-                              title="Reject"
+                              title={t("Reject")}
                               disabled={!item.canAction}
                               onClick={() => onReject(item)}
                               suppressHydrationWarning
-                             aria-label="Reject">
+                             aria-label={t("Reject")}>
                               <i className="ti ti-x" />
                             </button>
                           </div>
@@ -253,11 +256,11 @@ export default function ApprovalsTable({
             {totalPages > 1 && (
               <div className="ta-pagination">
                 <span className="ta-pagination-info">
-                  Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sorted.length)} of {sorted.length}
+                  {t("Showing {from}–{to} of {total}", { from: (page - 1) * PAGE_SIZE + 1, to: Math.min(page * PAGE_SIZE, sorted.length), total: sorted.length })}
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <button className="ta-page-btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} suppressHydrationWarning>
-                    <i className="ti ti-chevron-left" /> Prev
+                    <i className="ti ti-chevron-left" /> {t("Prev")}
                   </button>
                   {Array.from({ length: pageWindowSize }, (_, i) => pageWindowStart + i).map(n => (
                     <button
@@ -270,7 +273,7 @@ export default function ApprovalsTable({
                     </button>
                   ))}
                   <button className="ta-page-btn" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} suppressHydrationWarning>
-                    Next <i className="ti ti-chevron-right" />
+                    {t("Next")} <i className="ti ti-chevron-right" />
                   </button>
                 </div>
               </div>

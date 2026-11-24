@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
 import { useVoiceMutePreference } from "@/hooks/useVoiceMutePreference";
+import { useT } from "@/hooks/useI18n";
 import VoiceConversationPanel from "@/components/VoiceConversationPanel";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
 
@@ -39,6 +40,7 @@ function clamp(value: number, min: number, max: number): number {
 const HIDDEN_ROUTES = ["/login", "/signup"];
 
 export default function VoiceCommandButton() {
+  const t = useT();
   const pathname = usePathname();
   const user = useCurrentUser();
   const { isMuted, toggleMuted } = useVoiceMutePreference();
@@ -139,8 +141,8 @@ export default function VoiceCommandButton() {
   if (HIDDEN_ROUTES.includes(pathname)) return null;
 
   const disabledReason = !isAuthenticated
-    ? "Log in to use voice commands"
-    : "Voice commands need a Chromium-based browser (Chrome, Edge) — the Web Speech API isn't available here.";
+    ? t("Log in to use voice commands")
+    : t("Voice commands need a Chromium-based browser (Chrome, Edge) — the Web Speech API isn't available here.");
 
   // Every voice response now opens this panel — the recognized transcript
   // while the request is in flight, then the result, whether the intent was
@@ -252,7 +254,7 @@ export default function VoiceCommandButton() {
             fontSize: 12.5, lineHeight: 1.5, color: "var(--on-bg)",
           }}
         >
-          <div>How can I help you?</div>
+          <div>{t("How can I help you?")}</div>
           <div lang="hi" style={{ color: "var(--on-variant)" }}>मैं आपकी कैसे मदद कर सकता हूँ?</div>
         </div>
       )}
@@ -267,8 +269,8 @@ export default function VoiceCommandButton() {
         onPointerMove={handleDragPointerMove}
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerUp}
-        aria-label={isDisabled ? disabledReason : "Open voice assistant — press and drag to move"}
-        title={isDisabled ? disabledReason : "Voice assistant — drag to move"}
+        aria-label={isDisabled ? disabledReason : t("Open voice assistant — press and drag to move")}
+        title={isDisabled ? disabledReason : t("Voice assistant — drag to move")}
         data-testid="voice-fab-idle"
         className={!isDisabled && !isDragging ? "voice-fab-idle-pulse" : undefined}
         style={{

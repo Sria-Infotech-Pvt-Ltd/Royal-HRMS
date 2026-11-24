@@ -5,6 +5,7 @@
 
 import PhoneInput from "@/components/PhoneInput";
 import FieldError from "@/components/shared/FieldError";
+import { useT } from "@/hooks/useI18n";
 
 interface EditRecordContactFieldsProps {
   canEdit: boolean;
@@ -27,12 +28,13 @@ export default function EditRecordContactFields({
   canEdit, email, mobile, savedEmail, isLoginChangeConfirmed, emailError, mobileError,
   onEmailChange, onMobileChange, onLoginChangeConfirmed,
 }: EditRecordContactFieldsProps) {
+  const t = useT();
   const isEmailChanged = email.trim().toLowerCase() !== savedEmail.trim().toLowerCase();
   return (
     <>
       <div>
         <label className="block text-[12.5px] font-semibold mb-1.5">
-          Personal email {!canEdit && <span style={HINT_STYLE}>read-only</span>}
+          {t("Personal email")} {!canEdit && <span style={HINT_STYLE}>{t("read-only")}</span>}
         </label>
         <input
           type="email" value={email} readOnly={!canEdit} className="field-input"
@@ -45,13 +47,13 @@ export default function EditRecordContactFields({
               type="checkbox" checked={isLoginChangeConfirmed} className="mt-0.5"
               onChange={event => onLoginChangeConfirmed(event.target.checked)}
             />
-            <span>This is also the employee&apos;s login email. Changing it changes how they sign in, and they will be notified at the old and new address.</span>
+            <span>{t("This is also the employee's login email. Changing it changes how they sign in, and they will be notified at the old and new address.")}</span>
           </label>
         )}
       </div>
       <div>
         <label className="block text-[12.5px] font-semibold mb-1.5">
-          Mobile number {!canEdit && <span style={HINT_STYLE}>read-only</span>}
+          {t("Mobile number")} {!canEdit && <span style={HINT_STYLE}>{t("read-only")}</span>}
         </label>
         <PhoneInput value={mobile} onChange={canEdit ? onMobileChange : () => {}} placeholder="90000 00000" />
         <FieldError message={mobileError} />

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
 
 function initials(name: string): string {
@@ -21,6 +22,7 @@ interface Props {
  * and imperative "fire once" API, so it never loops or re-triggers on rerender).
  */
 export default function BirthdayCelebrationModal({ employee, onClose }: Props) {
+  const t = useT();
   const fired = useRef(false);
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export default function BirthdayCelebrationModal({ employee, onClose }: Props) {
       >
         <button
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t("Close")}
           suppressHydrationWarning
           style={{ position: "absolute", top: 14, right: 14, background: "none", border: "none", cursor: "pointer", color: "var(--on-variant)", fontSize: 18 }}
         >
@@ -86,7 +88,7 @@ export default function BirthdayCelebrationModal({ employee, onClose }: Props) {
         </div>
 
         <div style={{ fontSize: 20, fontWeight: 800, color: "var(--on-bg)" }}>
-          Happy Birthday, {employee.full_name}!
+          {t("Happy Birthday, {name}!", { name: employee.full_name })}
         </div>
         <div style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 4 }}>
           {employee.designation}{employee.department ? ` · ${employee.department}` : ""}
@@ -96,7 +98,7 @@ export default function BirthdayCelebrationModal({ employee, onClose }: Props) {
           marginTop: 18, padding: "14px 16px", borderRadius: 10,
           background: "rgba(219,39,119,0.06)", fontSize: 13, color: "var(--on-bg)", lineHeight: 1.6,
         }}>
-          {employee.message || "Wishing you a wonderful year ahead!"}
+          {employee.message || t("Wishing you a wonderful year ahead!")}
         </div>
 
         <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 16 }}>

@@ -1,8 +1,10 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import type { BranchDistribution } from "./_data";
 
 export default function EmployeeDistributionChart({ distribution }: { distribution: BranchDistribution[] }) {
+  const t = useT();
   if (distribution.length === 0) return null;
 
   const maxEmp = Math.max(...distribution.map(d => d.employees), 8);
@@ -12,7 +14,7 @@ export default function EmployeeDistributionChart({ distribution }: { distributi
     <div className="card">
       <div className="card-header">
         <div className="card-title">
-          <i className="ti ti-chart-bar" /> Employee Distribution by Company Code
+          <i className="ti ti-chart-bar" /> {t("Employee Distribution by Company Code")}
         </div>
       </div>
       <div className="card-body">
@@ -39,7 +41,7 @@ export default function EmployeeDistributionChart({ distribution }: { distributi
                     borderRadius: "6px 6px 0 0",
                     transition: "height 0.3s ease",
                     cursor: "pointer"
-                  }} title={`${dist.branch}: ${dist.employees} Employees`} />
+                  }} title={t("{branch}: {count} Employees", { branch: dist.branch, count: dist.employees })} />
                   <div style={{ position: "absolute", bottom: "-30px", fontSize: "12px", color: "var(--on-variant)", whiteSpace: "nowrap", textAlign: "center" }}>
                     {dist.branch}
                   </div>

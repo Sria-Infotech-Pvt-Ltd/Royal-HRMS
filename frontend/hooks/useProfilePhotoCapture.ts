@@ -5,6 +5,7 @@
 // detection loop. Just getUserMedia + a manual "Capture" button that snapshots
 // the current video frame to a canvas and hands back a JPEG Blob. The camera
 // lifecycle (open/close) mirrors useFaceLivenessCapture's pattern.
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 export type PhotoCapturePhase =
@@ -68,7 +69,7 @@ export function useProfilePhotoCapture(
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
         setPhase("camera_denied");
       } else {
-        setErrorMessage("Could not access the camera. Please check it isn't in use by another app.");
+        setErrorMessage(tr("Could not access the camera. Please check it isn't in use by another app."));
         setPhase("error");
       }
     }
@@ -85,7 +86,7 @@ export function useProfilePhotoCapture(
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(blob => {
       if (!blob) {
-        setErrorMessage("Could not capture the photo. Please try again.");
+        setErrorMessage(tr("Could not capture the photo. Please try again."));
         setPhase("error");
         return;
       }

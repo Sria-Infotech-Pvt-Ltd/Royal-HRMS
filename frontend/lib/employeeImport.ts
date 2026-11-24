@@ -1,12 +1,13 @@
+import { tr } from "@/lib/i18n/tr";
 import type { ImportCommitResult, ImportInviteProgress, ImportJobProgress, ImportJobStatus, ImportRowStatus } from "@/types/employeeImport";
 
 export const IMPORT_MAX_BYTES = 5 * 1024 * 1024;
 
 /** Quick client-side check before upload; the server repeats it (and the real checks) regardless. */
 export function validateImportFile(file: { name: string; size: number }): string | null {
-  if (!file.name.toLowerCase().endsWith(".xlsx")) return "Please upload the .xlsx template. CSV files are not accepted here.";
-  if (file.size > IMPORT_MAX_BYTES) return "The file is too large. The maximum size is 5 MB.";
-  if (file.size === 0) return "The file is empty.";
+  if (!file.name.toLowerCase().endsWith(".xlsx")) return tr("Please upload the .xlsx template. CSV files are not accepted here.");
+  if (file.size > IMPORT_MAX_BYTES) return tr("The file is too large. The maximum size is 5 MB.");
+  if (file.size === 0) return tr("The file is empty.");
   return null;
 }
 
@@ -18,16 +19,20 @@ export const ROW_STATUS_LABEL: Record<ImportRowStatus, string> = {
 
 /** One line describing what happened after a confirmed import; invitations are sent in the background, so progress may still be running. */
 export function describeCommitResult(result: ImportCommitResult, progress: ImportInviteProgress | null = null): string {
-  const people = `${result.created} employee${result.created === 1 ? "" : "s"}`;
+  const names = people(result.created);
   if (result.already_committed) {
-    return `This import was already completed earlier: ${people} were created. Nothing new was added.`;
+    return tr("This import was already completed earlier: {people} were created. Nothing new was added.", { people: names });
   }
-  const created = `${people} created.`;
-  if (!progress) return `${created} Activation emails are being sent.`;
+  const created = tr("{people} created.", { people: names });
+  if (!progress) return tr("{created} Activation emails are being sent.", { created });
   const failed = progress.failed.length;
-  if (progress.state === "sending") return `${created} Sending activation emails: ${progress.sent + failed} of ${progress.total} done.`;
-  if (failed === 0) return `${created} Activation emails were sent to all of them.`;
-  return `${created} ${failed} activation email${failed === 1 ? "" : "s"} could not be sent: the employees exist, use Resend Invite for them.`;
+  if (progress.state === "sending") {
+    return tr("{created} Sending activation emails: {done} of {total} done.", { created, done: progress.sent + failed, total: progress.total });
+  }
+  if (failed === 0) return tr("{created} Activation emails were sent to all of them.", { created });
+  return failed === 1
+    ? tr("{created} {count} activation email could not be sent: the employees exist, use Resend Invite for them.", { created, count: failed })
+    : tr("{created} {count} activation emails could not be sent: the employees exist, use Resend Invite for them.", { created, count: failed });
 }
 
 // ── Background import job ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -39,12 +44,6 @@ export const JOB_STATUS_LABEL: Record<ImportJobStatus, string> = {
   completed_with_errors: "Completed with errors",
   failed: "Stopped",
   cancelled: "Cancelled",
-};
-
-const FAILURE_REASON: Record<string, string> = {
-  employee_id_range_full: "the employee ID range for this employment type is full",
-  batch_failed: "a batch could not be saved after several attempts",
-  file_unreadable: "the stored file could not be read",
 };
 
 export const POLL_ACTIVE_MS = 3_000;
@@ -66,28 +65,38 @@ export const canCancelJob = (job: ImportJobProgress): boolean => job.is_active &
 export const canRetryEmails = (job: ImportJobProgress): boolean => job.invitations.failed > 0;
 export const hasRowErrors = (job: ImportJobProgress): boolean => job.failed_rows > 0;
 
-const people = (count: number): string => `${count} employee${count === 1 ? "" : "s"}`;
+const people = (count: number): string => (count === 1 ? tr("{count} employee", { count }) : tr("{count} employees", { count }));
+const rowsWord = (count: number): string => (count === 1 ? tr("{count} row", { count }) : tr("{count} rows", { count }));
+
+/** The reason text is kept in English in FAILURE_REASON and translated here, where it is shown. */
+function failureReason(code: string): string {
+  switch (code) {
+    case "employee_id_range_full": return tr("the employee ID range for this employment type is full");
+    case "batch_failed": return tr("a batch could not be saved after several attempts");
+    case "file_unreadable": return tr("the stored file could not be read");
+    default: return tr("an unexpected problem");
+  }
+}
 
 /** Headline about EMPLOYEE CREATION only. Whether the emails arrived is a separate statement (describeEmails). */
 export function describeJob(job: ImportJobProgress): string {
-  const failed = job.failed_rows > 0 ? `, ${job.failed_rows} row${job.failed_rows === 1 ? "" : "s"} failed` : "";
+  const names = people(job.created);
   switch (job.status) {
     case "queued":
-      return "Import queued. The employees will be created in the background. You can close this window: progress is saved.";
+      return tr("Import queued. The employees will be created in the background. You can close this window: progress is saved.");
     case "running":
-      return job.cancel_requested
-        ? `Stopping after the current batch. ${people(job.created)} created so far.`
-        : `Creating employees: ${job.processed_rows} of ${job.total_rows} rows processed, ${job.created} created${failed}.`;
+      if (job.cancel_requested) return tr("Stopping after the current batch. {people} created so far.", { people: names });
+      return job.failed_rows > 0
+        ? tr("Creating employees: {processed} of {total} rows processed, {created} created, {failed} failed.", { processed: job.processed_rows, total: job.total_rows, created: job.created, failed: rowsWord(job.failed_rows) })
+        : tr("Creating employees: {processed} of {total} rows processed, {created} created.", { processed: job.processed_rows, total: job.total_rows, created: job.created });
     case "completed":
-      return `${people(job.created)} created.`;
+      return tr("{people} created.", { people: names });
     case "completed_with_errors":
-      return `${people(job.created)} created. ${job.failed_rows} row${job.failed_rows === 1 ? "" : "s"} could not be imported: download the error report.`;
+      return tr("{people} created. {rows} could not be imported: download the error report.", { people: names, rows: rowsWord(job.failed_rows) });
     case "cancelled":
-      return `Import cancelled. ${people(job.created)} had already been created and stay in the system.`;
-    default: {
-      const reason = FAILURE_REASON[job.failure_code] ?? "an unexpected problem";
-      return `The import stopped because ${reason}. ${people(job.created)} had been created before it stopped.`;
-    }
+      return tr("Import cancelled. {people} had already been created and stay in the system.", { people: names });
+    default:
+      return tr("The import stopped because {reason}. {people} had been created before it stopped.", { reason: failureReason(job.failure_code), people: names });
   }
 }
 
@@ -95,11 +104,11 @@ export function describeJob(job: ImportJobProgress): string {
 export function describeEmails(job: ImportJobProgress): string {
   const { held, total, sent, failed, skipped } = job.invitations;
   const waiting = emailsInFlight(job);
-  if (total === 0) return job.is_active ? "Activation emails are queued after each employee is created." : "No activation emails were needed.";
-  const parts = [`${sent} sent`, `${waiting} waiting`, `${failed} failed`];
-  if (skipped > 0) parts.push(`${skipped} not needed`);
-  const base = `Activation emails: ${parts.join(", ")}.`;
-  if (held && waiting > 0) return `${base} Sending is switched off by an administrator, so they are waiting.`;
-  if (failed > 0) return `${base} The employees exist; retry the failed emails below.`;
+  if (total === 0) return job.is_active ? tr("Activation emails are queued after each employee is created.") : tr("No activation emails were needed.");
+  const parts = [tr("{count} sent", { count: sent }), tr("{count} waiting", { count: waiting }), tr("{count} failed", { count: failed })];
+  if (skipped > 0) parts.push(tr("{count} not needed", { count: skipped }));
+  const base = tr("Activation emails: {parts}.", { parts: parts.join(", ") });
+  if (held && waiting > 0) return tr("{base} Sending is switched off by an administrator, so they are waiting.", { base });
+  if (failed > 0) return tr("{base} The employees exist; retry the failed emails below.", { base });
   return base;
 }

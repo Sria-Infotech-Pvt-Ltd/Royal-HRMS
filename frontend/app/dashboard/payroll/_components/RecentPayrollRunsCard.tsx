@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { PayrollCycle } from "@/types/payroll";
 import { STATUS_BADGE, STATUS_LABEL, DETAIL_STATUSES, TERMINAL_STATUSES, cyclePeriodLabel } from "./payrollDashboardShared";
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 
 interface RecentPayrollRunsCardProps {
   cycles: PayrollCycle[];
@@ -15,25 +16,26 @@ interface RecentPayrollRunsCardProps {
 
 export default function RecentPayrollRunsCard({ cycles, cyclesLoading, canResume, onRunPayroll, onResumeCycle }: RecentPayrollRunsCardProps) {
   const router = useRouter();
+  const t = useT();
 
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-history" /> Recent Payroll Runs</div>
+        <div className="card-title"><i className="ti ti-history" /> {t("Recent Payroll Runs")}</div>
       </div>
 
       {cyclesLoading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 24 }} />
-          <div style={{ marginTop: 8, fontSize: 13 }}>Loading payroll cycles…</div>
+          <div style={{ marginTop: 8, fontSize: 13 }}>{t("Loading payroll cycles…")}</div>
         </div>
       ) : cycles.length === 0 ? (
         <div style={{ padding: "40px", textAlign: "center", color: "var(--on-variant)" }}>
           <i className="ti ti-calendar-off" style={{ fontSize: 36, display: "block", marginBottom: 12 }} />
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>No payroll runs yet</div>
-          <div style={{ fontSize: 13, marginBottom: 16 }}>Click &quot;Run Payroll&quot; to start your first payroll cycle.</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{t("No payroll runs yet")}</div>
+          <div style={{ fontSize: 13, marginBottom: 16 }}>{t("Click \"Run Payroll\" to start your first payroll cycle.")}</div>
           <button className="btn btn-filled btn-sm" onClick={() => onRunPayroll()}>
-            <i className="ti ti-player-play" /> Run First Payroll
+            <i className="ti ti-player-play" /> {t("Run First Payroll")}
           </button>
         </div>
       ) : (
@@ -41,12 +43,12 @@ export default function RecentPayrollRunsCard({ cycles, cyclesLoading, canResume
           <table>
             <thead>
               <tr>
-                <th>Period</th>
-                <th>Cycle Start</th>
-                <th>Cycle End</th>
-                <th>Pay Date</th>
-                <th>Payslips</th>
-                <th>Status</th>
+                <th>{t("Period")}</th>
+                <th>{t("Cycle Start")}</th>
+                <th>{t("Cycle End")}</th>
+                <th>{t("Pay Date")}</th>
+                <th>{t("Payslips")}</th>
+                <th>{t("Status")}</th>
               </tr>
             </thead>
             <tbody>
@@ -66,11 +68,11 @@ export default function RecentPayrollRunsCard({ cycles, cyclesLoading, canResume
                   <td style={{ fontSize: 13, fontWeight: 500 }}>{formatDate(c.pay_date)}</td>
                   <td>
                     <span style={{ fontWeight: 600 }}>{c.payslip_count}</span>
-                    <span style={{ color: "var(--on-variant)", fontSize: 12 }}> employees</span>
+                    <span style={{ color: "var(--on-variant)", fontSize: 12 }}> {t("employees")}</span>
                   </td>
                   <td>
                     <span className={STATUS_BADGE[c.status] ?? "badge badge-neutral"}>
-                      {STATUS_LABEL[c.status] ?? c.status}
+                      {STATUS_LABEL[c.status] ? t(STATUS_LABEL[c.status]) : c.status}
                     </span>
                   </td>
                 </tr>

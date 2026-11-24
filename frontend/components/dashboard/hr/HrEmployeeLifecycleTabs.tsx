@@ -6,6 +6,8 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { formatDate as sharedFormatDate } from "@/lib/formatDate";
 import type { HREmployeeLifecycle, HRLifecycleEmployee } from "@/types/dashboard";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 type Tab = "new_joiners" | "notice_period" | "work_anniversaries";
 
@@ -25,13 +27,14 @@ function initials(name: string): string {
 }
 
 function subLabel(tab: Tab, emp: HRLifecycleEmployee): string {
-  if (tab === "new_joiners")        return emp.date_of_joining ? `Joined ${formatDate(emp.date_of_joining)}` : emp.designation ?? "—";
-  if (tab === "notice_period")      return emp.date_of_joining ? `Since ${formatDate(emp.date_of_joining)}` : "—";
-  if (tab === "work_anniversaries") return emp.years_completed ? `${emp.years_completed} year${emp.years_completed !== 1 ? "s" : ""} · ${formatDate(emp.anniversary_date)}` : formatDate(emp.anniversary_date);
+  if (tab === "new_joiners")        return emp.date_of_joining ? tr("Joined {date}", { date: formatDate(emp.date_of_joining) }) : emp.designation ?? "—";
+  if (tab === "notice_period")      return emp.date_of_joining ? tr("Since {date}", { date: formatDate(emp.date_of_joining) }) : "—";
+  if (tab === "work_anniversaries") return emp.years_completed ? (emp.years_completed === 1 ? tr("{count} year · {date}", { count: emp.years_completed, date: formatDate(emp.anniversary_date) }) : tr("{count} years · {date}", { count: emp.years_completed, date: formatDate(emp.anniversary_date) })) : formatDate(emp.anniversary_date);
   return "—";
 }
 
 export default function HrEmployeeLifecycleTabs() {
+  const t = useT();
   const [activeTab, setActiveTab] = useState<Tab>("new_joiners");
   const { data, loading } = useFetch<HREmployeeLifecycle>(API.dashboard.hrEmployeeLifecycle);
 
@@ -41,7 +44,7 @@ export default function HrEmployeeLifecycleTabs() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-users" /> Employee Lifecycle</div>
+        <div className="card-title"><i className="ti ti-users" /> {t("Employee Lifecycle")}</div>
         {!loading && group && group.count > 0 && (
           <span className="badge badge-primary">{group.count}</span>
         )}
@@ -62,19 +65,19 @@ export default function HrEmployeeLifecycleTabs() {
             }}
           >
             <i className={`ti ${tab.icon}`} style={{ fontSize: 13 }} />
-            {tab.label}
+            {t(tab.label)}
           </button>
         ))}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : employees.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-users" style={{ fontSize: 22, display: "block", marginBottom: 6, opacity: 0.3 }} />
-          No records
+          {t("No records")}
         </div>
       ) : (
         <div style={{ padding: "8px 0" }}>
@@ -99,7 +102,7 @@ export default function HrEmployeeLifecycleTabs() {
           ))}
           <div style={{ padding: "8px 20px 4px", borderTop: "1px solid var(--border)" }}>
             <Link href="/dashboard/employees" style={{ fontSize: 12, color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>
-              View all employees <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
+              {t("View all employees")} <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
             </Link>
           </div>
         </div>

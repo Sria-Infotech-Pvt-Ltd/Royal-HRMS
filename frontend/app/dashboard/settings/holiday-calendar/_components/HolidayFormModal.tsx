@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
@@ -44,6 +45,7 @@ const INPUT_ERR = "w-full border border-[var(--error)] rounded-lg px-3 py-2 text
 
 export default function HolidayFormModal({ mode, editing, branches, onClose, onSaved }: Props) {
   const { showToast } = useToast();
+  const t = useT();
   const [form, setForm]       = useState<HolidayFormPayload>(editing ? toForm(editing) : BLANK);
   const [errors, setErrors]   = useState<Record<string, string>>({});
   const [saveErr, setSaveErr] = useState("");
@@ -57,9 +59,9 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
   function validate() {
     const e: Record<string, string> = {};
     const name = form.name.trim();
-    if (!name) e.name = "Holiday name is required.";
-    else if (!HOLIDAY_NAME_RE.test(name)) e.name = "Holiday name can only contain letters, spaces, apostrophes, periods, and hyphens — not just numbers or symbols.";
-    if (!form.date) e.date = "Date is required.";
+    if (!name) e.name = t("Holiday name is required.");
+    else if (!HOLIDAY_NAME_RE.test(name)) e.name = t("Holiday name can only contain letters, spaces, apostrophes, periods, and hyphens — not just numbers or symbols.");
+    if (!form.date) e.date = t("Date is required.");
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -76,7 +78,7 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
       onSaved();
       onClose();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to save holiday.";
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Failed to save holiday.");
       setSaveErr(msg);
     } finally {
       setSaving(false);
@@ -88,9 +90,9 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
       <div className="bg-[var(--surface)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
           <span className="text-sm font-bold text-[var(--on-bg)]">
-            {mode === "add" ? "Add Holiday" : `Edit: ${editing?.name}`}
+            {mode === "add" ? t("Add Holiday") : t("Edit: {name}", { name: editing?.name ?? "" })}
           </span>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors" aria-label="Close">
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors" aria-label={t("Close")}>
             <i className="ti ti-x text-sm" />
           </button>
         </div>
@@ -101,62 +103,62 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
             </div>
           )}
           <div>
-            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Holiday Name *</label>
+            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">{t("Holiday Name *")}</label>
             <input className={errors.name ? INPUT_ERR : INPUT} value={form.name}
-              onChange={e => setField("name", sanitizeHolidayName(e.target.value))} placeholder="e.g. Independence Day" autoFocus maxLength={80} />
+              onChange={e => setField("name", sanitizeHolidayName(e.target.value))} placeholder={t("e.g. Independence Day")} autoFocus maxLength={80} />
             {errors.name && <p className="text-xs text-[var(--error)] mt-1">{errors.name}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Date *</label>
+              <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">{t("Date *")}</label>
               <DateInput className={errors.date ? INPUT_ERR : INPUT} value={form.date} onChange={isoDate => setField("date", isoDate)} />
               {errors.date && <p className="text-xs text-[var(--error)] mt-1">{errors.date}</p>}
             </div>
             <div>
-              <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Type</label>
+              <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">{t("Type")}</label>
               <select className={`${INPUT} field-select`} value={form.holiday_type} onChange={e => setField("holiday_type", e.target.value as HolidayType)}>
-                <option value="national">National</option>
-                <option value="regional">Regional</option>
-                <option value="company">Company</option>
+                <option value="national">{t("National")}</option>
+                <option value="regional">{t("Regional")}</option>
+                <option value="company">{t("Company")}</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Applicable Company Code</label>
+            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">{t("Applicable Company Code")}</label>
             <SearchableSelect
               inputClassName={INPUT}
               value={form.branch === null ? "" : String(form.branch)}
               onChange={v => setField("branch", v === "" ? null : Number(v))}
-              placeholder="All Company Codes"
+              placeholder={t("All Company Codes")}
               options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Description</label>
+            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">{t("Description")}</label>
             <textarea className={INPUT} rows={2} value={form.description}
-              onChange={e => setField("description", e.target.value)} placeholder="Optional notes" />
+              onChange={e => setField("description", e.target.value)} placeholder={t("Optional notes")} />
           </div>
           <div className="flex items-center gap-6">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={form.is_optional} onChange={e => setField("is_optional", e.target.checked)}
                 className="w-4 h-4 rounded border-[var(--outline-v)] text-[var(--info)]" />
-              <span className="text-sm text-[var(--on-bg)]">Optional holiday</span>
+              <span className="text-sm text-[var(--on-bg)]">{t("Optional holiday")}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={form.is_active} onChange={e => setField("is_active", e.target.checked)}
                 className="w-4 h-4 rounded border-[var(--outline-v)] text-[var(--info)]" />
-              <span className="text-sm text-[var(--on-bg)]">Active</span>
+              <span className="text-sm text-[var(--on-bg)]">{t("Active")}</span>
             </label>
           </div>
         </div>
         <div className="flex justify-end gap-2 px-6 pb-5">
           <button onClick={onClose} className="px-4 py-2 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-mid)] transition-colors">
-            Cancel
+            {t("Cancel")}
           </button>
           <button onClick={save} disabled={saving}
             className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition-colors flex items-center gap-2"
             style={{ background: "var(--primary)", opacity: saving ? 0.7 : 1 }}>
-            {saving ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</> : mode === "add" ? "Add Holiday" : "Save Changes"}
+            {saving ? <><i className="ti ti-loader-2 animate-spin" /> {t("Saving…")}</> : mode === "add" ? t("Add Holiday") : t("Save Changes")}
           </button>
         </div>
       </div>

@@ -32,7 +32,7 @@ function DecisionRow({
   /** The stage was skipped on purpose (no manager): say so instead of "Pending - Not yet assigned". */
   isSkipped?:     boolean;
 }) {
-  const label = isSkipped ? "Skipped" : decisionStatus ? (DECISION_LABEL[decisionStatus] ?? decisionStatus) : "Pending";
+  const label = isSkipped ? tr("Skipped") : decisionStatus ? tr(DECISION_LABEL[decisionStatus] ?? decisionStatus) : tr("Pending");
   const dotClass = isSkipped ? "bg-[var(--outline-v)]" : decisionStatus === "approved" ? "bg-[var(--success)]" : decisionStatus === "rejected" ? "bg-[var(--error)]" : "bg-[var(--warn)]";
 
   return (
@@ -129,7 +129,7 @@ export default function LeaveRequestDetailModal({
                 <span>{tr(r.total_days === 1 ? "{count} day" : "{count} days", { count: r.total_days })}</span>
               )}
             </div>
-            <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
+            <span className={STATUS_BADGE[r.status]}>{tr(STATUS_LABEL[r.status])}</span>
           </div>
 
           <div>
@@ -150,7 +150,7 @@ export default function LeaveRequestDetailModal({
           <div className="flex flex-col gap-4 border-t border-[var(--outline-v)] pt-4">
             <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide -mb-1">{tr("Approval Flow")}</p>
             <DecisionRow
-              level="Manager Approval"
+              level={tr("Manager Approval")}
               approverName={r.l1_approver_name}
               decisionStatus={r.l1_status}
               remarks={r.l1_remarks}
@@ -159,7 +159,7 @@ export default function LeaveRequestDetailModal({
             />
             {(r.l2_approver_name || r.status === "l2_pending") && (
               <DecisionRow
-                level="HR Approval"
+                level={tr("HR Approval")}
                 approverName={r.l2_approver_name}
                 decisionStatus={r.l2_status}
                 remarks={r.l2_remarks}
@@ -233,8 +233,8 @@ export default function LeaveRequestDetailModal({
       {confirmingCancel && (
         <ConfirmModal
           title={tr("Cancel this leave request?")}
-          body={`This cancels the ${r.leave_type_display} request for ${fmtDate(r.start_date)} → ${fmtDate(r.end_date)} and releases any balance held against it. This cannot be undone.`}
-          confirmLabel="Cancel Request"
+          body={tr("This cancels the {type} request for {start} → {end} and releases any balance held against it. This cannot be undone.", { type: r.leave_type_display, start: fmtDate(r.start_date), end: fmtDate(r.end_date) })}
+          confirmLabel={tr("Cancel Request")}
           danger
           onConfirm={() => {
             setConfirmingCancel(false);

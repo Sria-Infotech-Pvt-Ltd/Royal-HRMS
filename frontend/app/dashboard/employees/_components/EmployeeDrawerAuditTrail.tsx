@@ -6,6 +6,7 @@
 // it isn't duplicated per render. Split out purely to keep
 // EmployeeDrawer.tsx under this codebase's ~300-line guideline.
 
+import { useT } from "@/hooks/useI18n";
 import { formatDateSlash, formatTimeHm } from "@/lib/formatDate";
 import { Row, SectionCard } from "./EmployeeDrawerParts";
 
@@ -32,14 +33,15 @@ interface Props {
 }
 
 export default function EmployeeDrawerAuditTrail({ rows, forbidden = false, loading = false }: Props) {
+  const t = useT();
   return (
-    <SectionCard title="Audit Trail" list={forbidden}>
+    <SectionCard title={t("Audit Trail")} list={forbidden}>
       {forbidden ? (
-        <Row label="Visibility" value="Permission required" />
+        <Row label={t("Visibility")} value={t("Permission required")} />
       ) : loading ? (
-        <p className="hint">Loading…</p>
+        <p className="hint">{t("Loading…")}</p>
       ) : !rows || rows.length === 0 ? (
-        <p className="hint">No access recorded yet in this session.</p>
+        <p className="hint">{t("No access recorded yet in this session.")}</p>
       ) : (
         // Newest first: only the latest entry shows at rest, the rest scroll
         // inside this box so a long history doesn't stretch the whole form.
@@ -48,9 +50,9 @@ export default function EmployeeDrawerAuditTrail({ rows, forbidden = false, load
             <div key={row.id} className="actrow">
               <span className="bar" />
               <div className="meta">
-                <div className="t1">{row.description || (row.action === "profile_viewed_self" ? "Record viewed" : row.action.replace(/_/g, " "))}</div>
+                <div className="t1">{row.description || (row.action === "profile_viewed_self" ? t("Record viewed") : row.action.replace(/_/g, " "))}</div>
                 <div className="t2">
-                  {row.actor_name} · {row.action === "profile_viewed_self" ? "Employee (self-service)" : (row.actor_role || "Admin")}
+                  {row.actor_name} · {row.action === "profile_viewed_self" ? t("Employee (self-service)") : (row.actor_role || t("Admin"))}
                 </div>
               </div>
               <div className="dates" style={{ textAlign: "right" }}>

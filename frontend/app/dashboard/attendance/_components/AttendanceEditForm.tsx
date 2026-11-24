@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 
 const STATUSES = [
   { value: "present",    label: "Present"    },
@@ -32,6 +33,7 @@ export function AttendanceEditForm({
   recordId, initialStatus, initialClockIn, initialClockOut, initialNote,
   onSaved, onCancel,
 }: EditProps) {
+  const t = useT();
   const { showToast } = useToast();
   const [status,   setStatus]   = useState(initialStatus);
   const [clockIn,  setClockIn]  = useState(initialClockIn ?? "");
@@ -42,7 +44,7 @@ export function AttendanceEditForm({
 
   async function handleSave() {
     if (!reason.trim()) {
-      showToast("Reason is required — it's recorded in the audit log.", "error");
+      showToast(t("Reason is required — it's recorded in the audit log."), "error");
       return;
     }
     setSaving(true);
@@ -54,11 +56,11 @@ export function AttendanceEditForm({
         note,
         reason,
       });
-      showToast("Attendance record updated.", "success");
+      showToast(t("Attendance record updated."), "success");
       onSaved();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? "Failed to save. Please try again.";
+        ?? t("Failed to save. Please try again.");
       showToast(msg, "error");
     } finally {
       setSaving(false);
@@ -70,7 +72,7 @@ export function AttendanceEditForm({
     onStatus={setStatus} onClockIn={setClockIn} onClockOut={setClockOut}
     onNote={setNote} onReason={setReason}
     saving={saving} onSave={handleSave} onCancel={onCancel}
-    saveLabel="Save Changes"
+    saveLabel={t("Save Changes")}
   />;
 }
 
@@ -84,6 +86,7 @@ interface CreateProps {
 }
 
 export function AttendanceCreateForm({ employeeId, date, onSaved, onCancel }: CreateProps) {
+  const t = useT();
   const { showToast } = useToast();
   const [status,   setStatus]   = useState("present");
   const [clockIn,  setClockIn]  = useState("");
@@ -94,7 +97,7 @@ export function AttendanceCreateForm({ employeeId, date, onSaved, onCancel }: Cr
 
   async function handleSave() {
     if (!reason.trim()) {
-      showToast("Reason is required — it's recorded in the audit log.", "error");
+      showToast(t("Reason is required — it's recorded in the audit log."), "error");
       return;
     }
     setSaving(true);
@@ -108,11 +111,11 @@ export function AttendanceCreateForm({ employeeId, date, onSaved, onCancel }: Cr
         note,
         reason,
       });
-      showToast("Attendance record created.", "success");
+      showToast(t("Attendance record created."), "success");
       onSaved((response.data as { data?: { record_id?: string } })?.data?.record_id ?? "");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? "Failed to create record. Please try again.";
+        ?? t("Failed to create record. Please try again.");
       showToast(msg, "error");
     } finally {
       setSaving(false);
@@ -124,7 +127,7 @@ export function AttendanceCreateForm({ employeeId, date, onSaved, onCancel }: Cr
     onStatus={setStatus} onClockIn={setClockIn} onClockOut={setClockOut}
     onNote={setNote} onReason={setReason}
     saving={saving} onSave={handleSave} onCancel={onCancel}
-    saveLabel="Create Record"
+    saveLabel={t("Create Record")}
   />;
 }
 
@@ -145,52 +148,53 @@ function AttendanceFormFields({
   onStatus, onClockIn, onClockOut, onNote, onReason,
   saving, onSave, onCancel, saveLabel,
 }: FieldsProps) {
+  const t = useT();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
-        <label className="field-label">Status</label>
+        <label className="field-label">{t("Status")}</label>
         <select className="field-input field-select" value={status} onChange={e => onStatus(e.target.value)}>
-          {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          {STATUSES.map(s => <option key={s.value} value={s.value}>{t(s.label)}</option>)}
         </select>
       </div>
 
       <div className="form-row cols-2">
         <div>
-          <label className="field-label">Clock In</label>
+          <label className="field-label">{t("Clock In")}</label>
           <input type="time" className="field-input" value={clockIn} onChange={e => onClockIn(e.target.value)} />
         </div>
         <div>
-          <label className="field-label">Clock Out</label>
+          <label className="field-label">{t("Clock Out")}</label>
           <input type="time" className="field-input" value={clockOut} onChange={e => onClockOut(e.target.value)} />
         </div>
       </div>
 
       <div>
-        <label className="field-label">Note (optional)</label>
+        <label className="field-label">{t("Note (optional)")}</label>
         <input
           type="text" className="field-input" maxLength={200}
-          placeholder="WFH, field work, biometric failure…"
+          placeholder={t("WFH, field work, biometric failure…")}
           value={note} onChange={e => onNote(e.target.value)}
         />
       </div>
 
       <div>
         <label className="field-label">
-          Reason <span style={{ color: "var(--error)" }}>*</span>
-          <span style={{ fontSize: 10, color: "var(--on-variant)", fontWeight: 400, marginLeft: 6 }}>logged in audit trail</span>
+          {t("Reason")} <span style={{ color: "var(--error)" }}>*</span>
+          <span style={{ fontSize: 10, color: "var(--on-variant)", fontWeight: 400, marginLeft: 6 }}>{t("logged in audit trail")}</span>
         </label>
         <textarea
           className="field-input" rows={2} maxLength={500}
-          placeholder="e.g. Biometric device failure, employee forgot to punch, client visit…"
+          placeholder={t("e.g. Biometric device failure, employee forgot to punch, client visit…")}
           value={reason} onChange={e => onReason(e.target.value)}
           style={{ resize: "vertical" }}
         />
       </div>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", paddingTop: 4 }}>
-        <button className="btn btn-ghost btn-sm" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel} disabled={saving}>{t("Cancel")}</button>
         <button className="btn btn-filled btn-sm" onClick={onSave} disabled={saving}>
-          {saving ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</> : <><i className="ti ti-check" /> {saveLabel}</>}
+          {saving ? <><i className="ti ti-loader-2 animate-spin" /> {t("Saving…")}</> : <><i className="ti ti-check" /> {saveLabel}</>}
         </button>
       </div>
     </div>

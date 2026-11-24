@@ -1,8 +1,10 @@
 "use client";
 
 import type { ReferralRule } from "./_data";
+import { useT } from "@/hooks/useI18n";
 
 export default function ReferralRulesTab({ rules, loading }: { rules: ReferralRule[]; loading: boolean }) {
+  const t = useT();
   return (
     <div style={{ padding: "28px 32px" }}>
       {loading ? (
@@ -10,16 +12,16 @@ export default function ReferralRulesTab({ rules, loading }: { rules: ReferralRu
       ) : rules.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-file-text" />
-          <h3>No rules configured</h3>
-          <p>An admin can add referral rules from{" "}
-            <strong>Settings → Referral Rules</strong>.
+          <h3>{t("No rules configured")}</h3>
+          <p>{t("An admin can add referral rules from")}{" "}
+            <strong>{t("Settings → Referral Rules")}</strong>.
           </p>
         </div>
       ) : (
         <>
           <div className="alert alert-info" style={{ marginBottom: 24 }}>
             <i className="ti ti-info-circle" />
-            <div>These rules govern the Employee Referral Programme. Please read them carefully before submitting a referral.</div>
+            <div>{t("These rules govern the Employee Referral Programme. Please read them carefully before submitting a referral.")}</div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 20, marginBottom: 28 }}>
             {rules.map((rule, idx) => (
@@ -30,7 +32,7 @@ export default function ReferralRulesTab({ rules, loading }: { rules: ReferralRu
                   </div>
                   <div>
                     <span style={{ fontSize: 10, fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Rule {idx + 1}
+                      {t("Rule {number}", { number: idx + 1 })}
                     </span>
                     <p style={{ fontWeight: 700, fontSize: 14, color: "var(--on-bg)", margin: 0 }}>{rule.title}</p>
                   </div>

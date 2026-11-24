@@ -13,6 +13,7 @@ import { getStoredUser } from "@/lib/auth";
 import AnnouncementCard from "../../announcements/AnnouncementCard";
 import { FILTERS, type Announcement, type PageMeta } from "../../announcements/_data";
 import EssAnnouncementDetailModal from "./EssAnnouncementDetailModal";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   /** An announcement to open straight away, e.g. from its bell notification. */
@@ -24,6 +25,7 @@ const PAGE_SIZE = 10;
 function noop() { /* employees cannot edit or delete from this tab */ }
 
 export default function EssAnnouncementsTab({ openAnnouncementId = null }: Props) {
+  const t = useT();
   const [category, setCategory] = useState("");
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState<number | null>(openAnnouncementId);
@@ -68,8 +70,8 @@ export default function EssAnnouncementsTab({ openAnnouncementId = null }: Props
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Announcements</div>
-          <div className="page-sub">Company news, policy updates and celebrations meant for you</div>
+          <div className="page-title">{t("Announcements")}</div>
+          <div className="page-sub">{t("Company news, policy updates and celebrations meant for you")}</div>
         </div>
       </div>
 
@@ -81,7 +83,7 @@ export default function EssAnnouncementsTab({ openAnnouncementId = null }: Props
             className={`btn ${category === filter.value ? "btn-filled" : "btn-ghost"}`}
             suppressHydrationWarning
           >
-            {filter.label}
+            {t(filter.label)}
           </button>
         ))}
       </div>
@@ -89,7 +91,7 @@ export default function EssAnnouncementsTab({ openAnnouncementId = null }: Props
       {error && (
         <div className="alert alert-error mb-16">
           <i className="ti ti-alert-circle" /> {error}{" "}
-          <button className="btn btn-ghost btn-sm" onClick={refetch} suppressHydrationWarning>Retry</button>
+          <button className="btn btn-ghost btn-sm" onClick={refetch} suppressHydrationWarning>{t("Retry")}</button>
         </div>
       )}
 
@@ -102,8 +104,8 @@ export default function EssAnnouncementsTab({ openAnnouncementId = null }: Props
       {meta && results.length === 0 && (
         <div className="empty-state">
           <i className="ti ti-speakerphone" />
-          <h3>No announcements</h3>
-          <p>{category ? "Nothing in this category right now." : "You are all caught up."}</p>
+          <h3>{t("No announcements")}</h3>
+          <p>{category ? t("Nothing in this category right now.") : t("You are all caught up.")}</p>
         </div>
       )}
 
@@ -128,13 +130,13 @@ export default function EssAnnouncementsTab({ openAnnouncementId = null }: Props
 
       {meta && meta.total_pages > 1 && (
         <div className="ann-pagination">
-          <span className="ann-pagination-info">Page {meta.page} of {meta.total_pages}</span>
+          <span className="ann-pagination-info">{t("Page {page} of {total}", { page: meta.page, total: meta.total_pages })}</span>
           <div className="ann-page-btns">
             <button className="btn btn-ghost btn-sm" disabled={meta.page <= 1} onClick={() => setPage(p => p - 1)} suppressHydrationWarning>
-              <i className="ti ti-chevron-left" /> Prev
+              <i className="ti ti-chevron-left" /> {t("Prev")}
             </button>
             <button className="btn btn-ghost btn-sm" disabled={meta.page >= meta.total_pages} onClick={() => setPage(p => p + 1)} suppressHydrationWarning>
-              Next <i className="ti ti-chevron-right" />
+              {t("Next")} <i className="ti ti-chevron-right" />
             </button>
           </div>
         </div>

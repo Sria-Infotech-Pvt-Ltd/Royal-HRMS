@@ -43,7 +43,7 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
       <div className="card-header" style={{ flexWrap: "wrap", gap: 8 }}>
         <div>
           <div className="card-title">
-            {isLoading ? tr("Loading…") : `${MONTH_NAMES[month - 1]} ${year}`}
+            {isLoading ? tr("Loading…") : tr("{month} {year}", { month: tr(MONTH_NAMES[month - 1]), year })}
           </div>
           <div className="page-sub" style={{ marginTop: 2 }}>{tr("Daily attendance and approved leave.")}</div>
         </div>

@@ -5,6 +5,7 @@
 // server-side list; scope is enforced by the API regardless of what is shown here.
 
 import BranchFilterSelect from "@/components/BranchFilterSelect";
+import { useT } from "@/hooks/useI18n";
 import type { EmployeeStatusFilter } from "../_data";
 
 interface StatusFilterOption { value: "all" | EmployeeStatusFilter; label: string }
@@ -36,6 +37,7 @@ export default function EmployeeToolbar({
   dept, deptOptions, onDeptChange, status, statusFilters, onStatusChange,
   hasActiveFilters, onClearFilters, canImport, onBulkImport,
 }: Props) {
+  const t = useT();
   return (
     <div className="toolbar">
       <div className="search">
@@ -47,8 +49,8 @@ export default function EmployeeToolbar({
           </svg>
         )}
         <input
-          placeholder="Search by name, ID or email"
-          aria-label="Search employees by name, ID or email. Results update as you type; press Enter to search now."
+          placeholder={t("Search by name, ID or email")}
+          aria-label={t("Search employees by name, ID or email. Results update as you type; press Enter to search now.")}
           value={search}
           onChange={event => onSearchChange(event.target.value)}
           onKeyDown={event => {
@@ -59,11 +61,11 @@ export default function EmployeeToolbar({
           }}
           suppressHydrationWarning
         />
-        {searching && <span className="sr-only" role="status" aria-live="polite">Searching employees</span>}
+        {searching && <span className="sr-only" role="status" aria-live="polite">{t("Searching employees")}</span>}
       </div>
 
-      <select className="sel" value={dept} onChange={event => onDeptChange(event.target.value)} aria-label="Department" suppressHydrationWarning>
-        <option value="all">All Departments</option>
+      <select className="sel" value={dept} onChange={event => onDeptChange(event.target.value)} aria-label={t("Department")} suppressHydrationWarning>
+        <option value="all">{t("All Departments")}</option>
         {deptOptions.map(name => <option key={name} value={name}>{name}</option>)}
       </select>
 
@@ -79,20 +81,20 @@ export default function EmployeeToolbar({
       />
 
       <select
-        className="sel" value={status} aria-label="Status" suppressHydrationWarning
+        className="sel" value={status} aria-label={t("Status")} suppressHydrationWarning
         onChange={event => onStatusChange(event.target.value as "all" | EmployeeStatusFilter)}
       >
-        {statusFilters.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {statusFilters.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
       </select>
 
       <span className="spacer" />
 
       {hasActiveFilters && (
-        <button className="rvbtn ghost" type="button" onClick={onClearFilters} suppressHydrationWarning>Clear filters</button>
+        <button className="rvbtn ghost" type="button" onClick={onClearFilters} suppressHydrationWarning>{t("Clear filters")}</button>
       )}
       {canImport && (
-        <button className="rvbtn" type="button" onClick={onBulkImport} title="Bulk import employees from a spreadsheet" suppressHydrationWarning>
-          <i className="ti ti-file-upload" style={{ fontSize: 14 }} /> Bulk Import
+        <button className="rvbtn" type="button" onClick={onBulkImport} title={t("Bulk import employees from a spreadsheet")} suppressHydrationWarning>
+          <i className="ti ti-file-upload" style={{ fontSize: 14 }} /> {t("Bulk Import")}
         </button>
       )}
     </div>

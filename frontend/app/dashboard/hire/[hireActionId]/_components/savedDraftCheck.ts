@@ -1,3 +1,4 @@
+import { tr } from "@/lib/i18n/tr";
 // Before the final "Hire", the wizard re-saves the form and gets the draft the SERVER now holds. This compares the two for the
 // fields hiring depends on, so a value that is on screen but never reached the server is reported by name instead of being
 // discovered as a vague refusal after the hire request.
@@ -15,5 +16,5 @@ export function fieldsTheServerDidNotKeep(sent: Record<string, unknown>, held: R
   const saved = held ?? {};
   return WATCHED_FIELDS
     .filter(([key]) => asText(sent[key]) !== "" && asText(saved[key]) === "")
-    .map(([, label]) => label);
+    .map(([, label]) => tr(label));
 }

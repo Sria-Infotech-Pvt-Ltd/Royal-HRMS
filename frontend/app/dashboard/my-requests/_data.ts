@@ -3,6 +3,7 @@ import type { Expense } from "../expenses/_components/ExpenseClaims";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import { HR_HELP_DOCUMENT_TOPIC, type HrHelpRequest } from "@/types/hrHelp";
 import { formatDate } from "@/lib/formatDate";
+import { tr } from "@/lib/i18n/tr";
 
 // ─── Correction request shape (own corrections, /attendance/corrections/my/) ──
 // The single source of truth for "my attendance correction" rows — used by
@@ -190,7 +191,7 @@ export function leaveToMyItem(r: LeaveRequest): MyRequestItem {
     id:              r.id,
     requestCode:     `LR-${r.id.slice(0, 6).toUpperCase()}`,
     title:           r.leave_type_display,
-    detailSecondary: `${fmtShort(r.start_date)} - ${fmtShort(r.end_date)} · ${r.total_days} day${r.total_days === 1 ? "" : "s"}`,
+    detailSecondary: `${fmtShort(r.start_date)} - ${fmtShort(r.end_date)} · ${r.total_days === 1 ? tr("{count} day", { count: r.total_days }) : tr("{count} days", { count: r.total_days })}`,
     submittedAt:     r.created_at,
     status:          r.status,
     displayStatus:   toDisplayStatus(r.status),
@@ -207,7 +208,7 @@ export function expenseToMyItem(r: Expense): MyRequestItem {
     kind:            "expense",
     id:              String(r.expense_number),
     requestCode:     r.expense_ref,
-    title:           r.title || "Expense",
+    title:           r.title || tr("Expense"),
     detailSecondary: `₹${parseFloat(String(r.amount)).toLocaleString("en-IN")}`,
     submittedAt:     r.created_at,
     status:          r.status,
@@ -226,8 +227,8 @@ export function wfhToMyItem(r: WorkFromHomeRequest): MyRequestItem {
     kind:            "wfh",
     id:              r.id,
     requestCode:     `WFH-${r.id.slice(0, 6).toUpperCase()}`,
-    title:           r.location_label || "Work From Home",
-    detailSecondary: `${fmtShort(r.start_date)} - ${fmtShort(r.end_date)} · ${days} day${days === 1 ? "" : "s"}`,
+    title:           r.location_label || tr("Work From Home"),
+    detailSecondary: `${fmtShort(r.start_date)} - ${fmtShort(r.end_date)} · ${days === 1 ? tr("{count} day", { count: days }) : tr("{count} days", { count: days })}`,
     submittedAt:     r.created_at,
     status:          r.status,
     displayStatus:   toDisplayStatus(r.status),
@@ -251,7 +252,7 @@ export function correctionToMyItem(r: MyCorrectionRequest): MyRequestItem {
     kind:            "attendance_correction",
     id:              r.id,
     requestCode:     `AC-${r.id.slice(0, 6).toUpperCase()}`,
-    title:           PUNCH_LABEL[r.punch_type] ?? "Attendance Correction",
+    title:           tr(PUNCH_LABEL[r.punch_type] ?? "Attendance Correction"),
     detailSecondary: `${fmtDateOnly(r.date)} · ${arrows.join(", ")}`,
     submittedAt:     r.created_at,
     status:          r.status,

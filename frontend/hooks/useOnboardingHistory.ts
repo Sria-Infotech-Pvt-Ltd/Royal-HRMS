@@ -2,6 +2,7 @@
 
 // One employee's onboarding history plus the resend action, so the panel only renders.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { useToast } from "@/components/ToastProvider";
 import { useApiErrors } from "@/hooks/useApiErrors";
@@ -22,10 +23,10 @@ export function useOnboardingHistory(employeeUuid: string, onChanged: () => void
     setIsResending(true);
     try {
       await clientApi.post(API.employees.resendInvite(employeeUuid), correctedEmail ? { email: correctedEmail } : {});
-      showToast("Onboarding email resent.", "success");
+      showToast(tr("Onboarding email resent."), "success");
       return true;
     } catch (err: unknown) {
-      handleError(err, "Could not resend the onboarding email.");
+      handleError(err, tr("Could not resend the onboarding email."));
       return false;
     } finally {
       // Failed sends are still written to the history, so show them either way.

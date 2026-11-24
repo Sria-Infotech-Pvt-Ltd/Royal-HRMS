@@ -1,6 +1,7 @@
 "use client";
 
 import type { FaceRegistrationCardState } from "@/hooks/useFaceRegistrationCard";
+import { useT } from "@/hooks/useI18n";
 
 interface ProfileFaceIdCardProps {
   faceCardState: FaceRegistrationCardState;
@@ -20,6 +21,7 @@ const HEADLINES: Record<Exclude<FaceRegistrationCardState, "disabled">, string> 
 };
 
 export default function ProfileFaceIdCard({ faceCardState, message, canSelfRegister, faceRejectionNotes, onRegister }: ProfileFaceIdCardProps) {
+  const t = useT();
   if (faceCardState === "disabled") return null;
   const color = faceCardState === "approved" ? "var(--success)" : faceCardState === "rejected" ? "var(--error)" : "var(--on-bg)";
   const canAct = canSelfRegister && faceCardState !== "pending";
@@ -27,20 +29,20 @@ export default function ProfileFaceIdCard({ faceCardState, message, canSelfRegis
   return (
     <div className="card mb-16">
       <div className="card-header">
-        <span className="card-title"><i className="ti ti-face-id" />Face Registration</span>
+        <span className="card-title"><i className="ti ti-face-id" />{t("Face Registration")}</span>
       </div>
       <div className="card-body" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
         <i className="ti ti-face-id" style={{ fontSize: 22, color: "var(--on-variant)" }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color }}>{HEADLINES[faceCardState]}</div>
+          <div style={{ fontSize: 13, color }}>{t(HEADLINES[faceCardState])}</div>
           <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
             {message}
-            {faceCardState === "rejected" && faceRejectionNotes ? ` Reason: ${faceRejectionNotes}` : ""}
+            {faceCardState === "rejected" && faceRejectionNotes ? ` ${t("Reason: {notes}", { notes: faceRejectionNotes })}` : ""}
           </div>
         </div>
         {canAct && (
           <button type="button" className="btn btn-primary btn-sm" suppressHydrationWarning onClick={onRegister}>
-            <i className="ti ti-camera" /> {faceCardState === "approved" || faceCardState === "rejected" ? "Update My Face" : "Register My Face"}
+            <i className="ti ti-camera" /> {faceCardState === "approved" || faceCardState === "rejected" ? t("Update My Face") : t("Register My Face")}
           </button>
         )}
       </div>

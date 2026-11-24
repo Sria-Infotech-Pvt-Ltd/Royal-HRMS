@@ -2,6 +2,7 @@
 
 // The day's punches as a timeline: in or out, the time, where it came from, and whether it was inside the office geofence.
 
+import { useT } from "@/hooks/useI18n";
 import type { AttendanceDetailPunch } from "@/types/attendance";
 import { PALETTE, tint } from "./attendancePalette";
 
@@ -16,19 +17,21 @@ function Chip({ children }: { children: React.ReactNode }) {
 }
 
 function Geofence({ punch }: { punch: AttendanceDetailPunch }) {
-  if (punch.is_geofence === true) return <span style={{ fontSize: 11.5, fontWeight: 600, color: PALETTE.present }}><i className="ti ti-circle-check" aria-hidden="true" /> Inside geofence</span>;
+  const t = useT();
+  if (punch.is_geofence === true) return <span style={{ fontSize: 11.5, fontWeight: 600, color: PALETTE.present }}><i className="ti ti-circle-check" aria-hidden="true" /> {t("Inside geofence")}</span>;
   if (punch.is_geofence === false) {
-    return <span style={{ fontSize: 11.5, fontWeight: 600, color: PALETTE.absent }}><i className="ti ti-circle-x" aria-hidden="true" /> Outside geofence{punch.distance_m !== null ? ` · ${punch.distance_m.toFixed(0)} m away` : ""}</span>;
+    return <span style={{ fontSize: 11.5, fontWeight: 600, color: PALETTE.absent }}><i className="ti ti-circle-x" aria-hidden="true" /> {t("Outside geofence")}{punch.distance_m !== null ? ` · ${t("{distance} m away", { distance: punch.distance_m.toFixed(0) })}` : ""}</span>;
   }
-  return <span style={{ fontSize: 11.5, color: "var(--outline)" }}><i className="ti ti-circle-dashed" aria-hidden="true" /> Geofence not applicable</span>;
+  return <span style={{ fontSize: 11.5, color: "var(--outline)" }}><i className="ti ti-circle-dashed" aria-hidden="true" /> {t("Geofence not applicable")}</span>;
 }
 
 export default function DetailPunchTimeline({ punches }: { punches: AttendanceDetailPunch[] }) {
+  const t = useT();
   if (punches.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: "26px 12px", color: "var(--on-variant)" }}>
         <i className="ti ti-fingerprint-off" aria-hidden="true" style={{ fontSize: 30, color: "var(--outline)" }} />
-        <div style={{ fontSize: 13, marginTop: 6 }}>No punches recorded for this day.</div>
+        <div style={{ fontSize: 13, marginTop: 6 }}>{t("No punches recorded for this day.")}</div>
       </div>
     );
   }
@@ -44,7 +47,7 @@ export default function DetailPunchTimeline({ punches }: { punches: AttendanceDe
             </div>
             <div style={{ paddingBottom: 16, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--on-bg)" }}>{kind.label}</span>
+                <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--on-bg)" }}>{t(kind.label)}</span>
                 <span style={{ fontFamily: "Menlo, Consolas, monospace", fontWeight: 800, fontSize: 14, color: kind.colour }}>{punch.time}</span>
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "5px 0" }}>
@@ -54,7 +57,7 @@ export default function DetailPunchTimeline({ punches }: { punches: AttendanceDe
               <Geofence punch={punch} />
               {punch.face_fallback && (
                 <div style={{ fontSize: 12, fontWeight: 600, color: PALETTE.late, marginTop: 4 }}>
-                  <i className="ti ti-alert-triangle" aria-hidden="true" /> No Face ID: allowed by the Face ID fallback, please review
+                  <i className="ti ti-alert-triangle" aria-hidden="true" /> {t("No Face ID: allowed by the Face ID fallback, please review")}
                 </div>
               )}
             </div>

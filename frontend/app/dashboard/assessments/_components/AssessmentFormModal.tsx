@@ -7,6 +7,7 @@ import {
   timeForMode, timeMode, validateAssessmentForm, type AttemptsMode, type GlobalDefaults, type TimeMode,
 } from "@/lib/assessmentForm";
 import type { AssessmentForm } from "../_types";
+import { useT } from "@/hooks/useI18n";
 
 interface AssessmentFormModalProps {
   isEditing: boolean
@@ -23,12 +24,13 @@ interface AssessmentFormModalProps {
 interface Choice<Value extends string> { value: Value; label: string; hint?: string }
 
 function Segmented<Value extends string>({ label, choices, value, onPick }: { label: string; choices: Choice<Value>[]; value: Value; onPick: (value: Value) => void }) {
+  const t = useT();
   return (
-    <div className="asmf-seg" role="radiogroup" aria-label={label}>
+    <div className="asmf-seg" role="radiogroup" aria-label={t(label)}>
       {choices.map(choice => (
         <button key={choice.value} type="button" role="radio" aria-checked={choice.value === value}
           className={choice.value === value ? "on" : ""} onClick={() => onPick(choice.value)}>
-          {choice.label}
+          {t(choice.label)}
         </button>
       ))}
     </div>
@@ -36,9 +38,10 @@ function Segmented<Value extends string>({ label, choices, value, onPick }: { la
 }
 
 function Section({ icon, title, hint, children }: { icon: string; title: string; hint?: string; children: React.ReactNode }) {
+  const t = useT();
   return (
     <section className="asmf-section">
-      <header><span className="asmf-section-icon"><i className={`ti ${icon}`} /></span><div><h4>{title}</h4>{hint && <p>{hint}</p>}</div></header>
+      <header><span className="asmf-section-icon"><i className={`ti ${icon}`} /></span><div><h4>{t(title)}</h4>{hint && <p>{hint}</p>}</div></header>
       {children}
     </section>
   );
@@ -51,6 +54,7 @@ const TIME_CHOICES: Choice<TimeMode>[] = [{ value: "global", label: "Use global"
 
 /** Create or edit an assessment: basics, pass mark, attempts, time limit and whether it is active, with a live summary. */
 export default function AssessmentFormModal(props: AssessmentFormModalProps) {
+  const t = useT();
   const { form, defaults, isSaving } = props;
   const [showErrors, setShowErrors] = useState(false);
   const errors = validateAssessmentForm(form);
@@ -66,73 +70,73 @@ export default function AssessmentFormModal(props: AssessmentFormModalProps) {
 
   return (
     <Modal
-      title={props.isEditing ? "Edit assessment" : "New assessment"}
+      title={props.isEditing ? t("Edit assessment") : t("New assessment")}
       onClose={props.onClose}
       closeDisabled={isSaving}
       maxWidth={640}
       scrollBody
       footer={
         <>
-          <button type="button" className="btn btn-ghost" onClick={props.onClose} disabled={isSaving}>Cancel</button>
+          <button type="button" className="btn btn-ghost" onClick={props.onClose} disabled={isSaving}>{t("Cancel")}</button>
           <button type="button" className="btn btn-filled" onClick={save} disabled={isSaving}>
-            {isSaving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-check" /> {props.isEditing ? "Save changes" : "Create assessment"}</>}
+            {isSaving ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : <><i className="ti ti-check" /> {props.isEditing ? t("Save changes") : t("Create assessment")}</>}
           </button>
         </>
       }
     >
       {props.serverError && <div className="alert alert-error"><i className="ti ti-alert-circle" /><div>{props.serverError}</div></div>}
 
-      <Section icon="ti-file-text" title="Basics" hint="What people will see when they are assigned this assessment.">
+      <Section icon="ti-file-text" title={t("Basics")} hint={t("What people will see when they are assigned this assessment.")}>
         <div className="field-group">
-          <label className="field-label" htmlFor="asmf-title">Title *</label>
-          <input id="asmf-title" className={`field-input${shown.title ? " has-error" : ""}`} value={form.title} placeholder="e.g. Onboarding Assessment"
+          <label className="field-label" htmlFor="asmf-title">{t("Title *")}</label>
+          <input id="asmf-title" className={`field-input${shown.title ? " has-error" : ""}`} value={form.title} placeholder={t("e.g. Onboarding Assessment")}
             aria-invalid={!!shown.title} onChange={event => set({ title: event.target.value })} autoFocus />
-          {shown.title && <div className="asmf-error">{shown.title}</div>}
+          {shown.title && <div className="asmf-error">{t(shown.title)}</div>}
         </div>
         <div className="field-group">
-          <label className="field-label" htmlFor="asmf-desc">Description</label>
-          <textarea id="asmf-desc" className="field-input" rows={2} value={form.description} placeholder="What does this assessment cover?"
+          <label className="field-label" htmlFor="asmf-desc">{t("Description")}</label>
+          <textarea id="asmf-desc" className="field-input" rows={2} value={form.description} placeholder={t("What does this assessment cover?")}
             onChange={event => set({ description: event.target.value })} />
         </div>
       </Section>
 
-      <Section icon="ti-target" title="Pass mark" hint="The score a person needs to pass.">
+      <Section icon="ti-target" title={t("Pass mark")} hint={t("The score a person needs to pass.")}>
         <div className="asmf-pass">
-          <input type="range" min={1} max={100} value={pass} aria-label="Pass mark slider" onChange={event => set({ pass_percentage: event.target.value })} />
+          <input type="range" min={1} max={100} value={pass} aria-label={t("Pass mark slider")} onChange={event => set({ pass_percentage: event.target.value })} />
           <div className="asmf-pass-box">
             <input type="number" min={1} max={100} className={`field-input${shown.pass ? " has-error" : ""}`} value={form.pass_percentage}
-              aria-label="Pass percentage" aria-invalid={!!shown.pass} onChange={event => set({ pass_percentage: event.target.value })} />
+              aria-label={t("Pass percentage")} aria-invalid={!!shown.pass} onChange={event => set({ pass_percentage: event.target.value })} />
             <span>%</span>
           </div>
         </div>
-        {shown.pass && <div className="asmf-error">{shown.pass}</div>}
+        {shown.pass && <div className="asmf-error">{t(shown.pass)}</div>}
       </Section>
 
       <div className="asmf-stack">
-        <Section icon="ti-refresh" title="Attempts" hint={`Global setting: ${describeAttempts(defaults.maxAttempts)}.`}>
-          <Segmented label="Attempts" choices={ATTEMPT_CHOICES} value={attemptsMode(form.max_attempts)}
+        <Section icon="ti-refresh" title={t("Attempts")} hint={t("Global setting: {value}.", { value: describeAttempts(defaults.maxAttempts) })}>
+          <Segmented label={t("Attempts")} choices={ATTEMPT_CHOICES} value={attemptsMode(form.max_attempts)}
             onPick={mode => set({ max_attempts: attemptsForMode(mode, form.max_attempts) })} />
           {attemptsMode(form.max_attempts) === "limited" && (
             <div className="asmf-inline">
               <input type="number" min={1} className={`field-input${shown.attempts ? " has-error" : ""}`} value={form.max_attempts}
-                aria-label="Number of attempts" onChange={event => set({ max_attempts: event.target.value })} />
-              <span>attempts</span>
+                aria-label={t("Number of attempts")} onChange={event => set({ max_attempts: event.target.value })} />
+              <span>{t("attempts")}</span>
             </div>
           )}
-          {shown.attempts && <div className="asmf-error">{shown.attempts}</div>}
+          {shown.attempts && <div className="asmf-error">{t(shown.attempts)}</div>}
         </Section>
 
-        <Section icon="ti-clock" title="Time limit" hint={`Global setting: ${describeTime(defaults.timeLimitMins)}.`}>
-          <Segmented label="Time limit" choices={TIME_CHOICES} value={timeMode(form.time_limit_mins)}
+        <Section icon="ti-clock" title={t("Time limit")} hint={t("Global setting: {value}.", { value: describeTime(defaults.timeLimitMins) })}>
+          <Segmented label={t("Time limit")} choices={TIME_CHOICES} value={timeMode(form.time_limit_mins)}
             onPick={mode => set({ time_limit_mins: timeForMode(mode, form.time_limit_mins, defaults.timeLimitMins) })} />
           {timeMode(form.time_limit_mins) === "limited" && (
             <div className="asmf-inline">
               <input type="number" min={1} className={`field-input${shown.time ? " has-error" : ""}`} value={form.time_limit_mins}
-                aria-label="Time limit in minutes" onChange={event => set({ time_limit_mins: event.target.value })} />
-              <span>minutes</span>
+                aria-label={t("Time limit in minutes")} onChange={event => set({ time_limit_mins: event.target.value })} />
+              <span>{t("minutes")}</span>
             </div>
           )}
-          {shown.time && <div className="asmf-error">{shown.time}</div>}
+          {shown.time && <div className="asmf-error">{t(shown.time)}</div>}
         </Section>
       </div>
 
@@ -140,14 +144,14 @@ export default function AssessmentFormModal(props: AssessmentFormModalProps) {
         <input type="checkbox" role="switch" checked={form.is_active} onChange={event => set({ is_active: event.target.checked })} />
         <span className="asmf-switch-track" aria-hidden="true" />
         <span className="asmf-switch-text">
-          <strong>{form.is_active ? "Active" : "Inactive"}</strong>
-          <small>{form.is_active ? "Shown as Active in the assessment list." : "Shown as Inactive in the assessment list."}</small>
+          <strong>{form.is_active ? t("Active") : t("Inactive")}</strong>
+          <small>{form.is_active ? t("Shown as Active in the assessment list.") : t("Shown as Inactive in the assessment list.")}</small>
         </span>
       </label>
 
       <div className="asmf-summary" aria-live="polite">
-        <span className="asmf-summary-label"><i className="ti ti-list-check" /> How it will work</span>
-        {rulesSummary(form, defaults).map(part => <span key={part}>{part}</span>)}
+        <span className="asmf-summary-label"><i className="ti ti-list-check" /> {t("How it will work")}</span>
+        {rulesSummary(form, defaults).map(part => <span key={part}>{t(part)}</span>)}
       </div>
     </Modal>
   );

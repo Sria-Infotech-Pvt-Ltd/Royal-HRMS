@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { useT } from "@/hooks/useI18n";
 
 export interface WorkflowCardData {
   key: string;
@@ -32,6 +33,7 @@ interface Props {
 
 /** One workflow: how many requests are waiting, how many are this person's to decide, and the way in. */
 export default function ApprovalWorkflowCard({ row, actionLabel, onAction }: Props) {
+  const t = useT();
   const look = LOOK[row.key] ?? FALLBACK_LOOK;
   const isCounted = row.pending !== null || row.mine !== null;
   const needsMe = (row.mine ?? 0) > 0;
@@ -40,16 +42,16 @@ export default function ApprovalWorkflowCard({ row, actionLabel, onAction }: Pro
       <div className="ap-card-top">
         <span className="ap-icon"><i className={`ti ${look.icon}`} /></span>
         <h3>{row.label}</h3>
-        {needsMe && <span className="ap-flag">Needs you</span>}
+        {needsMe && <span className="ap-flag">{t("Needs you")}</span>}
       </div>
 
       {isCounted ? (
         <div className="ap-counts">
-          <div><b>{row.pending ?? "—"}</b><span>Waiting</span></div>
-          <div className={needsMe ? "is-hot" : ""}><b>{row.mine ?? "—"}</b><span>For me to act on</span></div>
+          <div><b>{row.pending ?? "—"}</b><span>{t("Waiting")}</span></div>
+          <div className={needsMe ? "is-hot" : ""}><b>{row.mine ?? "—"}</b><span>{t("For me to act on")}</span></div>
         </div>
       ) : (
-        <div className="ap-uncounted"><i className="ti ti-info-circle" /> Counts are shown inside the tab.</div>
+        <div className="ap-uncounted"><i className="ti ti-info-circle" /> {t("Counts are shown inside the tab.")}</div>
       )}
 
       <p className="ap-scope" title={row.scope}>{row.scope}</p>

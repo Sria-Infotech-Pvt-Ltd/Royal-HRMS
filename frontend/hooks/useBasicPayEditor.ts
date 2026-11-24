@@ -5,6 +5,7 @@
 // save. Saving the record already in force updates it in place; saving a later date closes it the day before
 // and opens a new one (the server enforces both and the payroll.edit permission — this only reflects them).
 
+import { tr } from "@/lib/i18n/tr";
 import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -173,9 +174,9 @@ export function useBasicPayEditor(employee: EmployeeLike, onSaved: () => void) {
   const startsBeforeCurrent = !!current && !!effectiveFrom && effectiveFrom < current.effective_from;
   let delimitNote = "";
   if (current && effectiveFrom) {
-    if (effectiveFrom === current.effective_from) delimitNote = `Updating the record in force from ${formatDateSlash(current.effective_from)}.`;
-    else if (startsBeforeCurrent) delimitNote = `Must be on or after ${formatDateSlash(current.effective_from)}.`;
-    else delimitNote = `Current record will be delimited to ${formatDateSlash(dayBefore(effectiveFrom))}; the new record runs ${formatDateSlash(effectiveFrom)} → 31/12/9999.`;
+    if (effectiveFrom === current.effective_from) delimitNote = tr("Updating the record in force from {date}.", { date: formatDateSlash(current.effective_from) });
+    else if (startsBeforeCurrent) delimitNote = tr("Must be on or after {date}.", { date: formatDateSlash(current.effective_from) });
+    else delimitNote = tr("Current record will be delimited to {end}; the new record runs {start} → 31/12/9999.", { end: formatDateSlash(dayBefore(effectiveFrom)), start: formatDateSlash(effectiveFrom) });
   }
 
   function setOverride(key: OverrideKey, value: string) {
@@ -187,8 +188,8 @@ export function useBasicPayEditor(employee: EmployeeLike, onSaved: () => void) {
   }
 
   async function save() {
-    if (!(ctcNumber > 0)) { setFormError("Enter an annual CTC greater than zero."); return; }
-    if (!effectiveFrom) { setFormError("Start date is required."); return; }
+    if (!(ctcNumber > 0)) { setFormError(tr("Enter an annual CTC greater than zero.")); return; }
+    if (!effectiveFrom) { setFormError(tr("Start date is required.")); return; }
     if (startsBeforeCurrent) { setFormError(delimitNote); return; }
     setSaving(true);
     setFormError("");
@@ -200,11 +201,11 @@ export function useBasicPayEditor(employee: EmployeeLike, onSaved: () => void) {
     try {
       if (current && current.effective_from === effectiveFrom) await clientApi.put(API.payroll.employeeSalaryDetail(current.id), body);
       else await clientApi.post(API.payroll.employeeSalary, { ...body, employee: employee.code });
-      showToast(`Basic pay saved — ₹${Math.round(annualCostToCompany).toLocaleString("en-IN")} per annum, effective ${formatDateSlash(effectiveFrom)}.`, "success");
+      showToast(tr("Basic pay saved — ₹{amount} per annum, effective {date}.", { amount: Math.round(annualCostToCompany).toLocaleString("en-IN"), date: formatDateSlash(effectiveFrom) }), "success");
       history.refetch();
       onSaved();
     } catch (err: unknown) {
-      setFormError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not save this pay record.");
+      setFormError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? tr("Could not save this pay record."));
     } finally {
       setSaving(false);
     }

@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import { useApprovalRules } from "@/hooks/useApprovalRules";
 import ApprovalRulesList from "./_components/ApprovalRulesList";
 import { BRAND, summarise, tint } from "./_components/approvalFlowView";
 
 export default function ApprovalRulesPage() {
   const router = useRouter();
+  const t = useT();
   const approval = useApprovalRules();
   const { rules, loading, error, lastChange } = approval;
   const totals = summarise(rules);
@@ -16,13 +18,13 @@ export default function ApprovalRulesPage() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Approval Rules</div>
-          <div className="page-sub">Who approves each workflow, for everyone. Individual employees can have their own override on their profile.</div>
+          <div className="page-title">{t("Approval Rules")}</div>
+          <div className="page-sub">{t("Who approves each workflow, for everyone. Individual employees can have their own override on their profile.")}</div>
         </div>
         <div className="page-actions">
-          <Link href="/dashboard/settings/audit?module=settings" className="btn btn-ghost"><i className="ti ti-history" /> Change history</Link>
+          <Link href="/dashboard/settings/audit?module=settings" className="btn btn-ghost"><i className="ti ti-history" /> {t("Change history")}</Link>
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
         </div>
       </div>
@@ -32,23 +34,23 @@ export default function ApprovalRulesPage() {
       {lastChange && (
         <div role="status" style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 13, background: tint(BRAND, 0.08), border: `1px solid ${tint(BRAND, 0.25)}` }}>
           <i className="ti ti-circle-check" aria-hidden="true" style={{ color: BRAND, fontSize: 18 }} />
-          <span style={{ flex: 1 }}>Saved for {lastChange.labels.join(", ")}.</span>
-          <button className="btn btn-ghost btn-sm" onClick={approval.undo}><i className="ti ti-arrow-back-up" /> Undo</button>
-          <button className="btn btn-ghost btn-sm" aria-label="Dismiss" onClick={approval.dismissChange}><i className="ti ti-x" /></button>
+          <span style={{ flex: 1 }}>{t("Saved for {labels}.", { labels: lastChange.labels.join(", ") })}</span>
+          <button className="btn btn-ghost btn-sm" onClick={approval.undo}><i className="ti ti-arrow-back-up" /> {t("Undo")}</button>
+          <button className="btn btn-ghost btn-sm" aria-label={t("Dismiss")} onClick={approval.dismissChange}><i className="ti ti-x" /></button>
         </div>
       )}
 
       {!error && (
         <>
           {!loading && (
-            <p aria-label="Summary" style={{ margin: "0 0 14px", fontSize: 13, color: "var(--on-variant)" }}>
-              <b style={{ color: "var(--on-bg)" }}>{totals.workflows}</b> workflows · <b style={{ color: "var(--on-bg)" }}>{totals.twoLevel}</b> two-level · <b style={{ color: "var(--on-bg)" }}>{totals.oneLevel}</b> single-level · <b style={{ color: "var(--on-bg)" }}>{totals.namedPeople}</b> named {totals.namedPeople === 1 ? "person" : "people"}
+            <p aria-label={t("Summary")} style={{ margin: "0 0 14px", fontSize: 13, color: "var(--on-variant)" }}>
+              <b style={{ color: "var(--on-bg)" }}>{totals.workflows}</b> {t("workflows")} · <b style={{ color: "var(--on-bg)" }}>{totals.twoLevel}</b> {t("two-level")} · <b style={{ color: "var(--on-bg)" }}>{totals.oneLevel}</b> {t("single-level")} · <b style={{ color: "var(--on-bg)" }}>{totals.namedPeople}</b> {totals.namedPeople === 1 ? t("named person") : t("named people")}
             </p>
           )}
 
           {!loading && totals.unset > 0 && (
             <div role="alert" style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 12, fontSize: 13, color: "var(--on-bg)", background: tint("#EA580C", 0.08), border: `1px solid ${tint("#EA580C", 0.28)}` }}>
-              <i className="ti ti-alert-triangle" aria-hidden="true" style={{ color: "#EA580C" }} /> {totals.unset} {totals.unset === 1 ? "workflow has" : "workflows have"} no level 1 approver yet. Requests of that kind have nobody to approve them.
+              <i className="ti ti-alert-triangle" aria-hidden="true" style={{ color: "#EA580C" }} /> {totals.unset === 1 ? t("{count} workflow has no level 1 approver yet. Requests of that kind have nobody to approve them.", { count: totals.unset }) : t("{count} workflows have no level 1 approver yet. Requests of that kind have nobody to approve them.", { count: totals.unset })}
             </div>
           )}
 

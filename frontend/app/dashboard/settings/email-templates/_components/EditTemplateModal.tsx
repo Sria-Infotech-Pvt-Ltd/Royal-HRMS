@@ -12,6 +12,7 @@ import {
   type ApiAttachment, type ApiEmailTemplate, type ApiTemplateCategory, type TemplateForm, type TemplateFormErrors,
 } from "../_data";
 import { promptDialog } from "@/components/DialogProvider";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   template: ApiEmailTemplate | null;   // null = add mode
@@ -42,6 +43,7 @@ const TOOLBAR = [
 ];
 
 export default function EditTemplateModal({ template, saving, onClose, onSave }: Props) {
+  const t = useT();
   const isAddMode = template === null;
 
   const [form,       setForm]       = useState<TemplateForm>(
@@ -149,7 +151,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
       // The dialog takes focus away from the editor, so remember the selected text and put it back before linking it.
       const selection = window.getSelection();
       const savedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
-      const url = await promptDialog({ title: "Insert link", inputLabel: "URL", confirmLabel: "Insert" });
+      const url = await promptDialog({ title: t("Insert link"), inputLabel: t("URL"), confirmLabel: t("Insert") });
       editorRef.current?.focus();
       if (savedRange && selection) { selection.removeAllRanges(); selection.addRange(savedRange); }
       if (url) document.execCommand("createLink", false, url);
@@ -180,12 +182,12 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
   // ── Image editing helpers ──────────────────────────────────────────────────
 
   function handleEditorClick(e: React.MouseEvent<HTMLDivElement>) {
-    const t = e.target as HTMLElement;
-    if (t.tagName === "IMG") {
-      const img = t as HTMLImageElement;
+    const target = e.target as HTMLElement;
+    if (target.tagName === "IMG") {
+      const img = target as HTMLImageElement;
       setSelImg(img);
       setImgWidth(img.offsetWidth || img.naturalWidth);
-    } else if (!(t as HTMLElement).closest("[data-img-toolbar]")) {
+    } else if (!target.closest("[data-img-toolbar]")) {
       setSelImg(null);
     }
   }
@@ -394,18 +396,18 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
           <div style={{ minWidth: 0 }}>
             <div className="modal-title">
               {isAddMode
-                ? "Add Email Template"
-                : <>Edit — <span style={{ color: "var(--primary)" }}>{template.display_name}</span></>
+                ? t("Add Email Template")
+                : <>{t("Edit")} — <span style={{ color: "var(--primary)" }}>{template.display_name}</span></>
               }
             </div>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
               {isAddMode
-                ? "Fill in the subject and body for the new template"
+                ? t("Fill in the subject and body for the new template")
                 : template.description
               }
             </div>
           </div>
-          <button className="modal-close" onClick={onClose} aria-label="Close" suppressHydrationWarning>
+          <button className="modal-close" onClick={onClose} aria-label={t("Close")} suppressHydrationWarning>
             <i className="ti ti-x" />
           </button>
         </div>
@@ -417,7 +419,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
               className={`et-tab-btn${mobileTab === tab ? " et-tab-btn-active" : ""}`}
               onClick={() => setMobileTab(tab)}
               style={{ flex: 1, padding: "10px 4px", background: "none", border: "none", borderBottom: `2px solid ${mobileTab === tab ? "var(--primary)" : "transparent"}`, cursor: "pointer", fontSize: 12, fontWeight: mobileTab === tab ? 600 : 400, color: mobileTab === tab ? "var(--primary)" : "var(--on-variant)", fontFamily: "inherit", transition: "color 0.15s" }}>
-              {tab === "editor" ? "Editor" : tab === "preview" ? "Preview" : "Variables"}
+              {tab === "editor" ? t("Editor") : tab === "preview" ? t("Preview") : t("Variables")}
             </button>
           ))}
         </div>
@@ -433,8 +435,8 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
               {isAddMode && (
                 <>
                   <div className="field-group">
-                    <label className="field-label">Display Name <span style={{ color: "var(--error)" }}>*</span></label>
-                    <input className="field-input" placeholder="e.g. Pay Slip, Birthday Wish"
+                    <label className="field-label">{t("Display Name")} <span style={{ color: "var(--error)" }}>*</span></label>
+                    <input className="field-input" placeholder={t("e.g. Pay Slip, Birthday Wish")}
                       value={form.display_name}
                       onChange={e => {
                         const val = e.target.value;
@@ -451,10 +453,10 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
 
                   <div className="field-group">
                     <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      Slug (name) <span style={{ color: "var(--error)" }}>*</span>
-                      <span style={{ fontSize: 10, color: "var(--outline)", fontWeight: 400 }}>auto-generated · lowercase_with_underscores</span>
+                      {t("Slug (name)")} <span style={{ color: "var(--error)" }}>*</span>
+                      <span style={{ fontSize: 10, color: "var(--outline)", fontWeight: 400 }}>{t("auto-generated · lowercase_with_underscores")}</span>
                     </label>
-                    <input className="field-input" placeholder="e.g. pay_slip"
+                    <input className="field-input" placeholder={t("e.g. pay_slip")}
                       value={form.name}
                       onChange={e => {
                         setSlugEdited(true);
@@ -471,12 +473,12 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
               {/* Category combobox — searchable + inline create */}
               <div className="field-group">
                 <label className="field-label">
-                  Category <span style={{ color: "var(--error)" }}>*</span>
+                  {t("Category")} <span style={{ color: "var(--error)" }}>*</span>
                 </label>
 
                 {catLoading ? (
                   <div style={{ fontSize: 12, color: "var(--on-variant)", padding: "8px 0", display: "flex", alignItems: "center", gap: 6 }}>
-                    <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Loading categories…
+                    <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Loading categories…")}
                   </div>
 
                 ) : isAddMode ? (() => {
@@ -490,7 +492,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                       <div style={{ position: "relative", width: "100%" }}>
                         <input
                           className="field-input"
-                          placeholder="Search or create category…"
+                          placeholder={t("Search or create category…")}
                           value={catSearch}
                           autoComplete="off"
                           suppressHydrationWarning
@@ -508,7 +510,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                           <button type="button" suppressHydrationWarning
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { setCatSearch(""); setForm(p => ({ ...p, template_type: "" })); setCatOpen(false); }}
-                            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--outline)", padding: 2, lineHeight: 1 }} aria-label="Close">
+                            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--outline)", padding: 2, lineHeight: 1 }} aria-label={t("Close")}>
                             <i className="ti ti-x" style={{ fontSize: 13 }} />
                           </button>
                         ) : (
@@ -521,7 +523,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                         <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", boxShadow: "0 4px 18px rgba(0,0,0,0.1)", zIndex: 300, overflow: "hidden" }}>
                           <div style={{ maxHeight: 186, overflowY: "auto" }}>
                             {filtered.length === 0 && !catSearch.trim() && (
-                              <div style={{ padding: "10px 14px", fontSize: 12, color: "var(--on-variant)" }}>No categories yet</div>
+                              <div style={{ padding: "10px 14px", fontSize: 12, color: "var(--on-variant)" }}>{t("No categories yet")}</div>
                             )}
                             {filtered.map(cat => {
                               const val       = catValue(cat);
@@ -556,8 +558,8 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                                 onMouseEnter={e => { if (!catCreating) e.currentTarget.style.background = "color-mix(in srgb, var(--brand) 6%, transparent)"; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
                                 {catCreating
-                                  ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} /> Creating…</>
-                                  : <><i className="ti ti-plus" style={{ fontSize: 13 }} /> Create &ldquo;{catSearch.trim()}&rdquo;</>
+                                  ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} /> {t("Creating…")}</>
+                                  : <><i className="ti ti-plus" style={{ fontSize: 13 }} /> {t("Create “{name}”", { name: catSearch.trim() })}</>
                                 }
                               </button>
                             </div>
@@ -581,14 +583,14 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                   <span className="field-error-msg">{(errors as Record<string, string | undefined>).template_type}</span>
                 )}
                 {!isAddMode && (
-                  <span style={{ fontSize: 11, color: "var(--outline)", marginTop: 2 }}>Category cannot be changed after creation.</span>
+                  <span style={{ fontSize: 11, color: "var(--outline)", marginTop: 2 }}>{t("Category cannot be changed after creation.")}</span>
                 )}
               </div>
 
               {/* Subject */}
               <div className="field-group">
-                <label className="field-label">Subject <span style={{ color: "var(--error)" }}>*</span></label>
-                <input className="field-input" placeholder="Email subject line…"
+                <label className="field-label">{t("Subject")} <span style={{ color: "var(--error)" }}>*</span></label>
+                <input className="field-input" placeholder={t("Email subject line…")}
                   value={form.subject}
                   onChange={e => { setForm(p => ({ ...p, subject: e.target.value })); setErrors(p => ({ ...p, subject: undefined })); }}
                   suppressHydrationWarning />
@@ -599,13 +601,13 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
               <div className="field-group" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                   <label className="field-label" style={{ marginBottom: 0 }}>
-                    Body <span style={{ color: "var(--error)" }}>*</span>
+                    {t("Body")} <span style={{ color: "var(--error)" }}>*</span>
                   </label>
                   <button type="button" suppressHydrationWarning
                     onClick={() => { syncBody(); setSelImg(null); setViewSource(v => !v); }}
                     style={{ fontSize: 11, color: "var(--primary)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}>
                     <i className={`ti ${viewSource ? "ti-eye" : "ti-code"}`} style={{ fontSize: 13 }} />
-                    {viewSource ? "Visual" : "HTML source"}
+                    {viewSource ? t("Visual") : t("HTML source")}
                   </button>
                 </div>
 
@@ -616,7 +618,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                       btn.cmd === "|" ? (
                         <div key={i} style={{ width: 1, height: 16, background: "var(--outline-v)", margin: "0 3px" }} />
                       ) : (
-                        <button key={btn.cmd} type="button" title={btn.tip} suppressHydrationWarning
+                        <button key={btn.cmd} type="button" title={t(btn.tip ?? "")} suppressHydrationWarning
                           onMouseDown={e => { e.preventDefault(); execCmd(btn.cmd!); }}
                           style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", borderRadius: 4, cursor: "pointer", color: "var(--on-variant)", fontSize: 14 }}
                           onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-mid)")}
@@ -631,7 +633,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                 {/* Image controls bar — shown when an image is selected */}
                 {selImg && !viewSource && (
                   <div data-img-toolbar="true" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "5px 10px", background: "var(--primary)", borderLeft: "1.5px solid var(--primary)", borderRight: "1.5px solid var(--primary)" }}>
-                    <span style={{ fontSize: 11, color: "#fff", fontWeight: 600, marginRight: 2 }}>Image</span>
+                    <span style={{ fontSize: 11, color: "#fff", fontWeight: 600, marginRight: 2 }}>{t("Image")}</span>
                     <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.3)" }} />
 
                     {/* Width */}
@@ -647,7 +649,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
 
                     {/* Align */}
                     {(["left","center","right"] as const).map(a => (
-                      <button key={a} type="button" title={`Align ${a}`} suppressHydrationWarning
+                      <button key={a} type="button" title={t(a === "left" ? "Align left" : a === "center" ? "Align center" : "Align right")} suppressHydrationWarning
                         onMouseDown={e => { e.preventDefault(); alignImg(a); }}
                         style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", fontSize: 13 }}>
                         <i className={`ti ti-align-${a}`} />
@@ -656,17 +658,17 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                     <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.3)" }} />
 
                     {/* Crop */}
-                    <button type="button" title="Crop image" suppressHydrationWarning
+                    <button type="button" title={t("Crop image")} suppressHydrationWarning
                       onMouseDown={e => { e.preventDefault(); openCrop(); }}
                       style={{ display: "flex", alignItems: "center", gap: 5, height: 26, padding: "0 9px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", fontSize: 11 }}>
-                      <i className="ti ti-crop" style={{ fontSize: 13 }} /> Crop
+                      <i className="ti ti-crop" style={{ fontSize: 13 }} /> {t("Crop")}
                     </button>
 
                     {/* Delete */}
-                    <button type="button" title="Remove image" suppressHydrationWarning
+                    <button type="button" title={t("Remove image")} suppressHydrationWarning
                       onMouseDown={e => { e.preventDefault(); deleteImg(); }}
                       style={{ display: "flex", alignItems: "center", gap: 5, height: 26, padding: "0 9px", background: "rgba(239,68,68,0.35)", border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", fontSize: 11, marginLeft: "auto" }}>
-                      <i className="ti ti-trash" style={{ fontSize: 13 }} /> Remove
+                      <i className="ti ti-trash" style={{ fontSize: 13 }} /> {t("Remove")}
                     </button>
                   </div>
                 )}
@@ -748,13 +750,13 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
             onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--primary)"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--outline-v)"; e.currentTarget.style.color = "var(--on-variant)"; }}>
             <i className="ti ti-paperclip" style={{ fontSize: 14 }} />
-            Attach files
+            {t("Attach files")}
           </button>
 
           {/* Attachment chips — existing (saved) + new (pending upload) */}
           {existingAttachments.length === 0 && form.attachments.length === 0 ? (
             <span style={{ fontSize: 12, color: "var(--outline)", fontStyle: "italic" }}>
-              {dragOver ? "Drop to attach…" : "PDF, Word, Excel, images"}
+              {dragOver ? t("Drop to attach…") : t("PDF, Word, Excel, images")}
             </span>
           ) : (
             <div style={{ display: "flex", gap: 6, overflowX: "auto", flex: 1, alignItems: "center", paddingBottom: 2 }}>
@@ -782,10 +784,10 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                     </span>
                     <button type="button" suppressHydrationWarning
                       onClick={() => removeExistingAttachment(att.id)}
-                      title="Remove attachment"
+                      title={t("Remove attachment")}
                       style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, color: "var(--outline)", flexShrink: 0 }}
                       onMouseEnter={e => (e.currentTarget.style.color = "var(--error)")}
-                      onMouseLeave={e => (e.currentTarget.style.color = "var(--outline)")} aria-label="Remove attachment">
+                      onMouseLeave={e => (e.currentTarget.style.color = "var(--outline)")} aria-label={t("Remove attachment")}>
                       <i className="ti ti-x" style={{ fontSize: 11 }} />
                     </button>
                   </div>
@@ -798,7 +800,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                 const meta = FILE_KIND_META[kind];
                 const isImg = kind === "image";
                 return (
-                  <div key={`new-${file.name}-${i}`} title={`${file.name} · ${formatBytes(file.size)} — will be uploaded`} style={{
+                  <div key={`new-${file.name}-${i}`} title={t("{name} · {size} — will be uploaded", { name: file.name, size: formatBytes(file.size) })} style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "4px 8px 4px 6px",
                     background: "var(--surface)", border: "1px dashed var(--outline-v)",
@@ -816,12 +818,12 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                     <span style={{ fontSize: 11, color: "var(--on-bg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 110 }}>
                       {file.name}
                     </span>
-                    <i className="ti ti-upload" style={{ fontSize: 10, color: "var(--primary)", flexShrink: 0 }} title="New — will be uploaded" />
+                    <i className="ti ti-upload" style={{ fontSize: 10, color: "var(--primary)", flexShrink: 0 }} title={t("New — will be uploaded")} />
                     <button type="button" suppressHydrationWarning
                       onClick={() => removeFile(i)}
                       style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, color: "var(--outline)", flexShrink: 0 }}
                       onMouseEnter={e => (e.currentTarget.style.color = "var(--error)")}
-                      onMouseLeave={e => (e.currentTarget.style.color = "var(--outline)")} aria-label="Close">
+                      onMouseLeave={e => (e.currentTarget.style.color = "var(--outline)")} aria-label={t("Close")}>
                       <i className="ti ti-x" style={{ fontSize: 11 }} />
                     </button>
                   </div>
@@ -832,19 +834,19 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
 
           {(existingAttachments.length + form.attachments.length) > 0 && (
             <span style={{ fontSize: 11, color: "var(--outline)", flexShrink: 0, marginLeft: "auto", whiteSpace: "nowrap" }}>
-              {existingAttachments.length + form.attachments.length} file{(existingAttachments.length + form.attachments.length) !== 1 ? "s" : ""}
-              {form.attachments.length > 0 && <span style={{ color: "var(--primary)" }}> · {form.attachments.length} new</span>}
+              {(existingAttachments.length + form.attachments.length) !== 1 ? t("{count} files", { count: existingAttachments.length + form.attachments.length }) : t("{count} file", { count: existingAttachments.length + form.attachments.length })}
+              {form.attachments.length > 0 && <span style={{ color: "var(--primary)" }}> · {t("{count} new", { count: form.attachments.length })}</span>}
             </span>
           )}
         </div>
 
         {/* Footer */}
         <div className="modal-footer" style={{ flexShrink: 0 }}>
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
             {saving
-              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-              : <><i className="ti ti-device-floppy" /> {isAddMode ? "Create Template" : "Save Template"}</>
+              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</>
+              : <><i className="ti ti-device-floppy" /> {isAddMode ? t("Create Template") : t("Save Template")}</>
             }
           </button>
         </div>
@@ -897,10 +899,10 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: "1px solid var(--outline-v)" }}>
             <i className="ti ti-crop" style={{ fontSize: 16, color: "var(--primary)" }} />
-            <span style={{ fontWeight: 600, fontSize: 14 }}>Crop Image</span>
-            <span style={{ fontSize: 12, color: "var(--on-variant)", marginLeft: 4 }}>— drag to select area</span>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>{t("Crop Image")}</span>
+            <span style={{ fontSize: 12, color: "var(--on-variant)", marginLeft: 4 }}>{t("— drag to select area")}</span>
             <button type="button" onClick={() => setCropState(null)} suppressHydrationWarning
-              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "var(--outline)", lineHeight: 1 }} aria-label="Close">
+              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "var(--outline)", lineHeight: 1 }} aria-label={t("Close")}>
               <i className="ti ti-x" />
             </button>
           </div>
@@ -913,7 +915,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
 
               {/* Base image */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cropState.src} alt="crop" draggable={false}
+              <img src={cropState.src} alt={t("crop")} draggable={false}
                 style={{ display: "block", width: cropState.dispW, height: cropState.dispH, pointerEvents: "none" }} />
 
               {/* Selection rectangle */}
@@ -934,16 +936,16 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
           {/* Selection info */}
           <div style={{ padding: "8px 18px", background: "var(--bg-low)", borderTop: "1px solid var(--outline-v)", fontSize: 12, color: "var(--on-variant)" }}>
             {cropState.sel.w > 2 && cropState.sel.h > 2
-              ? `Selection: ${Math.round(cropState.sel.w)} × ${Math.round(cropState.sel.h)} px`
-              : "Drag on the image to select the crop area"}
+              ? t("Selection: {width} × {height} px", { width: Math.round(cropState.sel.w), height: Math.round(cropState.sel.h) })
+              : t("Drag on the image to select the crop area")}
           </div>
 
           {/* Footer */}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "12px 18px", borderTop: "1px solid var(--outline-v)" }}>
-            <button className="btn btn-ghost" type="button" onClick={() => setCropState(null)} suppressHydrationWarning>Cancel</button>
+            <button className="btn btn-ghost" type="button" onClick={() => setCropState(null)} suppressHydrationWarning>{t("Cancel")}</button>
             <button className="btn btn-filled" type="button" onClick={applyCrop} suppressHydrationWarning
               disabled={cropState.sel.w < 4 || cropState.sel.h < 4}>
-              <i className="ti ti-check" /> Apply Crop
+              <i className="ti ti-check" /> {t("Apply Crop")}
             </button>
           </div>
         </div>

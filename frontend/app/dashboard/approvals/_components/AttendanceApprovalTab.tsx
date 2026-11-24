@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { ManagerApproval } from "@/types/payroll";
@@ -60,6 +61,7 @@ const needsAttention = (employee: EmployeeRow) => employee.absent_days > 0 || em
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function AttendanceApprovalTab() {
+  const t = useT();
   const [selectedId,  setSelectedId]  = useState<string | null>(null);
   const [comment,     setComment]     = useState("");
   const [selfApprove, setSelfApprove] = useState(false);
@@ -112,7 +114,7 @@ export default function AttendanceApprovalTab() {
         comment,
         self_approve: selfApprove,
       });
-      setSuccessMsg(`L${approvalLevel} attendance approval recorded.`);
+      setSuccessMsg(approvalLevel === 1 ? t("L1 attendance approval recorded.") : t("L2 attendance approval recorded."));
       setComment("");
       setSelfApprove(false);
       refetchSummary();
@@ -120,7 +122,7 @@ export default function AttendanceApprovalTab() {
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Approval failed. Please try again.";
+        ?.response?.data?.message ?? t("Approval failed. Please try again.");
       setApiErr(msg);
     } finally {
       setApproving(false);
@@ -131,7 +133,7 @@ export default function AttendanceApprovalTab() {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "60px 20px", justifyContent: "center", fontSize: 13, color: "var(--on-variant)" }}>
         <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 20, color: "var(--primary)" }} />
-        Loading pending approval cycles…
+        {t("Loading pending approval cycles…")}
       </div>
     );
   }
@@ -144,7 +146,7 @@ export default function AttendanceApprovalTab() {
     return (
       <div style={{ padding: "60px 20px", textAlign: "center", color: "var(--on-variant)" }}>
         <i className="ti ti-checks" style={{ fontSize: 40, display: "block", marginBottom: 12, opacity: 0.3 }} />
-        <div style={{ fontSize: 14 }}>No payroll cycles pending your attendance approval.</div>
+        <div style={{ fontSize: 14 }}>{t("No payroll cycles pending your attendance approval.")}</div>
       </div>
     );
   }
@@ -160,7 +162,7 @@ export default function AttendanceApprovalTab() {
       {/* Cycle selector */}
       <div>
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
-          Select payroll period
+          {t("Select payroll period")}
         </div>
         <div className="aa-cycles">
           {cycles.map(c => (
@@ -173,11 +175,11 @@ export default function AttendanceApprovalTab() {
             >
               <b>{fmtMonth(c.cycle_start)}</b>
               <small>{fmtDate(c.cycle_start)} → {fmtDate(c.cycle_end)}</small>
-              <small>Pay date: {fmtDate(c.pay_date)}</small>
+              <small>{t("Pay date: {date}", { date: fmtDate(c.pay_date) })}</small>
               <span className="aa-cycle-chips">
-                <span className={`aa-chip ${c.attendance_l1_approved_at ? "is-done" : "is-open"}`}>L1 {c.attendance_l1_approved_at ? "done" : "open"}</span>
-                <span className={`aa-chip ${c.attendance_l2_approved_at ? "is-done" : "is-open"}`}>L2 {c.attendance_l2_approved_at ? "done" : "open"}</span>
-                <span className="aa-chip">{c.payslip_count} payslip{c.payslip_count === 1 ? "" : "s"}</span>
+                <span className={`aa-chip ${c.attendance_l1_approved_at ? "is-done" : "is-open"}`}>{c.attendance_l1_approved_at ? t("L1 done") : t("L1 open")}</span>
+                <span className={`aa-chip ${c.attendance_l2_approved_at ? "is-done" : "is-open"}`}>{c.attendance_l2_approved_at ? t("L2 done") : t("L2 open")}</span>
+                <span className="aa-chip">{c.payslip_count === 1 ? t("{count} payslip", { count: c.payslip_count }) : t("{count} payslips", { count: c.payslip_count })}</span>
               </span>
             </button>
           ))}
@@ -192,11 +194,11 @@ export default function AttendanceApprovalTab() {
           <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--outline-v)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 15 }}>
-                Attendance — {selected ? fmtMonth(selected.cycle_start) : ""}
+                {t("Attendance — {month}", { month: selected ? fmtMonth(selected.cycle_start) : "" })}
               </div>
               {selected && (
                 <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                  {fmtDate(selected.cycle_start)} → {fmtDate(selected.cycle_end)}  ·  Pay date {fmtDate(selected.pay_date)}
+                  {fmtDate(selected.cycle_start)} → {fmtDate(selected.cycle_end)}  ·  {t("Pay date {date}", { date: fmtDate(selected.pay_date) })}
                 </div>
               )}
             </div>
@@ -220,26 +222,26 @@ export default function AttendanceApprovalTab() {
           {/* Attendance table */}
           {summaryLoading ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "40px 20px", justifyContent: "center", fontSize: 13, color: "var(--on-variant)" }}>
-              <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 18, color: "var(--primary)" }} /> Loading attendance data…
+              <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 18, color: "var(--primary)" }} /> {t("Loading attendance data…")}
             </div>
           ) : !summary || summary.employees.length === 0 ? (
             <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-              No attendance records found for this period.
+              {t("No attendance records found for this period.")}
             </div>
           ) : (
             <>
             <div className="aa-find">
               <div className="aa-find-box">
                 <i className="ti ti-search" />
-                <input type="search" placeholder="Search name, ID or department…" aria-label="Search employees" value={query} onChange={e => setQuery(e.target.value)} />
+                <input type="search" placeholder={t("Search name, ID or department…")} aria-label={t("Search employees")} value={query} onChange={e => setQuery(e.target.value)} />
               </div>
               <button type="button" className={`aa-filter${isAttentionOnly ? " is-on" : ""}`} aria-pressed={isAttentionOnly} onClick={() => setIsAttentionOnly(v => !v)}>
-                <i className="ti ti-alert-triangle" /> Needs a look ({attentionCount})
+                <i className="ti ti-alert-triangle" /> {t("Needs a look ({count})", { count: attentionCount })}
               </button>
-              <span className="aa-find-count">Showing {visibleEmployees.length} of {allEmployees.length}</span>
+              <span className="aa-find-count">{t("Showing {shown} of {total}", { shown: visibleEmployees.length, total: allEmployees.length })}</span>
             </div>
             {visibleEmployees.length === 0 ? (
-              <div className="aa-empty"><i className="ti ti-mood-check" />Nobody matches. Clear the search or the filter.</div>
+              <div className="aa-empty"><i className="ti ti-mood-check" />{t("Nobody matches. Clear the search or the filter.")}</div>
             ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -247,7 +249,7 @@ export default function AttendanceApprovalTab() {
                   <tr style={{ borderBottom: "2px solid var(--outline-v)" }}>
                     {["Employee", "Department", "Present", "Late", "Half Day", "On Leave", "Absent", "LOP Days", "Hrs Worked"].map(h => (
                       <th key={h} style={{ padding: "10px 12px", textAlign: h === "Employee" || h === "Department" ? "left" : "center", color: "var(--on-variant)", fontWeight: 600, whiteSpace: "nowrap", fontSize: 12 }}>
-                        {h}
+                        {t(h)}
                       </th>
                     ))}
                   </tr>
@@ -275,14 +277,14 @@ export default function AttendanceApprovalTab() {
                 <i className="ti ti-user-check" style={{ marginRight: 6, color: "var(--primary)" }} />
                 {approvalLevel === 1
                   ? noManagersConfigured
-                    ? "No managers have team-lead rights configured for this cycle — HR/Admin can approve L1 directly"
-                    : "Your sign-off is required — review your team's attendance and approve"
-                  : "HR (L2) — Final sign-off on attendance"}
+                    ? t("No managers have team-lead rights configured for this cycle — HR/Admin can approve L1 directly")
+                    : t("Your sign-off is required — review your team's attendance and approve")
+                  : t("HR (L2) — Final sign-off on attendance")}
               </div>
               <textarea
                 className="field-input"
                 rows={2}
-                placeholder="Add approval note (optional)…"
+                placeholder={t("Add approval note (optional)…")}
                 value={comment}
                 onChange={e => setComment(e.target.value)}
                 style={{ resize: "vertical" }}
@@ -293,7 +295,7 @@ export default function AttendanceApprovalTab() {
                   checked={selfApprove}
                   onChange={e => setSelfApprove(e.target.checked)}
                 />
-                I also confirm my own attendance for this period is accurate (self-attested)
+                {t("I also confirm my own attendance for this period is accurate (self-attested)")}
               </label>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
@@ -302,8 +304,8 @@ export default function AttendanceApprovalTab() {
                   disabled={approving || summaryLoading}
                 >
                   {approving
-                    ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
-                    : <><i className="ti ti-check" /> Approve L{approvalLevel} Attendance</>
+                    ? <><i className="ti ti-loader-2 animate-spin" /> {t("Approving…")}</>
+                    : <><i className="ti ti-check" /> {approvalLevel === 1 ? t("Approve L1 Attendance") : t("Approve L2 Attendance")}</>
                   }
                 </button>
               </div>
@@ -314,7 +316,7 @@ export default function AttendanceApprovalTab() {
           {!approvalLevel && !currentUserPending && !l1Done && !summaryLoading && summary && (
             <div style={{ padding: "14px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
               <i className="ti ti-clock" />
-              You have approved. Waiting for {mgrTotalCount - mgrApprovedCount} other manager(s) to sign off.
+              {t("You have approved. Waiting for {count} other manager(s) to sign off.", { count: mgrTotalCount - mgrApprovedCount })}
             </div>
           )}
 
@@ -322,7 +324,7 @@ export default function AttendanceApprovalTab() {
           {!approvalLevel && (l1Done && l2Done) && !summaryLoading && summary && (
             <div style={{ padding: "14px 20px", borderTop: "1px solid var(--outline-v)", background: "rgba(34,197,94,0.06)", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#15803d", fontWeight: 600 }}>
               <i className="ti ti-circle-check" style={{ fontSize: 16 }} />
-              Attendance fully approved — L1 and L2 sign-off complete.
+              {t("Attendance fully approved — L1 and L2 sign-off complete.")}
             </div>
           )}
 

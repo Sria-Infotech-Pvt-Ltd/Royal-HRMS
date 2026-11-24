@@ -3,6 +3,7 @@
 // The Employee ID ranges and everything being edited in them. Each worker type keeps its own draft (what was typed, its errors, whether
 // it is saving), so one type saves without disturbing another's unsaved edit, and "Save all" saves every changed type one after another.
 
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -77,7 +78,7 @@ export function useEmployeeSeries() {
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { data?: RowErrors; message?: string } } };
       const fieldErrors = apiErr?.response?.data?.data;
-      patch(type, current => ({ ...current, saving: false, errors: fieldErrors ?? current.errors, apiError: fieldErrors ? null : (apiErr?.response?.data?.message ?? "Failed to save.") }));
+      patch(type, current => ({ ...current, saving: false, errors: fieldErrors ?? current.errors, apiError: fieldErrors ? null : (apiErr?.response?.data?.message ?? tr("Failed to save.")) }));
       return false;
     }
   }, [patch]);

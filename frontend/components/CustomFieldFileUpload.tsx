@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CustomFieldFileValue } from "@/types/onboardingFieldConfig";
 import DocPreviewModal from "@/components/DocPreviewModal";
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 
 const FILE_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
 
@@ -38,6 +39,7 @@ interface Props {
 export default function CustomFieldFileUpload({
   fieldKey, label, required, allowMultiple, value, uploading, onUpload, onDelete, disabled,
 }: Props) {
+  const t = useT();
   const [preview, setPreview] = useState<CustomFieldFileValue | null>(null);
   const canAddMore = allowMultiple || value.length === 0;
   const readOnly = !onDelete;
@@ -71,15 +73,15 @@ export default function CustomFieldFileUpload({
           </p>
           <p className="text-[11.5px] leading-snug" style={{ color: "var(--on-variant)" }}>
             {uploading
-              ? "Uploading…"
+              ? t("Uploading…")
               : uploaded
                 ? `${formatDate(item!.uploaded_at)}${item!.file_size ? ` · ${fmtBytes(item!.file_size)}` : ""}`
-                : "Not uploaded"}
+                : t("Not uploaded")}
           </p>
         </div>
         {!readOnly && !disabled && (!allowMultiple || !uploaded) && (
           <label
-            title={uploaded ? "Replace file" : "Upload file"}
+            title={uploaded ? t("Replace file") : t("Upload file")}
             suppressHydrationWarning
             className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 transition-colors ${uploading ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
             style={{ color: "var(--on-variant)" }}
@@ -97,24 +99,24 @@ export default function CustomFieldFileUpload({
         {!readOnly && !disabled && uploaded && item && (
           <button
             type="button"
-            title="Delete file"
+            title={t("Delete file")}
             onClick={() => onDelete!(fieldKey, item.id)}
             suppressHydrationWarning
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 transition-colors"
             style={{ color: "var(--error)" }}
-           aria-label="Delete file">
+           aria-label={t("Delete file")}>
             <i className="ti ti-trash text-[15px]" />
           </button>
         )}
         <button
           type="button"
-          title={uploaded ? "Preview file" : "Not uploaded"}
+          title={uploaded ? t("Preview file") : t("Not uploaded")}
           disabled={!uploaded}
           onClick={() => uploaded && item && setPreview(item)}
           suppressHydrationWarning
           className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           style={{ color: uploaded ? "var(--primary)" : "var(--on-variant)" }}
-         aria-label="View">
+         aria-label={t("View")}>
           <i className="ti ti-eye text-[15px]" />
         </button>
       </div>
@@ -146,7 +148,7 @@ export default function CustomFieldFileUpload({
             style={{ borderColor: "var(--outline-v)", color: "var(--on-variant)" }}
           >
             <i className="ti ti-plus text-[14px]" />
-            Add file
+            {t("Add file")}
             <input
               type="file"
               accept={FILE_ACCEPT}

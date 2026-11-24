@@ -12,6 +12,8 @@ import { useRouter } from "next/navigation";
 import { useParams } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 type CheckState = "loading" | "valid" | "invalid";
 
@@ -42,6 +44,7 @@ const STRENGTH_LABEL = ["Very weak", "Weak", "Fair", "Good", "Strong"];
 const STRENGTH_COLOR = ["var(--error)", "var(--error)", "var(--warn)", "var(--info)", "var(--success)"];
 
 export default function ActivatePage() {
+  const t = useT();
   const router = useRouter();
   const params = useParams<{ token: string }>();
   const token = params.token;
@@ -68,7 +71,7 @@ export default function ActivatePage() {
       })
       .catch((err: unknown) => {
         const msg = (err as { message?: string })?.message
-          ?? "This activation link is invalid or has expired.";
+          ?? tr("This activation link is invalid or has expired.");
         setCheckError(msg);
         setCheckState("invalid");
       });
@@ -81,8 +84,8 @@ export default function ActivatePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError("");
-    if (!rulesPassed) { setSubmitError("Please satisfy every password rule below."); return; }
-    if (!passwordsMatch) { setSubmitError("Passwords do not match."); return; }
+    if (!rulesPassed) { setSubmitError(t("Please satisfy every password rule below.")); return; }
+    if (!passwordsMatch) { setSubmitError(t("Passwords do not match.")); return; }
 
     setSubmitting(true);
     try {
@@ -94,14 +97,14 @@ export default function ActivatePage() {
       setStep("done");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Could not set your password. Please try again.";
+        ?.response?.data?.message ?? t("Could not set your password. Please try again.");
       setSubmitError(msg);
     } finally {
       setSubmitting(false);
     }
   }
 
-  const firstName = (invitee?.full_name || "").split(" ")[0] || "there";
+  const firstName = (invitee?.full_name || "").split(" ")[0] || t("there");
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg)" }}>
@@ -110,7 +113,7 @@ export default function ActivatePage() {
           {checkState === "loading" && (
             <div style={{ textAlign: "center", padding: "24px 0" }}>
               <i className="ti ti-loader-2" style={{ fontSize: 28, animation: "spin 1s linear infinite", color: "var(--primary)" }} />
-              <p style={{ marginTop: 12, color: "var(--on-variant)", fontSize: 13 }}>Checking your invite…</p>
+              <p style={{ marginTop: 12, color: "var(--on-variant)", fontSize: 13 }}>{t("Checking your invite…")}</p>
             </div>
           )}
 
@@ -122,11 +125,11 @@ export default function ActivatePage() {
               }}>
                 <i className="ti ti-link-off" style={{ fontSize: 22, color: "var(--error)" }} />
               </div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>This link isn&apos;t valid</h1>
+              <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{t("This link isn't valid")}</h1>
               <p style={{ fontSize: 13, color: "var(--on-variant)", lineHeight: 1.6 }}>{checkError}</p>
               <p style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 16 }}>
-                Ask HR to resend your activation invite, or{" "}
-                <a href="/login" style={{ color: "var(--primary)" }}>go to login</a>.
+                {t("Ask HR to resend your activation invite, or")}{" "}
+                <a href="/login" style={{ color: "var(--primary)" }}>{t("go to login")}</a>.
               </p>
             </div>
           )}
@@ -139,13 +142,13 @@ export default function ActivatePage() {
               }}>
                 <i className="ti ti-confetti" style={{ fontSize: 22, color: "var(--primary)" }} />
               </div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Welcome, {firstName}!</h1>
+              <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>{t("Welcome, {name}!", { name: firstName })}</h1>
               <p style={{ fontSize: 13, color: "var(--on-variant)", lineHeight: 1.6, marginBottom: 24 }}>
-                Let&apos;s secure your account. You&apos;ll set your own password now — it takes about a minute.
-                After that, you&apos;ll be guided through a short onboarding checklist.
+                {t("Let's secure your account. You'll set your own password now — it takes about a minute.")}{" "}
+                {t("After that, you'll be guided through a short onboarding checklist.")}
               </p>
               <button className="btn btn-filled w-full" onClick={() => setStep("password")} suppressHydrationWarning>
-                Get Started <i className="ti ti-arrow-right" />
+                {t("Get Started")} <i className="ti ti-arrow-right" />
               </button>
             </div>
           )}
@@ -153,9 +156,9 @@ export default function ActivatePage() {
           {checkState === "valid" && step === "password" && (
             <>
               <div style={{ textAlign: "center", marginBottom: 20 }}>
-                <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Set your password</h1>
+                <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{t("Set your password")}</h1>
                 <p style={{ fontSize: 13, color: "var(--on-variant)" }}>
-                  Signing in as <strong>{invitee?.email}</strong>
+                  {t("Signing in as")} <strong>{invitee?.email}</strong>
                 </p>
               </div>
 
@@ -163,11 +166,11 @@ export default function ActivatePage() {
                 {submitError && <div className="alert alert-error mb-3"><i className="ti ti-alert-circle" /> {submitError}</div>}
 
                 <div className="field-group">
-                  <label className="field-label" htmlFor="act-pwd">New password</label>
+                  <label className="field-label" htmlFor="act-pwd">{t("New password")}</label>
                   <div className="relative">
                     <input
                       id="act-pwd" type={showPwd ? "text" : "password"} className="field-input pr-[42px]"
-                      placeholder="New password" value={password} onChange={e => setPassword(e.target.value)}
+                      placeholder={t("New password")} value={password} onChange={e => setPassword(e.target.value)}
                       autoComplete="new-password" autoFocus suppressHydrationWarning
                     />
                     <button type="button" tabIndex={-1}
@@ -189,17 +192,17 @@ export default function ActivatePage() {
                       ))}
                     </div>
                     <span style={{ fontSize: 11.5, color: STRENGTH_COLOR[score], fontWeight: 600 }}>
-                      {STRENGTH_LABEL[score]}
+                      {t(STRENGTH_LABEL[score])}
                     </span>
                   </div>
                 )}
 
                 <div className="field-group">
-                  <label className="field-label" htmlFor="act-confirm">Confirm password</label>
+                  <label className="field-label" htmlFor="act-confirm">{t("Confirm password")}</label>
                   <div className="relative">
                     <input
                       id="act-confirm" type={showConfirm ? "text" : "password"} className="field-input pr-[42px]"
-                      placeholder="Confirm password" value={confirm} onChange={e => setConfirm(e.target.value)}
+                      placeholder={t("Confirm password")} value={confirm} onChange={e => setConfirm(e.target.value)}
                       autoComplete="new-password" suppressHydrationWarning
                     />
                     <button type="button" tabIndex={-1}
@@ -209,7 +212,7 @@ export default function ActivatePage() {
                     </button>
                   </div>
                   {confirm.length > 0 && !passwordsMatch && (
-                    <span className="field-error-msg">Passwords do not match.</span>
+                    <span className="field-error-msg">{t("Passwords do not match.")}</span>
                   )}
                 </div>
 
@@ -219,7 +222,7 @@ export default function ActivatePage() {
                     return (
                       <div key={r.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "2px 0", color: passed ? "var(--success)" : "var(--on-variant)" }}>
                         <i className={`ti ${passed ? "ti-circle-check-filled" : "ti-circle"}`} style={{ fontSize: 14 }} />
-                        {r.label}
+                        {t(r.label)}
                       </div>
                     );
                   })}
@@ -227,8 +230,8 @@ export default function ActivatePage() {
 
                 <button type="submit" className="btn btn-filled w-full" disabled={submitting} suppressHydrationWarning>
                   {submitting
-                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Activating…</>
-                    : <><i className="ti ti-shield-check" /> Activate my account</>
+                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Activating…")}</>
+                    : <><i className="ti ti-shield-check" /> {t("Activate my account")}</>
                   }
                 </button>
               </form>
@@ -243,12 +246,12 @@ export default function ActivatePage() {
               }}>
                 <i className="ti ti-circle-check" style={{ fontSize: 22, color: "var(--success)" }} />
               </div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>You&apos;re all set!</h1>
+              <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>{t("You're all set!")}</h1>
               <p style={{ fontSize: 13, color: "var(--on-variant)", lineHeight: 1.6, marginBottom: 20 }}>
-                Your account is active. Log in with your new password to start your onboarding checklist.
+                {t("Your account is active. Log in with your new password to start your onboarding checklist.")}
               </p>
               <button className="btn btn-filled w-full" onClick={() => router.push("/login")} suppressHydrationWarning>
-                Go to Login <i className="ti ti-arrow-right" />
+                {t("Go to Login")} <i className="ti ti-arrow-right" />
               </button>
             </div>
           )}

@@ -2,6 +2,7 @@
 
 import { FILTERS } from "./_data";
 import { SORT_OPTIONS, type SortKey } from "./_filters";
+import { useT } from "@/hooks/useI18n";
 
 interface AnnouncementToolbarProps {
   /** What is typed in the box right now (the list itself follows a moment later). */
@@ -22,6 +23,7 @@ interface AnnouncementToolbarProps {
 
 /** Search, category pills, pinned-only switch and sort, with a one-line summary of what is showing. */
 export default function AnnouncementToolbar(props: AnnouncementToolbarProps) {
+  const t = useT()
   const { searchText, category, sort, pinnedOnly, hasFilters, shown, matching } = props
 
   return (
@@ -32,15 +34,15 @@ export default function AnnouncementToolbar(props: AnnouncementToolbarProps) {
           <input
             type="search"
             className="field-input"
-            placeholder="Search title or message"
-            aria-label="Search announcements"
+            placeholder={t("Search title or message")}
+            aria-label={t("Search announcements")}
             value={searchText}
             maxLength={100}
             onChange={event => props.onSearchText(event.target.value)}
             suppressHydrationWarning
           />
           {searchText && (
-            <button type="button" className="ann-search-clear" aria-label="Clear search" onClick={() => props.onSearchText("")}>
+            <button type="button" className="ann-search-clear" aria-label={t("Clear search")} onClick={() => props.onSearchText("")}>
               <i className="ti ti-x" />
             </button>
           )}
@@ -52,17 +54,17 @@ export default function AnnouncementToolbar(props: AnnouncementToolbarProps) {
           aria-pressed={pinnedOnly}
           onClick={() => props.onPinnedOnly(!pinnedOnly)}
         >
-          <i className="ti ti-pin" aria-hidden="true" /> Pinned only
+          <i className="ti ti-pin" aria-hidden="true" /> {t("Pinned only")}
         </button>
 
         <label className="ann-sort">
-          <span className="sr-only">Sort announcements</span>
+          <span className="sr-only">{t("Sort announcements")}</span>
           <select
             className="field-input field-select"
             value={sort}
             onChange={event => props.onSort(event.target.value as SortKey)}
           >
-            {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
           </select>
         </label>
       </div>
@@ -76,17 +78,17 @@ export default function AnnouncementToolbar(props: AnnouncementToolbarProps) {
             className={`btn ${category === filter.value ? "btn-filled" : "btn-ghost"}`}
             suppressHydrationWarning
           >
-            {filter.label}
+            {t(filter.label)}
           </button>
         ))}
       </div>
 
       {(shown !== null && matching !== null && (matching > 0 || hasFilters)) && (
         <div className="ann-summary" role="status">
-          <span>{matching === 0 ? "No posts match" : `Showing ${shown} of ${matching} ${matching === 1 ? "post" : "posts"}`}</span>
+          <span>{matching === 0 ? t("No posts match") : matching === 1 ? t("Showing {shown} of {matching} post", { shown, matching }) : t("Showing {shown} of {matching} posts", { shown, matching })}</span>
           {hasFilters && (
             <button type="button" className="btn-link" onClick={props.onClear}>
-              <i className="ti ti-filter-off" aria-hidden="true" /> Clear filters
+              <i className="ti ti-filter-off" aria-hidden="true" /> {t("Clear filters")}
             </button>
           )}
         </div>

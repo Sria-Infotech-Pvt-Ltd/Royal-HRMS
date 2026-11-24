@@ -1,6 +1,8 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import ClockInButton from "@/components/ClockInButton";
+import { tr } from "@/lib/i18n/tr";
 import AnnouncementCard from "@/components/dashboard/AnnouncementCard";
 import { TeamProvider, useTeam } from "@/lib/teamContext";
 import type { SessionPayload } from "@/lib/session";
@@ -69,11 +71,11 @@ function initials(name: string): string {
 
 function timeAgo(iso: string): string {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return tr("just now");
+  if (m < 60) return tr("{count}m ago", { count: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (h < 24) return tr("{count}h ago", { count: h });
+  return tr("{count}d ago", { count: Math.floor(h / 24) });
 }
 
 function fmtDate(iso: string): string {
@@ -90,6 +92,7 @@ export default function ManagerDashboard({ session }: Props) {
 
 function ManagerDashboardInner({ session }: Props) {
   const { data, loading } = useTeam();
+  const t = useT();
 
   const ov      = data?.team_overview;
   const actions = data?.quick_actions        ?? [];
@@ -116,9 +119,9 @@ function ManagerDashboardInner({ session }: Props) {
               <i className="ti ti-users-group" />
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>Team Console</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>{t("Team Console")}</div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>
-                {ov ? `${ov.greeting}, ${ov.manager_name.split(" ")[0]}` : `Hello, ${session.name.split(" ")[0]}`}
+                {ov ? `${ov.greeting}, ${ov.manager_name.split(" ")[0]}` : t("Hello, {name}", { name: session.name.split(" ")[0] })}
               </div>
             </div>
           </div>
@@ -126,7 +129,7 @@ function ManagerDashboardInner({ session }: Props) {
             {ov && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: "rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.85)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <i className="ti ti-chart-bar" style={{ fontSize: 11 }} />
-                {ov.team_attendance_percentage}% Attendance
+                {t("{percent}% Attendance", { percent: ov.team_attendance_percentage })}
               </span>
             )}
             <ClockInButton />
@@ -138,10 +141,10 @@ function ManagerDashboardInner({ session }: Props) {
         {/* Stats grid */}
         <div className="stats-grid">
           {[
-            { icon: "ti-users",        val: ov ? String(ov.team_size)               : (loading ? "—" : "0"), lbl: "Team Size",         sub: "Active direct reports" },
-            { icon: "ti-checks",       val: ov ? String(ov.pending_approvals)        : (loading ? "—" : "0"), lbl: "Pending Approvals", sub: "Awaiting review"       },
-            { icon: "ti-beach",        val: ov ? String(ov.employees_on_leave_today) : (loading ? "—" : "0"), lbl: "On Leave Today",    sub: "Team members"          },
-            { icon: "ti-calendar",     val: ov ? `${ov.team_attendance_percentage}%` : (loading ? "—" : "—"), lbl: "Attendance Rate",   sub: "Today"                 },
+            { icon: "ti-users",        val: ov ? String(ov.team_size)               : (loading ? "—" : "0"), lbl: t("Team Size"),         sub: t("Active direct reports") },
+            { icon: "ti-checks",       val: ov ? String(ov.pending_approvals)        : (loading ? "—" : "0"), lbl: t("Pending Approvals"), sub: t("Awaiting review")       },
+            { icon: "ti-beach",        val: ov ? String(ov.employees_on_leave_today) : (loading ? "—" : "0"), lbl: t("On Leave Today"),    sub: t("Team members")          },
+            { icon: "ti-calendar",     val: ov ? `${ov.team_attendance_percentage}%` : (loading ? "—" : "—"), lbl: t("Attendance Rate"),   sub: t("Today")                 },
           ].map(stat => (
             <div key={stat.lbl} style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -161,7 +164,7 @@ function ManagerDashboardInner({ session }: Props) {
       {/* Quick actions */}
       {actions.length > 0 && (
         <div className="card mb-20">
-          <div className="card-header"><div className="card-title"><i className="ti ti-bolt" /> Quick Actions</div></div>
+          <div className="card-header"><div className="card-title"><i className="ti ti-bolt" /> {t("Quick Actions")}</div></div>
           <div className="card-body">
             <div className="qa-grid">
               {actions.map(action => {
@@ -192,11 +195,11 @@ function ManagerDashboardInner({ session }: Props) {
           {/* Pending Approvals */}
           <div className="card mb-16">
             <div className="card-header">
-              <div className="card-title"><i className="ti ti-checks" /> Pending Approvals</div>
-              {pending.length > 0 && <span className="badge badge-warn">{pending.length} item{pending.length !== 1 ? "s" : ""}</span>}
+              <div className="card-title"><i className="ti ti-checks" /> {t("Pending Approvals")}</div>
+              {pending.length > 0 && <span className="badge badge-warn">{pending.length === 1 ? t("{count} item", { count: pending.length }) : t("{count} items", { count: pending.length })}</span>}
             </div>
             {pending.length === 0 ? (
-              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? "Loading…" : "No pending approvals."}</div>
+              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? t("Loading…") : t("No pending approvals.")}</div>
             ) : (
               <div style={{ padding: 0 }}>
                 {pending.map(item => {
@@ -210,9 +213,9 @@ function ManagerDashboardInner({ session }: Props) {
                         <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {item.employee_name} <span style={{ fontSize: 11, color: "var(--on-variant)", fontWeight: 400 }}>({item.employee_id})</span>
                         </div>
-                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{item.summary} · Applied {fmtDate(item.applied_on)}</div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{item.summary} · {t("Applied {date}", { date: fmtDate(item.applied_on) })}</div>
                       </div>
-                      <a href="/dashboard/approvals" className="btn btn-ghost btn-sm" style={{ flexShrink: 0, fontSize: 11 }}>Review</a>
+                      <a href="/dashboard/approvals" className="btn btn-ghost btn-sm" style={{ flexShrink: 0, fontSize: 11 }}>{t("Review")}</a>
                     </div>
                   );
                 })}
@@ -222,10 +225,10 @@ function ManagerDashboardInner({ session }: Props) {
 
           {/* Recent Team Activity */}
           <div className="card">
-            <div className="card-header"><div className="card-title"><i className="ti ti-activity" /> Recent Team Activity</div></div>
+            <div className="card-header"><div className="card-title"><i className="ti ti-activity" /> {t("Recent Team Activity")}</div></div>
             <div className="card-body">
               {activity.length === 0 ? (
-                <div style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? "Loading…" : "No recent activity."}</div>
+                <div style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? t("Loading…") : t("No recent activity.")}</div>
               ) : (
                 <>
                   <div className="timeline">
@@ -253,10 +256,10 @@ function ManagerDashboardInner({ session }: Props) {
           {/* Birthdays */}
           {(todayBd.length > 0 || upcomBd.length > 0) && (
             <div className="card mb-16">
-              <div className="card-header"><div className="card-title"><i className="ti ti-cake" /> Birthdays</div></div>
+              <div className="card-header"><div className="card-title"><i className="ti ti-cake" /> {t("Birthdays")}</div></div>
               {todayBd.length > 0 && (
                 <div style={{ padding: "10px 20px 0" }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Today</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{t("Today")}</div>
                   {todayBd.map(b => (
                     <div key={b.employee_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--bg-high)" }}>
                       <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(23,144,90,0.15)", color: "var(--success)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{initials(b.full_name)}</div>
@@ -270,7 +273,7 @@ function ManagerDashboardInner({ session }: Props) {
               )}
               {upcomBd.length > 0 && (
                 <div style={{ padding: "10px 20px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Upcoming (30 days)</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{t("Upcoming (30 days)")}</div>
                   {upcomBd.slice(0, 5).map(b => (
                     <div key={b.employee_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--bg-high)" }}>
                       <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--bg-low)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{initials(b.full_name)}</div>
@@ -278,7 +281,7 @@ function ManagerDashboardInner({ session }: Props) {
                         <div style={{ fontSize: 13, fontWeight: 500 }}>{b.full_name}</div>
                         <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{b.department}</div>
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--on-variant)", whiteSpace: "nowrap" }}>in {b.days_until}d</div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)", whiteSpace: "nowrap" }}>{t("in {days}d", { days: b.days_until })}</div>
                     </div>
                   ))}
                 </div>
@@ -289,11 +292,11 @@ function ManagerDashboardInner({ session }: Props) {
           {/* Team Attendance Today */}
           <div className="card mb-16">
             <div className="card-header">
-              <div className="card-title"><i className="ti ti-users" /> Team Attendance Today</div>
-              {ov && <span className="badge badge-success">{presentCount}/{ov.team_size} present</span>}
+              <div className="card-title"><i className="ti ti-users" /> {t("Team Attendance Today")}</div>
+              {ov && <span className="badge badge-success">{t("{present}/{total} present", { present: presentCount, total: ov.team_size })}</span>}
             </div>
             {teamAtt.length === 0 ? (
-              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? "Loading…" : "No attendance data."}</div>
+              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? t("Loading…") : t("No attendance data.")}</div>
             ) : (
               <div style={{ padding: 0, maxHeight: 340, overflowY: "auto" }}>
                 {teamAtt.map(emp => (
@@ -314,9 +317,9 @@ function ManagerDashboardInner({ session }: Props) {
 
           {/* Upcoming Leaves */}
           <div className="card">
-            <div className="card-header"><div className="card-title"><i className="ti ti-calendar" /> Upcoming Leaves</div></div>
+            <div className="card-header"><div className="card-title"><i className="ti ti-calendar" /> {t("Upcoming Leaves")}</div></div>
             {leaves.length === 0 ? (
-              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? "Loading…" : "No upcoming leaves."}</div>
+              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? t("Loading…") : t("No upcoming leaves.")}</div>
             ) : (
               <div style={{ padding: 0 }}>
                 {leaves.map(lv => (

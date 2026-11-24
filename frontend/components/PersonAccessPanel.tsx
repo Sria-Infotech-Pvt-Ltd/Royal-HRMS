@@ -8,6 +8,7 @@ import EmployeeAccessList from "@/components/EmployeeAccessList";
 import PermissionChip from "@/components/PermissionChip";
 import { usePersonAccess, type PersonSearchResult } from "@/hooks/usePersonAccess";
 import { hueOf, initialsOf } from "@/lib/accessListView";
+import { useT } from "@/hooks/useI18n";
 import type { EmployeeAccessRow, PermissionCatalogueItem } from "@/types/orgStructure";
 
 interface Props {
@@ -42,6 +43,7 @@ function Tile({ icon, tone, label, value, note }: { icon: string; tone: string; 
 }
 
 export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
+  const t = useT();
   const [person, setPerson] = useState<PersonSearchResult | null>(null);
   const [extra, setExtra] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
@@ -55,8 +57,8 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
 
   // Where a permission the person already has comes from, so it can be shown ticked and locked.
   const sourceOf = (codename: string): string | null => {
-    if (access?.baseline.includes(codename)) return "everyone";
-    if (access?.seat?.codenames.includes(codename)) return "their seat";
+    if (access?.baseline.includes(codename)) return t("everyone");
+    if (access?.seat?.codenames.includes(codename)) return t("their seat");
     return null;
   };
   const searchTerm = filter.trim().toLowerCase();
@@ -97,7 +99,7 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
 
   async function save() {
     const isSaved = await saveExtra(extra);
-    setMessage(isSaved ? { text: "Saved. They get the new access the next time they sign in.", isError: false } : null);
+    setMessage(isSaved ? { text: t("Saved. They get the new access the next time they sign in."), isError: false } : null);
   }
 
   return (
@@ -121,33 +123,33 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
               </div>
             </div>
             <button type="button" className="btn btn-ghost" onClick={() => { setPerson(null); setMessage(null); }}>
-              <i className="ti ti-arrow-left" /> Choose someone else
+              <i className="ti ti-arrow-left" /> {t("Choose someone else")}
             </button>
           </div>
 
-          {loading && <p className="text-sm text-[var(--on-variant)]">Loading access…</p>}
+          {loading && <p className="text-sm text-[var(--on-variant)]">{t("Loading access…")}</p>}
           {(error || saveError) && <div className="alert alert-error" role="alert">{error || saveError}</div>}
           {message && <div className={`alert ${message.isError ? "alert-error" : "alert-success"}`} role="status">{message.text}</div>}
 
           {access && (
             <>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Tile icon="ti-users" tone="var(--on-variant)" label="From everyone" value={String(access.baseline.length)} note="The company baseline" />
+                <Tile icon="ti-users" tone="var(--on-variant)" label={t("From everyone")} value={String(access.baseline.length)} note={t("The company baseline")} />
                 <Tile
-                  icon="ti-briefcase" tone="var(--primary-c)" label="From their seat" value={String(access.seat?.codenames.length ?? 0)}
-                  note={access.seat ? access.seat.title : "No seat held today"}
+                  icon="ti-briefcase" tone="var(--primary-c)" label={t("From their seat")} value={String(access.seat?.codenames.length ?? 0)}
+                  note={access.seat ? access.seat.title : t("No seat held today")}
                 />
-                <Tile icon="ti-user-plus" tone="var(--primary)" label="Extra, personally" value={String(extra.length)} note={extra.length === 0 ? "None yet" : "Selected below"} />
-                <Tile icon="ti-shield-check" tone="var(--success)" label="Can do in total" value={String(effectiveTotal)} note="All three together" />
+                <Tile icon="ti-user-plus" tone="var(--primary)" label={t("Extra, personally")} value={String(extra.length)} note={extra.length === 0 ? t("None yet") : t("Selected below")} />
+                <Tile icon="ti-shield-check" tone="var(--success)" label={t("Can do in total")} value={String(effectiveTotal)} note={t("All three together")} />
               </div>
 
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="relative w-72 max-w-full">
                     <i className="ti ti-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--on-variant)]" />
-                    <input className="finput w-full !pl-9" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="Search e.g. payroll, leave" aria-label="Search permissions" />
+                    <input className="finput w-full !pl-9" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder={t("Search e.g. payroll, leave")} aria-label={t("Search permissions")} />
                   </div>
-                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show">
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("Show")}>
                     {VIEWS.map(option => (
                       <button
                         key={option.value} type="button" aria-pressed={view === option.value} onClick={() => setView(option.value)}
@@ -156,15 +158,15 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
                           ? { background: "var(--primary)", borderColor: "var(--primary)", color: "#fff" }
                           : { background: "var(--surface)", borderColor: "var(--outline-v)", color: "var(--on-variant)" }}
                       >
-                        <i className={`ti ${option.icon}`} /> {option.label}
+                        <i className={`ti ${option.icon}`} /> {t(option.label)}
                       </button>
                     ))}
                   </div>
-                  <span className="ml-auto text-xs text-[var(--on-variant)]">Showing {shownModules.length} of {modules.length} modules</span>
+                  <span className="ml-auto text-xs text-[var(--on-variant)]">{t("Showing {shown} of {total} modules", { shown: shownModules.length, total: modules.length })}</span>
                 </div>
 
                 <div className="max-h-[30rem] overflow-y-auto rounded-2xl border border-[var(--outline-v)]" style={{ background: "var(--surface)" }}>
-                  {shownModules.length === 0 && <p className="p-4 text-sm text-[var(--on-variant)]">Nothing matches. Clear the search or choose &ldquo;All modules&rdquo;.</p>}
+                  {shownModules.length === 0 && <p className="p-4 text-sm text-[var(--on-variant)]">{t("Nothing matches. Clear the search or choose “All modules”.")}</p>}
                   {shownModules.map(([module, items]) => {
                     const addable = addableIn(items);
                     const isAllOn = addable.length > 0 && addable.every(codename => extra.includes(codename));
@@ -172,10 +174,10 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
                       <div key={module} className="flex flex-col gap-2 border-b border-[var(--outline-v)] px-4 py-3 last:border-b-0 sm:flex-row sm:items-start sm:gap-4">
                         <div className="w-40 shrink-0">
                           <h4 className="text-sm font-semibold capitalize text-[var(--on-bg)]">{labelOf(module)}</h4>
-                          <p className="text-[11px] text-[var(--on-variant)]">{items.length - addable.length} already held · {addable.filter(codename => extra.includes(codename)).length} extra</p>
+                          <p className="text-[11px] text-[var(--on-variant)]">{t("{held} already held · {extra} extra", { held: items.length - addable.length, extra: addable.filter(codename => extra.includes(codename)).length })}</p>
                           {canEdit && addable.length > 0 && (
                             <button type="button" className="mt-1 text-[11px] font-semibold hover:underline" style={{ color: "var(--primary)" }} onClick={() => switchModule(items)}>
-                              {isAllOn ? "Remove all extra" : `Add all ${addable.length}`}
+                              {isAllOn ? t("Remove all extra") : t("Add all {count}", { count: addable.length })}
                             </button>
                           )}
                         </div>
@@ -201,18 +203,18 @@ export default function PersonAccessPanel({ catalogue, canEdit }: Props) {
                 <div className="sticky bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-lg" role="status" style={{ background: "var(--surface)", borderColor: "var(--primary)" }}>
                   <span className="text-sm font-semibold text-[var(--on-bg)]">
                     <i className="ti ti-pencil mr-2 text-[var(--primary)]" />
-                    {changedCount} unsaved {changedCount === 1 ? "change" : "changes"}
-                    <span className="ml-2 text-xs font-normal text-[var(--on-variant)]">{addedCount} to add · {removedCount} to remove</span>
+                    {changedCount === 1 ? t("{count} unsaved change", { count: changedCount }) : t("{count} unsaved changes", { count: changedCount })}
+                    <span className="ml-2 text-xs font-normal text-[var(--on-variant)]">{t("{added} to add · {removed} to remove", { added: addedCount, removed: removedCount })}</span>
                   </span>
                   <span className="flex gap-2">
-                    <button type="button" className="btn btn-ghost" onClick={() => setExtra(saved)} disabled={isSaving}><i className="ti ti-arrow-back-up" /> Discard</button>
+                    <button type="button" className="btn btn-ghost" onClick={() => setExtra(saved)} disabled={isSaving}><i className="ti ti-arrow-back-up" /> {t("Discard")}</button>
                     <button type="button" className="btn btn-filled" onClick={save} disabled={changedCount === 0 || isSaving}>
-                      <i className={`ti ${isSaving ? "ti-loader-2 animate-spin" : "ti-device-floppy"}`} /> {isSaving ? "Saving…" : "Save access"}
+                      <i className={`ti ${isSaving ? "ti-loader-2 animate-spin" : "ti-device-floppy"}`} /> {isSaving ? t("Saving…") : t("Save access")}
                     </button>
                   </span>
                 </div>
               )}
-              {!canEdit && <p className="text-xs text-[var(--on-variant)]">You can view access but only a full-access user can change it.</p>}
+              {!canEdit && <p className="text-xs text-[var(--on-variant)]">{t("You can view access but only a full-access user can change it.")}</p>}
             </>
           )}
         </>

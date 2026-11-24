@@ -23,6 +23,7 @@ import { fmtDate, statusBadgeClass } from "@/app/dashboard/separation/_workflow"
 import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import ResignationRequestModal from "./ResignationRequestModal";
 import WorkStatusPanel from "@/components/work-status/WorkStatusPanel";
+import { useT } from "@/hooks/useI18n";
 
 interface EmploymentProfileData {
   employee_id:                string;
@@ -40,6 +41,7 @@ interface Props {
 }
 
 export default function EmploymentTab({ onNavigateToDocuments }: Props) {
+  const t = useT();
   const [showResign, setShowResign] = useState(false);
 
   const { data: profile } = useFetch<EmploymentProfileData>(API.employees.me);
@@ -52,13 +54,13 @@ export default function EmploymentTab({ onNavigateToDocuments }: Props) {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Employment &amp; lifecycle</h2>
+          <h2 style={{ margin: 0, fontSize: 20 }}>{t("Employment & lifecycle")}</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--on-variant)" }}>
-            Review your current assignment and submit formal employment actions.
+            {t("Review your current assignment and submit formal employment actions.")}
           </p>
         </div>
         <button className="btn btn-filled" onClick={() => setShowResign(true)}>
-          <i className="ti ti-logout" /> Start resignation request
+          <i className="ti ti-logout" /> {t("Start resignation request")}
         </button>
       </div>
 
@@ -90,28 +92,30 @@ function Tile({ label, value }: { label: string; value: string }) {
 }
 
 function CurrentAssignmentCard({ profile }: { profile: EmploymentProfileData | null | undefined }) {
+  const t = useT();
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-id-badge-2" /> Current assignment</div>
+        <div className="card-title"><i className="ti ti-id-badge-2" /> {t("Current assignment")}</div>
       </div>
       <div className="ess-pair" style={{ padding: "4px 20px 20px", gap: 14 }}>
-        <Tile label="EMPLOYMENT STATUS"    value={profile?.employment_status_display || "—"} />
-        <Tile label="EMPLOYEE ID"          value={profile?.employee_id || "—"} />
-        <Tile label="POSITION"             value={profile?.designation || "—"} />
-        <Tile label="REPORTING MANAGER"    value={profile?.reporting_manager?.name || "Not assigned"} />
-        <Tile label="LOCATION"             value={profile?.work_location || profile?.branch || "—"} />
-        <Tile label="NOTICE PERIOD"        value={profile?.notice_period_days != null ? `${profile.notice_period_days} days` : "—"} />
+        <Tile label={t("EMPLOYMENT STATUS")} value={profile?.employment_status_display || "—"} />
+        <Tile label={t("EMPLOYEE ID")} value={profile?.employee_id || "—"} />
+        <Tile label={t("POSITION")} value={profile?.designation || "—"} />
+        <Tile label={t("REPORTING MANAGER")} value={profile?.reporting_manager?.name || t("Not assigned")} />
+        <Tile label={t("LOCATION")} value={profile?.work_location || profile?.branch || "—"} />
+        <Tile label={t("NOTICE PERIOD")} value={profile?.notice_period_days != null ? t("{count} days", { count: profile.notice_period_days }) : "—"} />
       </div>
     </div>
   );
 }
 
 function EmploymentDocumentsCard({ onNavigateToDocuments }: { onNavigateToDocuments: () => void }) {
+  const t = useT();
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-file-certificate" /> Employment documents</div>
+        <div className="card-title"><i className="ti ti-file-certificate" /> {t("Employment documents")}</div>
       </div>
       <div style={{ padding: "4px 24px 20px" }}>
         {/* Real on-demand PDF, generated server-side from the caller's own
@@ -121,14 +125,14 @@ function EmploymentDocumentsCard({ onNavigateToDocuments }: { onNavigateToDocume
             the download, so no target="_blank" is needed. */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Employment verification letter</div>
-            <div style={{ fontSize: 12, color: "var(--on-variant)" }}>For bank, visa or tenancy verification</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t("Employment verification letter")}</div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("For bank, visa or tenancy verification")}</div>
           </div>
           <a
             href={`${API_BASE}${API.employees.myEmploymentLetterPdf}`}
             className="btn btn-ghost btn-sm"
           >
-            <i className="ti ti-download" /> Download
+            <i className="ti ti-download" /> {t("Download")}
           </a>
         </div>
         <button
@@ -137,8 +141,8 @@ function EmploymentDocumentsCard({ onNavigateToDocuments }: { onNavigateToDocume
           style={{ width: "100%", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", padding: "12px 0 0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
         >
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--on-bg)" }}>All employee documents</div>
-            <div style={{ fontSize: 12, color: "var(--on-variant)" }}>Identity, education and company documents</div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--on-bg)" }}>{t("All employee documents")}</div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("Identity, education and company documents")}</div>
           </div>
           <i className="ti ti-chevron-right" style={{ color: "var(--on-variant)" }} />
         </button>
@@ -150,25 +154,26 @@ function EmploymentDocumentsCard({ onNavigateToDocuments }: { onNavigateToDocume
 function LifecycleRequestsCard({ requests, loading, error }: {
   requests: SeparationRequest[]; loading: boolean; error: string | null;
 }) {
+  const t = useT();
   return (
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="card-title"><i className="ti ti-list-check" /> Lifecycle requests</div>
-          <div className="page-sub" style={{ marginTop: 2 }}>Formal requests require manager and HR review; submitting does not change your status immediately.</div>
+          <div className="card-title"><i className="ti ti-list-check" /> {t("Lifecycle requests")}</div>
+          <div className="page-sub" style={{ marginTop: 2 }}>{t("Formal requests require manager and HR review; submitting does not change your status immediately.")}</div>
         </div>
       </div>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
           <i className="ti ti-loader-2 spin" />
-          <h3>Loading…</h3>
+          <h3>{t("Loading…")}</h3>
         </div>
       ) : requests.length === 0 ? (
         <div style={{ padding: "4px 24px 20px" }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>No lifecycle actions pending</div>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{t("No lifecycle actions pending")}</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>
-            Any resignation or employment letter request will appear here.
+            {t("Any resignation or employment letter request will appear here.")}
           </div>
         </div>
       ) : (
@@ -176,10 +181,10 @@ function LifecycleRequestsCard({ requests, loading, error }: {
           <table>
             <thead>
               <tr>
-                <th>Request</th>
-                <th>Proposed last day</th>
-                <th>Status</th>
-                <th>Submitted</th>
+                <th>{t("Request")}</th>
+                <th>{t("Proposed last day")}</th>
+                <th>{t("Status")}</th>
+                <th>{t("Submitted")}</th>
               </tr>
             </thead>
             <tbody>

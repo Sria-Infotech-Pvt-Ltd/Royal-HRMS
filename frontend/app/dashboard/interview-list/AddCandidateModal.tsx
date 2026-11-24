@@ -14,6 +14,7 @@ import { Branch, Candidate, InterviewMode, RECRUITMENT_API } from "./_data";
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   onClose: () => void;
@@ -25,6 +26,7 @@ interface PickerEmployee { uuid: string; id: string; full_name: string }
 const todayStr = todayDateString();
 
 export function AddCandidateModal({ onClose, onSaved }: Props) {
+  const t = useT();
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
   const effectiveBranch = getEffectiveBranch(user);
@@ -93,23 +95,23 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
     const name = form.name.trim();
     const positionApplied = form.position_applied.trim();
     if (!name || !form.email.trim() || !positionApplied) {
-      setError("Name, email and position are required.");
+      setError(t("Name, email and position are required."));
       return;
     }
     if (!NAME_RE.test(name)) {
-      setError("Full name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters.");
+      setError(t("Full name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters."));
       return;
     }
     if (!EMAIL_RE.test(form.email.trim())) {
-      setError("Enter a valid email address.");
+      setError(t("Enter a valid email address."));
       return;
     }
     if (form.phone.trim() && !PHONE_RE.test(form.phone.trim())) {
-      setError("Enter a valid phone number (10 to 15 digits, optionally starting with +).");
+      setError(t("Enter a valid phone number (10 to 15 digits, optionally starting with +)."));
       return;
     }
     if (form.interview_date && form.interview_date < todayStr) {
-      setError("Interview date cannot be in the past.");
+      setError(t("Interview date cannot be in the past."));
       return;
     }
     // Only unrestricted users actually pick a branch here — everyone else's
@@ -118,7 +120,7 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
     // block a legitimate submission whenever the best-effort name-match below
     // hasn't resolved form.branch yet (branches list still loading, etc.).
     if (unrestricted && !form.branch) {
-      setError("Please select a Company Code.");
+      setError(t("Please select a Company Code."));
       return;
     }
     setSaving(true);
@@ -134,7 +136,7 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
       onSaved(res.data.data);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "Failed to add candidate.");
+      setError(msg || t("Failed to add candidate."));
     } finally {
       setSaving(false);
     }
@@ -142,14 +144,14 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
 
   return (
     <Modal
-      title="Add Candidate to Interview List"
+      title={t("Add Candidate to Interview List")}
       onClose={onClose}
       maxWidth={560}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
-            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-check" /> Add to List</>}
+            {saving ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : <><i className="ti ti-check" /> {t("Add to List")}</>}
           </button>
         </>
       }
@@ -158,40 +160,40 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
 
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Full Name *</label>
-              <input className="field-input" placeholder="e.g. Anjali Sharma" value={form.name} onChange={e => set("name", sanitizeName(e.target.value))} />
+              <label className="field-label">{t("Full Name *")}</label>
+              <input className="field-input" placeholder={t("e.g. Anjali Sharma")} value={form.name} onChange={e => set("name", sanitizeName(e.target.value))} />
             </div>
             <div className="field-group">
-              <label className="field-label">Email Address *</label>
+              <label className="field-label">{t("Email Address *")}</label>
               <input className="field-input" type="email" placeholder="anjali@gmail.com" value={form.email} onChange={e => set("email", e.target.value)} />
             </div>
           </div>
 
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Position Applied *</label>
+              <label className="field-label">{t("Position Applied *")}</label>
               <SearchableSelect
                 value={form.position_applied}
                 onChange={v => set("position_applied", v)}
-                placeholder="— Select Position —"
+                placeholder={t("— Select Position —")}
                 options={positionTitles.map(title => ({ value: title, label: title }))}
                 inputClassName="field-input"
               />
             </div>
             <div className="field-group">
-              <label className="field-label">Phone</label>
+              <label className="field-label">{t("Phone")}</label>
               <input className="field-input" placeholder="+91 98765 43210" value={form.phone} onChange={e => set("phone", sanitizePhone(e.target.value))} />
             </div>
           </div>
 
           {/* Branch selection — required. Branch-restricted users are locked to their own branch. */}
           <div className="field-group mb-16">
-            <label className="field-label">Company Code *</label>
+            <label className="field-label">{t("Company Code *")}</label>
             {unrestricted ? (
               <SearchableSelect
                 value={form.branch}
                 onChange={v => set("branch", v)}
-                placeholder="— Select Company Code —"
+                placeholder={t("— Select Company Code —")}
                 options={branches.map(b => ({ value: String(b.id), label: `${b.branch_name} (${b.branch_code})` }))}
                 inputClassName="field-input"
               />
@@ -202,45 +204,45 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
 
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Interview Date</label>
+              <label className="field-label">{t("Interview Date")}</label>
               <DateInput className="field-input" min={todayStr} value={form.interview_date} onChange={isoDate => set("interview_date", isoDate)} />
             </div>
             <div className="field-group">
-              <label className="field-label">Interview Time</label>
+              <label className="field-label">{t("Interview Time")}</label>
               <input className="field-input" type="time" value={form.interview_time} onChange={e => set("interview_time", e.target.value)} />
             </div>
           </div>
 
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Interview Mode</label>
+              <label className="field-label">{t("Interview Mode")}</label>
               <select className="field-input field-select" value={form.interview_mode} onChange={e => set("interview_mode", e.target.value)}>
-                <option value="in_person">In-Person</option>
-                <option value="video_call">Video Call</option>
-                <option value="phone">Phone</option>
+                <option value="in_person">{t("In-Person")}</option>
+                <option value="video_call">{t("Video Call")}</option>
+                <option value="phone">{t("Phone")}</option>
               </select>
             </div>
             {form.interview_mode === "video_call" && (
               <div className="field-group">
-                <label className="field-label">Meeting Link</label>
+                <label className="field-label">{t("Meeting Link")}</label>
                 <input className="field-input" type="url" placeholder="https://meet.google.com/..." value={form.meeting_link} onChange={e => set("meeting_link", e.target.value)} />
               </div>
             )}
           </div>
 
           <div className="field-group mb-16">
-            <label className="field-label">Interviewer</label>
+            <label className="field-label">{t("Interviewer")}</label>
             <SearchableSelect
               value={form.interviewer} onChange={v => set("interviewer", v)}
-              placeholder="— Select interviewer —"
+              placeholder={t("— Select interviewer —")}
               options={employees.map(e => ({ value: e.uuid, label: `${e.full_name} (${e.id})` }))}
               inputClassName="field-input"
             />
           </div>
 
           <div className="field-group">
-            <label className="field-label">Notes</label>
-            <textarea className="field-input" rows={3} placeholder="Any notes about this candidate..." value={form.notes} onChange={e => set("notes", e.target.value)} />
+            <label className="field-label">{t("Notes")}</label>
+            <textarea className="field-input" rows={3} placeholder={t("Any notes about this candidate...")} value={form.notes} onChange={e => set("notes", e.target.value)} />
           </div>
     </Modal>
   );

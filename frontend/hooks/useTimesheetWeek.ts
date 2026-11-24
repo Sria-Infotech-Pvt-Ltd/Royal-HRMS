@@ -4,6 +4,7 @@
 // refreshed sheet, which replaces what is on screen (so there is no second fetch and totals always come from the server).
 // A rejected save or submit keeps what the person typed and lists every problem the server found.
 
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useState } from "react";
 import { useToast } from "@/components/ToastProvider";
 import { useFetch } from "@/hooks/useFetch";
@@ -50,7 +51,7 @@ export function useTimesheetWeek(week: string) {
   const save = useCallback(async (payload: TimesheetSavePayload): Promise<boolean> => {
     setIsSaving(true);
     try {
-      return await run(() => clientApi.put<Envelope>(API.attendance.timesheets.myWeek(week), payload), "Could not save the timesheet.", "Timesheet saved.");
+      return await run(() => clientApi.put<Envelope>(API.attendance.timesheets.myWeek(week), payload), tr("Could not save the timesheet."), tr("Timesheet saved."));
     } finally {
       setIsSaving(false);
     }
@@ -59,7 +60,7 @@ export function useTimesheetWeek(week: string) {
   const submit = useCallback(async (): Promise<boolean> => {
     setIsSubmitting(true);
     try {
-      return await run(() => clientApi.post<Envelope>(API.attendance.timesheets.mySubmit(week), {}), "Could not submit the timesheet.", "Timesheet submitted for approval.");
+      return await run(() => clientApi.post<Envelope>(API.attendance.timesheets.mySubmit(week), {}), tr("Could not submit the timesheet."), tr("Timesheet submitted for approval."));
     } finally {
       setIsSubmitting(false);
     }

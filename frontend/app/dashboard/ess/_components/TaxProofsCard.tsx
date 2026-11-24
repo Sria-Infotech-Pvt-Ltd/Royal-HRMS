@@ -4,6 +4,7 @@
 // insurance, loan interest ...) with the proof documents uploaded for it and an Upload action.
 // Proofs are stored as document submissions tagged with the item (see EmployeeDocumentSubmission.tax_item).
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { useMyDocuments, type ApiDocumentSubmission, type DocumentStatus } from "@/hooks/useMyDocuments";
 import { useTaxDeclarationSchema } from "@/hooks/useTaxDeclaration";
@@ -39,17 +40,17 @@ export default function TaxProofsCard({ declaration }: Props) {
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-paperclip" /> Investment proofs</div>
+        <div className="card-title"><i className="ti ti-paperclip" /> {tr("Investment proofs")}</div>
       </div>
       <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-        Upload a receipt or certificate for each item you claimed. Payroll verifies them before they count in full.
+        {tr("Upload a receipt or certificate for each item you claimed. Payroll verifies them before they count in full.")}
       </p>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {items.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-paperclip" />
-          <h3>{declaration?.tax_regime === "new" ? "No proofs needed under the new regime" : "Nothing to prove yet"}</h3>
-          <p>{declaration?.tax_regime === "new" ? "Only the old regime has deductions that need proof." : "Declare your investments first, then upload the proofs here."}</p>
+          <h3>{declaration?.tax_regime === "new" ? tr("No proofs needed under the new regime") : tr("Nothing to prove yet")}</h3>
+          <p>{declaration?.tax_regime === "new" ? tr("Only the old regime has deductions that need proof.") : tr("Declare your investments first, then upload the proofs here.")}</p>
         </div>
       ) : (
         <div style={{ padding: "4px 24px 16px" }}>
@@ -88,15 +89,15 @@ function ProofRow({ item, proofs, isLoading, isLocked, onUpload }: {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{item.label}</div>
           <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{item.eligible < item.declared
-              ? `Declared ${formatInr(item.declared)} · eligible ${formatInr(item.eligible)}`
-              : `Claimed ${formatInr(item.declared)}`} · Proof: {item.proof}</div>
+              ? tr("Declared {declared} · eligible {eligible}", { declared: formatInr(item.declared), eligible: formatInr(item.eligible) })
+              : tr("Claimed {amount}", { amount: formatInr(item.declared) })} · {tr("Proof: {proof}", { proof: item.proof })}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {proofs.length > 0
-            ? <span className={`badge ${STATUS_BADGE[overallStatus(proofs)]}`}>{overallStatus(proofs).toUpperCase()}</span>
-            : !isLoading && <span className="badge badge-neutral">NOT UPLOADED</span>}
+            ? <span className={`badge ${STATUS_BADGE[overallStatus(proofs)]}`}>{tr(overallStatus(proofs).toUpperCase())}</span>
+            : !isLoading && <span className="badge badge-neutral">{tr("NOT UPLOADED")}</span>}
           <button className="btn btn-ghost btn-sm" onClick={onUpload} disabled={isLocked} suppressHydrationWarning>
-            <i className="ti ti-upload" /> Upload
+            <i className="ti ti-upload" /> {tr("Upload")}
           </button>
         </div>
       </div>
@@ -108,7 +109,7 @@ function ProofRow({ item, proofs, isLoading, isLocked, onUpload }: {
               {proof.file_url
                 ? <a href={proof.file_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>{proof.file_name}</a>
                 : proof.file_name}
-              {proof.reference_number && <span style={{ color: "var(--on-variant)" }}>· No. {proof.reference_number}</span>}
+              {proof.reference_number && <span style={{ color: "var(--on-variant)" }}>{tr("· No. {number}", { number: proof.reference_number })}</span>}
             </span>
           ))}
         </div>

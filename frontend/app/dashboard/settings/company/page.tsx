@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import { useT } from "@/hooks/useI18n";
 import type { CompanyData } from "@/types/company";
 import { formatDateTime } from "@/lib/formatDate";
 import EntityIdentityCard from "./_components/EntityIdentityCard";
@@ -25,6 +26,7 @@ import {
 const ALL_SECTION_IDS = ["entity", "gst", "other", "office", "people", "signatory", "bank", "business", "regional", "contact"] as const;
 
 export default function CompanyInfoPage() {
+  const t = useT();
   const router  = useRouter();
   const canEdit = usePermission("settings.edit");
 
@@ -123,11 +125,11 @@ export default function CompanyInfoPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp", "image/svg+xml"].includes(file.type)) {
-      setApiError("Only JPEG, PNG, WebP, or SVG files are allowed.");
+      setApiError(t("Only JPEG, PNG, WebP, or SVG files are allowed."));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setApiError("Logo must be under 5 MB.");
+      setApiError(t("Logo must be under 5 MB."));
       return;
     }
     setApiError(null);
@@ -188,7 +190,7 @@ export default function CompanyInfoPage() {
       setSaveSuccess(true);
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setApiError(e.message ?? "Failed to save company info. Please try again.");
+      setApiError(e.message ?? t("Failed to save company info. Please try again."));
     } finally {
       setSaving(null);
     }
@@ -217,7 +219,7 @@ export default function CompanyInfoPage() {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, gap: 10, color: "var(--on-variant)" }}>
         <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "spin 1s linear infinite" }} />
-        Loading company info…
+        {t("Loading company info…")}
       </div>
     );
   }
@@ -231,16 +233,16 @@ export default function CompanyInfoPage() {
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="page-header">
         <div>
-          <div className="page-title">Company Profile</div>
-          <div className="page-sub">Statutory and business details. The form adapts to your entity type, so you only see what applies to you.</div>
+          <div className="page-title">{t("Company Profile")}</div>
+          <div className="page-sub">{t("Statutory and business details. The form adapts to your entity type, so you only see what applies to you.")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={toggleAllSections}>
             <i className={`ti ${allSectionsCollapsed ? "ti-chevron-down" : "ti-chevron-up"}`} />
-            {allSectionsCollapsed ? "Expand all" : "Collapse all"}
+            {allSectionsCollapsed ? t("Expand all") : t("Collapse all")}
           </button>
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
         </div>
       </div>
@@ -255,20 +257,20 @@ export default function CompanyInfoPage() {
       {saveSuccess && (
         <div className="alert alert-success mb-16">
           <i className="ti ti-circle-check" />
-          <div>Company info saved successfully.</div>
+          <div>{t("Company info saved successfully.")}</div>
         </div>
       )}
 
       {savedAt && !saveSuccess && (
         <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 20, display: "flex", alignItems: "center", gap: 6 }}>
           <i className="ti ti-clock" style={{ fontSize: 14 }} />
-          Last saved: {formatDateTime(savedAt)}
+          {t("Last saved: {time}", { time: formatDateTime(savedAt) })}
         </div>
       )}
 
       {/* ── Jurisdiction + entity type — page-level, drives the whole form ── */}
       <div className="field-group mb-16">
-        <label className="field-label"><i className="ti ti-world" style={{ marginRight: 4 }} /> Jurisdiction — where is this company registered?</label>
+        <label className="field-label"><i className="ti ti-world" style={{ marginRight: 4 }} /> {t("Jurisdiction — where is this company registered?")}</label>
         <div style={{ display: "flex", gap: 8 }}>
           {(["india", "foreign"] as const).map(j => (
             <button
@@ -278,21 +280,21 @@ export default function CompanyInfoPage() {
               disabled={!canEdit}
               onClick={() => handleJurisdiction(j)}
             >
-              {j === "india" ? "India" : "Foreign (outside India)"}
+              {j === "india" ? t("India") : t("Foreign (outside India)")}
             </button>
           ))}
         </div>
       </div>
       <div className="field-group mb-24">
-        <label className="field-label"><i className="ti ti-lock" style={{ marginRight: 4 }} /> Entity type — this drives the rest of the form</label>
+        <label className="field-label"><i className="ti ti-lock" style={{ marginRight: 4 }} /> {t("Entity type — this drives the rest of the form")}</label>
         <select
           className="field-input field-select"
           value={form.entity_type}
           disabled={!canEdit}
           onChange={e => handleField("entity_type", e.target.value)}
         >
-          <option value="">Select…</option>
-          {entityOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <option value="">{t("Select…")}</option>
+          {entityOptions.map(o => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
         </select>
       </div>
 
@@ -352,24 +354,24 @@ export default function CompanyInfoPage() {
               />
             </svg>
           </div>
-          Profile {completion}% complete
+          {t("Profile {percent}% complete", { percent: completion })}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} disabled={saving !== null}>
-            {canEdit ? "Cancel" : "Back"}
+            {canEdit ? t("Cancel") : t("Back")}
           </button>
           {canEdit && (
             <>
               <button className="btn btn-ghost" onClick={() => handleSave("draft")} disabled={saving !== null}>
                 {saving === "draft"
-                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-                  : "Save draft"
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</>
+                  : t("Save draft")
                 }
               </button>
               <button className="btn btn-filled" onClick={() => handleSave("validate")} disabled={saving !== null}>
                 {saving === "validate"
-                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-                  : <><i className="ti ti-device-floppy" /> Save &amp; validate</>
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</>
+                  : <><i className="ti ti-device-floppy" /> {t("Save & validate")}</>
                 }
               </button>
             </>

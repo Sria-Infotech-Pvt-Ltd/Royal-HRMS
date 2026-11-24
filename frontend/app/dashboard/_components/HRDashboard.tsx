@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KpiCard, OverviewItem, QuickTile, AttendanceTrend, AttendanceInsights, WfIcon } from "@/components/dashboard/WorkforceWidgets";
@@ -23,6 +24,7 @@ const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 :
 
 export default function HRDashboard({ session }: Props) {
   const router = useRouter();
+  const t = useT();
   const { data, loading } = useDashboardOverview();
   // This dashboard is shown to anyone holding employees.view (or a
   // superuser) — a strictly broader group than employees.create (see
@@ -52,9 +54,9 @@ export default function HRDashboard({ session }: Props) {
       );
       const rows = data.data?.results ?? [];
       downloadCsv(employeesToCsv(rows), `workforce-report-${new Date().toISOString().slice(0, 10)}.csv`);
-      showToast("Workforce report exported.", "success");
+      showToast(t("Workforce report exported."), "success");
     } catch {
-      showToast("Could not export the workforce report. Please try again.", "error");
+      showToast(t("Could not export the workforce report. Please try again."), "error");
     } finally {
       setExporting(false);
     }
@@ -67,8 +69,8 @@ export default function HRDashboard({ session }: Props) {
 
   const monthLabel = new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const hour = now?.getHours() ?? 12;
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = (session?.name ?? "").trim().split(/\s+/)[0];
+  const greeting = hour < 12 ? t("Good morning, {name}. ", { name: firstName }) : hour < 17 ? t("Good afternoon, {name}. ", { name: firstName }) : t("Good evening, {name}. ", { name: firstName });
   const dateLabel = now?.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }) ?? "";
 
   const totalHeadcount = data?.total_headcount ?? 0;
@@ -83,55 +85,55 @@ export default function HRDashboard({ session }: Props) {
   const compliancePct = data?.compliance_pct ?? 0;
 
   const quickActions = [
-    canHire && { title: "Hire an employee", sub: "Start the guided onboarding flow", onClick: () => router.push("/dashboard/employees?action=hire"), icon: WfIcon.userPlus, tone: "brand" as const },
-    { title: "Review leave", sub: `${openRequests} requests need a decision`, onClick: () => router.push("/dashboard/approvals"), icon: WfIcon.calendar, tone: "info" as const },
-    { title: "Run payroll checks", sub: `Resolve ${payrollBlocked} blocked records`, onClick: () => router.push("/dashboard/payroll"), icon: WfIcon.wallet, tone: "warn" as const },
-    canExport && { title: "Export workforce report", sub: exporting ? "Exporting…" : "Download the current snapshot", onClick: handleExportReport, icon: WfIcon.report, tone: "ok" as const },
+    canHire && { title: t("Hire an employee"), sub: t("Start the guided onboarding flow"), onClick: () => router.push("/dashboard/employees?action=hire"), icon: WfIcon.userPlus, tone: "brand" as const },
+    { title: t("Review leave"), sub: t("{count} requests need a decision", { count: openRequests }), onClick: () => router.push("/dashboard/approvals"), icon: WfIcon.calendar, tone: "info" as const },
+    { title: t("Run payroll checks"), sub: t("Resolve {count} blocked records", { count: payrollBlocked }), onClick: () => router.push("/dashboard/payroll"), icon: WfIcon.wallet, tone: "warn" as const },
+    canExport && { title: t("Export workforce report"), sub: exporting ? t("Exporting…") : t("Download the current snapshot"), onClick: handleExportReport, icon: WfIcon.report, tone: "ok" as const },
   ].filter((a): a is Exclude<typeof a, false> => Boolean(a));
 
   return (
     <div className="wf-dashboard wf-compact">
       <div className="wf-pagehead wf-reveal" style={{ animationDelay: "0.02s" }}>
         <div className="wf-titleblock">
-          <div className="wf-eyebrow">Dashboard / Overview{dateLabel && <> <span aria-hidden="true">·</span> {dateLabel}</>}</div>
-          <h1>Workforce <em className="hl">dashboard</em></h1>
+          <div className="wf-eyebrow">{t("Dashboard / Overview")}{dateLabel && <> <span aria-hidden="true">·</span> {dateLabel}</>}</div>
+          <h1>{t("Workforce")} <em className="hl">{t("dashboard")}</em></h1>
           <p className="wf-lede">
-            {now && firstName ? `${greeting}, ${firstName}. ` : ""}A live view of people operations, payroll readiness and work requiring attention.
+            {now && firstName ? greeting : ""}{t("A live view of people operations, payroll readiness and work requiring attention.")}
           </p>
         </div>
         <div className="wf-headacts">
           {canExport && (
             <button type="button" className="wf-btn" onClick={handleExportReport} disabled={exporting}>
-              {exporting ? "Exporting…" : "Export report"}
+              {exporting ? t("Exporting…") : t("Export report")}
             </button>
           )}
-          <button type="button" className="wf-btn pri" onClick={() => router.push("/dashboard/approvals")}>Review alerts</button>
+          <button type="button" className="wf-btn pri" onClick={() => router.push("/dashboard/approvals")}>{t("Review alerts")}</button>
         </div>
       </div>
 
       <div className="wf-stats wf-reveal" style={{ animationDelay: "0.06s" }}>
         <KpiCard
-          label="TOTAL HEADCOUNT" icon={WfIcon.people} tone="brand" loading={loading}
-          value={totalHeadcount} sub="new this month"
+          label={t("TOTAL HEADCOUNT")} icon={WfIcon.people} tone="brand" loading={loading}
+          value={totalHeadcount} sub={t("new this month")}
           trend={newThisMonth > 0 ? { text: `+${newThisMonth}`, tone: "ok" } : null}
           onClick={() => router.push("/dashboard/employees")}
         />
         <KpiCard
-          label="PRESENT TODAY" icon={WfIcon.check} tone="ok" loading={loading}
-          value={presentToday} sub={`${attendancePct}% attendance`}
+          label={t("PRESENT TODAY")} icon={WfIcon.check} tone="ok" loading={loading}
+          value={presentToday} sub={t("{percent}% attendance", { percent: attendancePct })}
           progress={attendancePct}
           onClick={() => router.push("/dashboard/attendance")}
         />
         <KpiCard
-          label="PAYROLL READY" icon={WfIcon.wallet} tone="info" loading={loading}
-          value={payrollReady} sub={`${payrollBlocked} records blocked`}
-          trend={payrollBlocked > 0 ? { text: "Action", tone: "warn" } : null}
+          label={t("PAYROLL READY")} icon={WfIcon.wallet} tone="info" loading={loading}
+          value={payrollReady} sub={t("{count} records blocked", { count: payrollBlocked })}
+          trend={payrollBlocked > 0 ? { text: t("Action"), tone: "warn" } : null}
           progress={pct(payrollReady, payrollTotal)}
           onClick={() => router.push("/dashboard/payroll")}
         />
         <KpiCard
-          label="OPEN REQUESTS" icon={WfIcon.inbox} tone="warn" loading={loading}
-          value={openRequests} sub={`${openRequests} awaiting you`}
+          label={t("OPEN REQUESTS")} icon={WfIcon.inbox} tone="warn" loading={loading}
+          value={openRequests} sub={t("{count} awaiting you", { count: openRequests })}
           onClick={() => router.push("/dashboard/approvals")}
         />
       </div>
@@ -140,35 +142,35 @@ export default function HRDashboard({ session }: Props) {
         <section className="wf-card wf-reveal" style={{ animationDelay: "0.1s" }}>
           <header className="wf-card-head">
             <div>
-              <h2>Dashboard overview</h2>
-              <p>Current records and items requiring attention.</p>
+              <h2>{t("Dashboard overview")}</h2>
+              <p>{t("Current records and items requiring attention.")}</p>
             </div>
           </header>
           <div className="wf-ov-list">
             <OverviewItem
-              icon={WfIcon.wallet} tone="info" label="Payroll readiness" loading={loading}
+              icon={WfIcon.wallet} tone="info" label={t("Payroll readiness")} loading={loading}
               sub={monthLabel}
-              chip={`${payrollReady} of ${payrollTotal} ready`} chipTone={payrollBlocked > 0 ? "warn" : "ok"}
+              chip={t("{ready} of {total} ready", { ready: payrollReady, total: payrollTotal })} chipTone={payrollBlocked > 0 ? "warn" : "ok"}
               progress={pct(payrollReady, payrollTotal)}
               onOpen={() => router.push("/dashboard/payroll")}
             />
             <OverviewItem
-              icon={WfIcon.userPlus} tone="brand" label="Onboarding" loading={loading}
-              sub={`${data?.joining_this_week ?? 0} joining this week`}
-              chip={`${data?.onboarding_in_progress ?? 0} in progress`} chipTone="warn"
+              icon={WfIcon.userPlus} tone="brand" label={t("Onboarding")} loading={loading}
+              sub={t("{count} joining this week", { count: data?.joining_this_week ?? 0 })}
+              chip={t("{count} in progress", { count: data?.onboarding_in_progress ?? 0 })} chipTone="warn"
               onOpen={() => router.push("/dashboard/candidate-review")}
             />
             <OverviewItem
-              icon={WfIcon.clock} tone="ok" label="Attendance" loading={loading}
-              sub="Today · all locations"
-              chip={`${exceptions} exceptions`} chipTone={exceptions > 0 ? "crit" : "ok"}
+              icon={WfIcon.clock} tone="ok" label={t("Attendance")} loading={loading}
+              sub={t("Today · all locations")}
+              chip={t("{count} exceptions", { count: exceptions })} chipTone={exceptions > 0 ? "crit" : "ok"}
               progress={attendancePct}
               onOpen={() => router.push("/dashboard/attendance")}
             />
             <OverviewItem
-              icon={WfIcon.shield} tone="crit" label="Compliance" loading={loading}
-              sub="Statutory declarations"
-              chip={`${compliancePct}% complete`} chipTone={compliancePct >= 90 ? "ok" : "warn"}
+              icon={WfIcon.shield} tone="crit" label={t("Compliance")} loading={loading}
+              sub={t("Statutory declarations")}
+              chip={t("{percent}% complete", { percent: compliancePct })} chipTone={compliancePct >= 90 ? "ok" : "warn"}
               progress={compliancePct}
               onOpen={() => router.push("/dashboard/reports")}
             />
@@ -178,8 +180,8 @@ export default function HRDashboard({ session }: Props) {
         <section className="wf-card wf-reveal" style={{ animationDelay: "0.14s" }}>
           <header className="wf-card-head">
             <div>
-              <h2>Quick actions</h2>
-              <p>Common tasks for your current role.</p>
+              <h2>{t("Quick actions")}</h2>
+              <p>{t("Common tasks for your current role.")}</p>
             </div>
           </header>
           <div className="wf-qa-grid">
@@ -192,23 +194,23 @@ export default function HRDashboard({ session }: Props) {
 
       <section className="wf-reveal" style={{ animationDelay: "0.16s" }} aria-labelledby="wf-analytics-title">
         <header className="wf-analytics-head">
-          <h2 id="wf-analytics-title">Analytics</h2>
-          <p>Where people work, and how headcount, leave and payroll cost have moved over the last six months.</p>
+          <h2 id="wf-analytics-title">{t("Analytics")}</h2>
+          <p>{t("Where people work, and how headcount, leave and payroll cost have moved over the last six months.")}</p>
         </header>
         <div className="wf-analytics-grid">
-          <LinkCard href="/dashboard/employees" label="Open employees"><HeadcountTrendCard /></LinkCard>
-          <LinkCard href="/dashboard/employees" label="Open employees"><DeptHeadcountChart /></LinkCard>
-          <LinkCard href={buildApprovalsLink({ type: "leave", status: "all" })} label="Open leave requests"><LeaveTrendCard /></LinkCard>
-          <LinkCard href="/dashboard/payroll" label="Open payroll"><PayrollCostTrendCard /></LinkCard>
+          <LinkCard href="/dashboard/employees" label={t("Open employees")}><HeadcountTrendCard /></LinkCard>
+          <LinkCard href="/dashboard/employees" label={t("Open employees")}><DeptHeadcountChart /></LinkCard>
+          <LinkCard href={buildApprovalsLink({ type: "leave", status: "all" })} label={t("Open leave requests")}><LeaveTrendCard /></LinkCard>
+          <LinkCard href="/dashboard/payroll" label={t("Open payroll")}><PayrollCostTrendCard /></LinkCard>
         </div>
       </section>
 
-      <LinkCard href="/dashboard/attendance" label="Open attendance">
+      <LinkCard href="/dashboard/attendance" label={t("Open attendance")}>
       <section className="wf-card wf-reveal" style={{ animationDelay: "0.18s" }}>
         <header className="wf-card-head">
           <div>
-            <h2>Attendance this week</h2>
-            <p>Employees present each day, as a share of total headcount.</p>
+            <h2>{t("Attendance this week")}</h2>
+            <p>{t("Employees present each day, as a share of total headcount.")}</p>
           </div>
         </header>
         <div className="wf-week">

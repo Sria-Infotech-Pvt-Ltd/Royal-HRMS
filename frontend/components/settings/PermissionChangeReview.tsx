@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { labelOf, type MatrixModule } from "@/lib/permissionMatrixView";
 
 interface Props {
@@ -35,9 +36,10 @@ function Pills({ actions, sign, color }: { actions: string[]; sign: "+" | "−";
 }
 
 export default function PermissionChangeReview({ modules, granted, saved }: Props) {
+  const t = useT();
   const changes = changesByModule(modules, granted, saved);
   return (
-    <div className="max-h-40 overflow-auto rounded-xl border p-3" style={{ borderColor: "var(--outline-v)", background: "var(--bg-low)" }} aria-label="Changes waiting to be saved">
+    <div className="max-h-40 overflow-auto rounded-xl border p-3" style={{ borderColor: "var(--outline-v)", background: "var(--bg-low)" }} aria-label={t("Changes waiting to be saved")}>
       <ul className="space-y-2">
         {changes.map(entry => (
           <li key={entry.module} className="flex flex-wrap items-center gap-2 text-sm">

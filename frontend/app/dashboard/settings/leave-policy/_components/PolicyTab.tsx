@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -35,6 +36,7 @@ function Spin() {
 }
 
 export default function PolicyTab() {
+  const t = useT();
   const { data: policies, loading, error, refetch } = useFetch<LeavePolicy[]>(API.leave.policy);
 
   // ── Edit state ────────────────────────────────────────────────────────────
@@ -67,8 +69,8 @@ export default function PolicyTab() {
 
   function validateEdit(): boolean {
     const e: Record<string, string> = {};
-    if (form.annual_days < 0) e.annual_days = "Annual days cannot be negative.";
-    if (form.can_carry_forward && form.max_carry_forward_days < 1) e.max_carry_forward_days = "Must be at least 1 when carry forward is enabled.";
+    if (form.annual_days < 0) e.annual_days = t("Annual days cannot be negative.");
+    if (form.can_carry_forward && form.max_carry_forward_days < 1) e.max_carry_forward_days = t("Must be at least 1 when carry forward is enabled.");
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -82,7 +84,7 @@ export default function PolicyTab() {
       refetch();
       closeEdit();
     } catch (err: unknown) {
-      setSaveError((err as { message?: string })?.message ?? "Failed to save policy.");
+      setSaveError((err as { message?: string })?.message ?? t("Failed to save policy."));
     } finally {
       setIsSaving(false);
     }
@@ -106,21 +108,21 @@ export default function PolicyTab() {
       await clientApi.put(API.leave.policyDetail(p.leave_type), { is_active: !p.is_active });
       refetch();
     } catch (err: unknown) {
-      setRowError((err as { message?: string })?.message ?? "Failed to update status.");
+      setRowError((err as { message?: string })?.message ?? t("Failed to update status."));
     } finally {
       setBusyType(null);
     }
   }
 
   async function deletePolicy(p: LeavePolicy) {
-    if (!(await confirmDialog(`Delete "${p.leave_type_display}"? This cannot be undone.`))) return;
+    if (!(await confirmDialog(t("Delete \"{name}\"? This cannot be undone.", { name: p.leave_type_display })))) return;
     setBusyType(p.leave_type);
     setRowError(null);
     try {
       await clientApi.delete(API.leave.policyDetail(p.leave_type));
       refetch();
     } catch (err: unknown) {
-      setRowError((err as { message?: string })?.message ?? "Failed to delete leave type.");
+      setRowError((err as { message?: string })?.message ?? t("Failed to delete leave type."));
     } finally {
       setBusyType(null);
     }
@@ -139,10 +141,10 @@ export default function PolicyTab() {
   function validateCreate(): boolean {
     const e: Record<string, string> = {};
     const label = createForm.leave_type_label.trim();
-    if (!label) e.leave_type_label = "Display name is required.";
-    else if (!LEAVE_NAME_RE.test(label)) e.leave_type_label = "Display name can only contain letters, spaces, and hyphens — no numbers or special characters.";
-    if (createForm.annual_days < 0) e.annual_days = "Annual days cannot be negative.";
-    if (createForm.can_carry_forward && createForm.max_carry_forward_days < 1) e.max_carry_forward_days = "Must be at least 1 when carry forward is enabled.";
+    if (!label) e.leave_type_label = t("Display name is required.");
+    else if (!LEAVE_NAME_RE.test(label)) e.leave_type_label = t("Display name can only contain letters, spaces, and hyphens — no numbers or special characters.");
+    if (createForm.annual_days < 0) e.annual_days = t("Annual days cannot be negative.");
+    if (createForm.can_carry_forward && createForm.max_carry_forward_days < 1) e.max_carry_forward_days = t("Must be at least 1 when carry forward is enabled.");
     setCreateErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -156,7 +158,7 @@ export default function PolicyTab() {
       refetch();
       closeCreate();
     } catch (err: unknown) {
-      setCreateError((err as { message?: string })?.message ?? "Failed to create leave type.");
+      setCreateError((err as { message?: string })?.message ?? t("Failed to create leave type."));
     } finally {
       setIsSubmitting(false);
     }
@@ -184,14 +186,14 @@ export default function PolicyTab() {
       {/* Edit Modal */}
       {editing && (
         <Modal
-          title={<><i className="ti ti-beach" style={{ marginRight: 8 }} />Edit: {editing.leave_type_display}</>}
+          title={<><i className="ti ti-beach" style={{ marginRight: 8 }} />{t("Edit: {name}", { name: editing.leave_type_display })}</>}
           onClose={closeEdit}
           maxWidth={480}
           footer={
             <>
-              <button className="btn btn-ghost" onClick={closeEdit}>Cancel</button>
+              <button className="btn btn-ghost" onClick={closeEdit}>{t("Cancel")}</button>
               <button className="btn btn-filled" onClick={saveEdit} disabled={isSaving}>
-                {isSaving ? <><Spin />&nbsp;Saving…</> : "Save Changes"}
+                {isSaving ? <><Spin />&nbsp;{t("Saving…")}</> : t("Save Changes")}
               </button>
             </>
           }
@@ -201,35 +203,35 @@ export default function PolicyTab() {
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
             <div className="field-group mb-16">
-              <label className="field-label">Annual Days *</label>
+              <label className="field-label">{t("Annual Days *")}</label>
               <input className={`field-input${errors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={form.annual_days} onChange={e => editField("annual_days", Number(e.target.value))} />
               {errors.annual_days && <p className="field-error-msg">{errors.annual_days}</p>}
             </div>
             <div className="field-group mb-16">
-              <label className="field-label">Accrual</label>
+              <label className="field-label">{t("Accrual")}</label>
               <select className="field-input field-select" value={form.accrual_frequency} onChange={e => editField("accrual_frequency", e.target.value)}>
-                <option value="annual">Annual (lump sum on Jan 1)</option>
-                <option value="monthly">Monthly (1/12th each month)</option>
+                <option value="annual">{t("Annual (lump sum on Jan 1)")}</option>
+                <option value="monthly">{t("Monthly (1/12th each month)")}</option>
               </select>
             </div>
             <div className="field-group mb-16">
-              <label className="field-label">Max Carry Fwd (days)</label>
+              <label className="field-label">{t("Max Carry Fwd (days)")}</label>
               <input className={`field-input${errors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={form.max_carry_forward_days} onChange={e => editField("max_carry_forward_days", Number(e.target.value))} disabled={!form.can_carry_forward} />
               {errors.max_carry_forward_days && <p className="field-error-msg">{errors.max_carry_forward_days}</p>}
             </div>
           </div>
           <div className="field-group mb-16">
-            <label className="field-label">Policy Note</label>
-            <textarea className="field-input" rows={3} value={form.policy_note} onChange={e => editField("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
+            <label className="field-label">{t("Policy Note")}</label>
+            <textarea className="field-input" rows={3} value={form.policy_note} onChange={e => editField("policy_note", e.target.value)} placeholder={t("Visible to employees when applying for leave")} style={{ resize: "none" }} />
           </div>
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 4 }}>
             <label className="module-check">
               <input type="checkbox" checked={form.can_carry_forward} onChange={e => editField("can_carry_forward", e.target.checked)} />
-              <span>Allow Carry Forward</span>
+              <span>{t("Allow Carry Forward")}</span>
             </label>
             <label className="module-check">
               <input type="checkbox" checked={form.is_active} onChange={e => editField("is_active", e.target.checked)} />
-              <span>Active</span>
+              <span>{t("Active")}</span>
             </label>
           </div>
         </Modal>
@@ -238,14 +240,14 @@ export default function PolicyTab() {
       {/* Create Modal */}
       {isCreating && (
         <Modal
-          title={<><i className="ti ti-plus" style={{ marginRight: 8 }} />Add Leave Type</>}
+          title={<><i className="ti ti-plus" style={{ marginRight: 8 }} />{t("Add Leave Type")}</>}
           onClose={closeCreate}
           maxWidth={480}
           footer={
             <>
-              <button className="btn btn-ghost" onClick={closeCreate}>Cancel</button>
+              <button className="btn btn-ghost" onClick={closeCreate}>{t("Cancel")}</button>
               <button className="btn btn-filled" onClick={submitCreate} disabled={isSubmitting}>
-                {isSubmitting ? <><Spin />&nbsp;Creating…</> : "Create Leave Type"}
+                {isSubmitting ? <><Spin />&nbsp;{t("Creating…")}</> : t("Create Leave Type")}
               </button>
             </>
           }
@@ -254,11 +256,11 @@ export default function PolicyTab() {
             <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{createError}</div>
           )}
           <div className="field-group mb-16">
-            <label className="field-label">Display Name *</label>
+            <label className="field-label">{t("Display Name *")}</label>
             <input
               className={`field-input${createErrors.leave_type_label ? " field-error" : ""}`}
               type="text"
-              placeholder="e.g. Compensatory Off"
+              placeholder={t("e.g. Compensatory Off")}
               value={createForm.leave_type_label}
               onChange={e => createField("leave_type_label", sanitizeLeaveName(e.target.value))}
             />
@@ -266,42 +268,42 @@ export default function PolicyTab() {
               ? <p className="field-error-msg">{createErrors.leave_type_label}</p>
               : createForm.leave_type_label.trim() && (
                 <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-                  Key: <code>{createForm.leave_type_label.trim().toLowerCase().replace(/[\s-]+/g, "_")}</code>
+                  {t("Key:")} <code>{createForm.leave_type_label.trim().toLowerCase().replace(/[\s-]+/g, "_")}</code>
                 </p>
               )
             }
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
             <div className="field-group mb-16">
-              <label className="field-label">Annual Days *</label>
+              <label className="field-label">{t("Annual Days *")}</label>
               <input className={`field-input${createErrors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={createForm.annual_days} onChange={e => createField("annual_days", Number(e.target.value))} />
               {createErrors.annual_days && <p className="field-error-msg">{createErrors.annual_days}</p>}
             </div>
             <div className="field-group mb-16">
-              <label className="field-label">Accrual</label>
+              <label className="field-label">{t("Accrual")}</label>
               <select className="field-input field-select" value={createForm.accrual_frequency} onChange={e => createField("accrual_frequency", e.target.value)}>
-                <option value="annual">Annual (lump sum on Jan 1)</option>
-                <option value="monthly">Monthly (1/12th each month)</option>
+                <option value="annual">{t("Annual (lump sum on Jan 1)")}</option>
+                <option value="monthly">{t("Monthly (1/12th each month)")}</option>
               </select>
             </div>
             <div className="field-group mb-16">
-              <label className="field-label">Max Carry Fwd (days)</label>
+              <label className="field-label">{t("Max Carry Fwd (days)")}</label>
               <input className={`field-input${createErrors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={createForm.max_carry_forward_days} onChange={e => createField("max_carry_forward_days", Number(e.target.value))} disabled={!createForm.can_carry_forward} />
               {createErrors.max_carry_forward_days && <p className="field-error-msg">{createErrors.max_carry_forward_days}</p>}
             </div>
           </div>
           <div className="field-group mb-16">
-            <label className="field-label">Policy Note</label>
-            <textarea className="field-input" rows={3} value={createForm.policy_note} onChange={e => createField("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
+            <label className="field-label">{t("Policy Note")}</label>
+            <textarea className="field-input" rows={3} value={createForm.policy_note} onChange={e => createField("policy_note", e.target.value)} placeholder={t("Visible to employees when applying for leave")} style={{ resize: "none" }} />
           </div>
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 4 }}>
             <label className="module-check">
               <input type="checkbox" checked={createForm.can_carry_forward} onChange={e => createField("can_carry_forward", e.target.checked)} />
-              <span>Allow Carry Forward</span>
+              <span>{t("Allow Carry Forward")}</span>
             </label>
             <label className="module-check">
               <input type="checkbox" checked={createForm.is_active} onChange={e => createField("is_active", e.target.checked)} />
-              <span>Active</span>
+              <span>{t("Active")}</span>
             </label>
           </div>
         </Modal>

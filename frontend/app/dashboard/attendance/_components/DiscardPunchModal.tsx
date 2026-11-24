@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import type { InvalidPunch } from "@/types/attendance";
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
 const MAX_REMARKS = 500;
 
 export default function DiscardPunchModal({ punch, onClose, onDiscarded }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const [remarks, setRemarks]       = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -26,10 +28,10 @@ export default function DiscardPunchModal({ punch, onClose, onDiscarded }: Props
     setError(null);
     try {
       await clientApi.post(API.attendance.invalidPunchDiscard(punch.id), { remarks: remarks.trim() });
-      showToast("Invalid punch discarded.", "success");
+      showToast(t("Invalid punch discarded."), "success");
       onDiscarded();
     } catch (err: unknown) {
-      const message = (err as { message?: string })?.message ?? "Failed to discard invalid punch.";
+      const message = (err as { message?: string })?.message ?? t("Failed to discard invalid punch.");
       setError(message);
       showToast(message, "error");
     } finally {
@@ -42,16 +44,16 @@ export default function DiscardPunchModal({ punch, onClose, onDiscarded }: Props
       title={
         <>
           <i className="ti ti-trash" style={{ marginRight: 8, color: "var(--error)" }} />
-          Discard Invalid Punch
+          {t("Discard Invalid Punch")}
         </>
       }
       onClose={onClose}
       maxWidth={420}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>{t("Cancel")}</button>
           <button className="btn btn-filled btn-danger" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? <><i className="ti ti-loader-2" /> Discarding…</> : "Discard Punch"}
+            {submitting ? <><i className="ti ti-loader-2" /> {t("Discarding…")}</> : t("Discard Punch")}
           </button>
         </>
       }
@@ -62,15 +64,15 @@ export default function DiscardPunchModal({ punch, onClose, onDiscarded }: Props
 
           <div className="alert alert-warn mb-16">
             <i className="ti ti-alert-triangle" />
-            <span>Device: {punch.device_id} · {punch.raw_time} — this punch will be permanently discarded.</span>
+            <span>{t("Device: {device} · {time} — this punch will be permanently discarded.", { device: punch.device_id, time: punch.raw_time })}</span>
           </div>
 
           <div className="field-group">
-            <label className="field-label">Remarks (optional)</label>
+            <label className="field-label">{t("Remarks (optional)")}</label>
             <textarea
               className="field-input"
               style={{ minHeight: 72 }}
-              placeholder="e.g. Accidental duplicate punch"
+              placeholder={t("e.g. Accidental duplicate punch")}
               value={remarks}
               maxLength={MAX_REMARKS}
               onChange={e => setRemarks(e.target.value)}

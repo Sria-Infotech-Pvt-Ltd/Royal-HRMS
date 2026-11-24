@@ -4,6 +4,7 @@
 // interest, donations). Driven entirely by the server's schema so labels, proof hints
 // and limits are never hard-coded here.
 
+import { tr } from "@/lib/i18n/tr";
 import type { TaxDeclarationSchema, TaxFormState, TaxSchemaGroup } from "@/types/taxDeclaration";
 import { fieldCap, groupTotals, parseAmount } from "@/lib/taxDeclarationForm";
 
@@ -44,8 +45,8 @@ function GroupBlock({ group, schema, form, onChange, onAmount }: Props & {
         <h4 style={{ margin: 0, fontSize: 14 }}>{group.title}</h4>
         {group.cap !== null && (
           <span style={{ fontSize: 12, color: isOverLimit ? "var(--error)" : "var(--on-variant)" }}>
-            {formatInr(counted)} of {formatInr(group.cap)}
-            {isOverLimit && ` — only ${formatInr(group.cap)} will count`}
+            {tr("{amount} of {cap}", { amount: formatInr(counted), cap: formatInr(group.cap) })}
+            {isOverLimit && tr(" — only {cap} will count", { cap: formatInr(group.cap) })}
           </span>
         )}
       </div>
@@ -55,11 +56,11 @@ function GroupBlock({ group, schema, form, onChange, onAmount }: Props & {
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 12 }}>
           <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
             <input type="checkbox" checked={form.isSeniorSelfFamily} onChange={event => onChange({ ...form, isSeniorSelfFamily: event.target.checked })} />
-            I, my spouse or a child is a senior citizen (60+)
+            {tr("I, my spouse or a child is a senior citizen (60+)")}
           </label>
           <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
             <input type="checkbox" checked={form.isSeniorParents} onChange={event => onChange({ ...form, isSeniorParents: event.target.checked })} />
-            A parent is a senior citizen (60+)
+            {tr("A parent is a senior citizen (60+)")}
           </label>
         </div>
       )}
@@ -77,12 +78,12 @@ function GroupBlock({ group, schema, form, onChange, onAmount }: Props & {
                 className={`field-input${isOverFieldLimit ? " field-error" : ""}`}
                 type="number"
                 min={0}
-                placeholder="₹ 0"
+                placeholder={tr("₹ 0")}
                 value={form.amounts[field.key] ?? ""}
                 onChange={event => onAmount(field.key, event.target.value)}
               />
               <span style={{ fontSize: 11.5, color: isOverFieldLimit ? "var(--error)" : "var(--on-variant)", marginTop: 4 }}>
-                {isOverFieldLimit && cap !== null ? `Only ${formatInr(cap)} will count. ` : ""}Proof: {field.proof}
+                {isOverFieldLimit && cap !== null ? <>{tr("Only {cap} will count.", { cap: formatInr(cap) })}{" "}</> : null}{tr("Proof: {proof}", { proof: field.proof })}
               </span>
             </div>
           );
@@ -92,14 +93,14 @@ function GroupBlock({ group, schema, form, onChange, onAmount }: Props & {
       {group.key === "loans" && parseAmount(form.amounts["24B"] ?? "") > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: 12, marginTop: 12 }}>
           <div className="field-group">
-            <label className="field-label" htmlFor="tax-lender-name">Home loan lender&apos;s name <span style={{ color: "var(--error)" }}>*</span></label>
+            <label className="field-label" htmlFor="tax-lender-name">{tr("Home loan lender's name")} <span style={{ color: "var(--error)" }}>*</span></label>
             <input
               id="tax-lender-name" className="field-input" value={form.homeLoan.lenderName}
               onChange={event => onChange({ ...form, homeLoan: { ...form.homeLoan, lenderName: event.target.value } })}
             />
           </div>
           <div className="field-group">
-            <label className="field-label" htmlFor="tax-lender-pan">Lender&apos;s PAN <span style={{ color: "var(--error)" }}>*</span></label>
+            <label className="field-label" htmlFor="tax-lender-pan">{tr("Lender's PAN")} <span style={{ color: "var(--error)" }}>*</span></label>
             <input
               id="tax-lender-pan" className="field-input" maxLength={10} placeholder="ABCDE1234F"
               style={{ textTransform: "uppercase" }} value={form.homeLoan.lenderPan}

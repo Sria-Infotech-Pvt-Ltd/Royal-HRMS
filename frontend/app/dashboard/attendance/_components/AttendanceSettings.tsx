@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useAttendanceSettings } from "@/hooks/useAttendanceSettings";
 import type { AttendanceSettingsForm } from "@/types/attendanceSettings";
 import { FACE_ID_FALLBACK_LABELS, FACE_ID_MODE_LABELS, type FaceIdFallbackPolicy, type FaceIdMode } from "@/types/faceId";
@@ -39,6 +40,7 @@ interface SectionSaveProps {
 }
 
 function SectionSave({ section, savingSection, isBusy, onSave }: SectionSaveProps) {
+  const t = useT();
   return (
     <button
       className="btn btn-ghost"
@@ -47,8 +49,8 @@ function SectionSave({ section, savingSection, isBusy, onSave }: SectionSaveProp
       disabled={isBusy}
     >
       {savingSection === section
-        ? <><Spin />&nbsp;Saving…</>
-        : <><i className="ti ti-device-floppy" />&nbsp;Save</>}
+        ? <><Spin />&nbsp;{t("Saving…")}</>
+        : <><i className="ti ti-device-floppy" />&nbsp;{t("Save")}</>}
     </button>
   );
 }
@@ -64,6 +66,7 @@ export default function AttendanceSettings() {
     save, saveSection, reset,
   } = useAttendanceSettings();
 
+  const t = useT();
   const isBusy = saving || savingSection !== null;
 
   // Field-level error helpers
@@ -78,7 +81,7 @@ export default function AttendanceSettings() {
       {/* Loading / error banner */}
       {loading && (
         <div style={{ textAlign: "center", padding: "12px 0", color: "var(--on-variant)", fontSize: 13 }}>
-          <Spin /> Loading settings…
+          <Spin /> {t("Loading settings…")}
         </div>
       )}
       {error && !loading && (
@@ -90,13 +93,13 @@ export default function AttendanceSettings() {
       {/* Working Hours */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-clock" /> Working Hours</div>
+          <div className="card-title"><i className="ti ti-clock" /> {t("Working Hours")}</div>
           <SectionSave section="working_hours" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
         </div>
         <div className="card-body">
           <div className="form-row cols-4">
             <div className="field-group">
-              <label className="field-label">Shift Start</label>
+              <label className="field-label">{t("Shift Start")}</label>
               <input type="time" className="field-input" style={errStyle("working_hours", "shift_start")}
                 value={form.working_hours.shift_start}
                 onChange={e => setForm(f => ({ ...f, working_hours: { ...f.working_hours, shift_start: e.target.value } }))}
@@ -104,7 +107,7 @@ export default function AttendanceSettings() {
               {fieldErr("working_hours", "shift_start") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("working_hours", "shift_start")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">Shift End</label>
+              <label className="field-label">{t("Shift End")}</label>
               <input type="time" className="field-input" style={errStyle("working_hours", "shift_end")}
                 value={form.working_hours.shift_end}
                 onChange={e => setForm(f => ({ ...f, working_hours: { ...f.working_hours, shift_end: e.target.value } }))}
@@ -112,7 +115,7 @@ export default function AttendanceSettings() {
               {fieldErr("working_hours", "shift_end") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("working_hours", "shift_end")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">Grace Period (min)</label>
+              <label className="field-label">{t("Grace Period (min)")}</label>
               <input type="number" className="field-input" min={0} max={120} style={errStyle("working_hours", "grace_period_minutes")}
                 value={form.working_hours.grace_period_minutes}
                 onChange={e => setForm(f => ({ ...f, working_hours: { ...f.working_hours, grace_period_minutes: Number(e.target.value) } }))}
@@ -120,7 +123,7 @@ export default function AttendanceSettings() {
               {fieldErr("working_hours", "grace_period_minutes") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("working_hours", "grace_period_minutes")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">Break Duration (min)</label>
+              <label className="field-label">{t("Break Duration (min)")}</label>
               <input type="number" className="field-input" min={0} max={480} style={errStyle("working_hours", "break_duration_minutes")}
                 value={form.working_hours.break_duration_minutes}
                 onChange={e => setForm(f => ({ ...f, working_hours: { ...f.working_hours, break_duration_minutes: Number(e.target.value) } }))}
@@ -144,55 +147,52 @@ export default function AttendanceSettings() {
       {/* Punch Rules */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-hand-finger" /> Punch Rules</div>
+          <div className="card-title"><i className="ti ti-hand-finger" /> {t("Punch Rules")}</div>
           <SectionSave section="punch_rules" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
         </div>
         <div className="card-body">
           <div className="form-row cols-3">
             <div className="field-group">
-              <label className="field-label">Min Hours — Full Day</label>
+              <label className="field-label">{t("Min Hours — Full Day")}</label>
               <select className="field-input field-select" style={errStyle("punch_rules", "min_hours_full_day")}
                 value={form.punch_rules.min_hours_full_day}
                 onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, min_hours_full_day: e.target.value } }))}
               >
-                <option value="8.00">8 hours</option>
-                <option value="7.00">7 hours</option>
-                <option value="9.00">9 hours</option>
+                <option value="8.00">{t("8 hours")}</option>
+                <option value="7.00">{t("7 hours")}</option>
+                <option value="9.00">{t("9 hours")}</option>
               </select>
               {fieldErr("punch_rules", "min_hours_full_day") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("punch_rules", "min_hours_full_day")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">Half-Day Limit (hours or fewer)</label>
+              <label className="field-label">{t("Half-Day Limit (hours or fewer)")}</label>
               <select className="field-input field-select" style={errStyle("punch_rules", "min_hours_half_day")}
                 value={form.punch_rules.min_hours_half_day}
                 onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, min_hours_half_day: e.target.value } }))}
               >
-                <option value="4.00">4 hours</option>
-                <option value="3.50">3.5 hours</option>
-                <option value="5.00">5 hours</option>
+                <option value="4.00">{t("4 hours")}</option>
+                <option value="3.50">{t("3.5 hours")}</option>
+                <option value="5.00">{t("5 hours")}</option>
               </select>
               {fieldErr("punch_rules", "min_hours_half_day") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("punch_rules", "min_hours_half_day")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">Early Exit Grace</label>
+              <label className="field-label">{t("Early Exit Grace")}</label>
               <select className="field-input field-select" style={errStyle("punch_rules", "early_exit_grace_minutes")}
                 value={form.punch_rules.early_exit_grace_minutes}
                 onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, early_exit_grace_minutes: Number(e.target.value) } }))}
               >
-                <option value={30}>30 minutes</option>
-                <option value={15}>15 minutes</option>
-                <option value={45}>45 minutes</option>
+                <option value={30}>{t("30 minutes")}</option>
+                <option value={15}>{t("15 minutes")}</option>
+                <option value={45}>{t("45 minutes")}</option>
               </select>
               {fieldErr("punch_rules", "early_exit_grace_minutes") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("punch_rules", "early_exit_grace_minutes")}</span>}
             </div>
           </div>
           <div className="field-group" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 16 }}>
             <div>
-              <div className="field-label" style={{ marginBottom: 2 }}>Treat every day below the full day as a Half Day</div>
-              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                Off (recommended): a finished day of the half-day limit or fewer is a Half Day; a day above it but short of the full-day minimum stays
-                Present and is shown as &ldquo;hours not completed&rdquo; with the minutes short. On: every day below the full-day minimum is a Half Day.
-              </span>
+              <div className="field-label" style={{ marginBottom: 2 }}>{t("Treat every day below the full day as a Half Day")}</div>
+              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Off (recommended): a finished day of the half-day limit or fewer is a Half Day; a day above it but short of the full-day minimum stays Present and is shown as “hours not completed” with the minutes short. On: every day below the full-day minimum is a Half Day.")}</span>
             </div>
             <Toggle
               on={form.punch_rules.short_hours_as_half_day}
@@ -201,21 +201,18 @@ export default function AttendanceSettings() {
           </div>
           <div className="field-group" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 16 }}>
             <div>
-              <div className="field-label" style={{ marginBottom: 2 }}>Work-from-home requests may start in the past</div>
-              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                How many days back an employee can request work from home. Not allowed (recommended): today or a later date only, because an approved
-                request for a past day relabels that day after the fact and the home-location check cannot be met.
-              </span>
+              <div className="field-label" style={{ marginBottom: 2 }}>{t("Work-from-home requests may start in the past")}</div>
+              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("How many days back an employee can request work from home. Not allowed (recommended): today or a later date only, because an approved request for a past day relabels that day after the fact and the home-location check cannot be met.")}</span>
             </div>
             <select className="field-input field-select" style={{ maxWidth: 220, ...errStyle("punch_rules", "wfh_max_backdated_days") }}
               value={form.punch_rules.wfh_max_backdated_days}
               onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, wfh_max_backdated_days: Number(e.target.value) } }))}
             >
-              <option value={0}>Not allowed (today or later)</option>
-              <option value={1}>Up to 1 day back</option>
-              <option value={2}>Up to 2 days back</option>
-              <option value={3}>Up to 3 days back</option>
-              <option value={7}>Up to 7 days back</option>
+              <option value={0}>{t("Not allowed (today or later)")}</option>
+              <option value={1}>{t("Up to 1 day back")}</option>
+              <option value={2}>{t("Up to 2 days back")}</option>
+              <option value={3}>{t("Up to 3 days back")}</option>
+              <option value={7}>{t("Up to 7 days back")}</option>
             </select>
           </div>
         </div>
@@ -224,46 +221,46 @@ export default function AttendanceSettings() {
       {/* Overtime Rules */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-trending-up" /> Overtime Rules</div>
+          <div className="card-title"><i className="ti ti-trending-up" /> {t("Overtime Rules")}</div>
           <SectionSave section="overtime_rules" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
         </div>
         <div className="card-body">
           <div className="form-row cols-3">
             <div className="field-group">
-              <label className="field-label">OT Threshold</label>
+              <label className="field-label">{t("OT Threshold")}</label>
               <select className="field-input field-select" style={errStyle("overtime_rules", "ot_threshold_hours")}
                 value={form.overtime_rules.ot_threshold_hours}
                 onChange={e => setForm(f => ({ ...f, overtime_rules: { ...f.overtime_rules, ot_threshold_hours: e.target.value } }))}
               >
-                <option value="8.00">8 hours</option>
-                <option value="8.50">8.5 hours (a 9-6 shift with a 30-minute break)</option>
-                <option value="9.00">9 hours</option>
-                <option value="10.00">10 hours</option>
+                <option value="8.00">{t("8 hours")}</option>
+                <option value="8.50">{t("8.5 hours (a 9-6 shift with a 30-minute break)")}</option>
+                <option value="9.00">{t("9 hours")}</option>
+                <option value="10.00">{t("10 hours")}</option>
               </select>
-              <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>Worked hours after the break is deducted. Shift length minus the break makes overtime start exactly at shift end.</span>
+              <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>{t("Worked hours after the break is deducted. Shift length minus the break makes overtime start exactly at shift end.")}</span>
               {fieldErr("overtime_rules", "ot_threshold_hours") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("overtime_rules", "ot_threshold_hours")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">OT Multiplier — Regular</label>
+              <label className="field-label">{t("OT Multiplier — Regular")}</label>
               <select className="field-input field-select" style={errStyle("overtime_rules", "ot_multiplier_regular")}
                 value={form.overtime_rules.ot_multiplier_regular}
                 onChange={e => setForm(f => ({ ...f, overtime_rules: { ...f.overtime_rules, ot_multiplier_regular: e.target.value } }))}
               >
-                <option value="1.50">1.5×</option>
-                <option value="1.25">1.25×</option>
-                <option value="2.00">2.0×</option>
+                <option value="1.50">{t("1.5×")}</option>
+                <option value="1.25">{t("1.25×")}</option>
+                <option value="2.00">{t("2.0×")}</option>
               </select>
               {fieldErr("overtime_rules", "ot_multiplier_regular") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("overtime_rules", "ot_multiplier_regular")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">OT Multiplier — Holiday</label>
+              <label className="field-label">{t("OT Multiplier — Holiday")}</label>
               <select className="field-input field-select" style={errStyle("overtime_rules", "ot_multiplier_holiday")}
                 value={form.overtime_rules.ot_multiplier_holiday}
                 onChange={e => setForm(f => ({ ...f, overtime_rules: { ...f.overtime_rules, ot_multiplier_holiday: e.target.value } }))}
               >
-                <option value="2.00">2.0×</option>
-                <option value="1.50">1.5×</option>
-                <option value="2.50">2.5×</option>
+                <option value="2.00">{t("2.0×")}</option>
+                <option value="1.50">{t("1.5×")}</option>
+                <option value="2.50">{t("2.5×")}</option>
               </select>
               {fieldErr("overtime_rules", "ot_multiplier_holiday") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("overtime_rules", "ot_multiplier_holiday")}</span>}
             </div>
@@ -274,17 +271,17 @@ export default function AttendanceSettings() {
       {/* Late Mark & LOP */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-alert-triangle" /> Late Mark &amp; LOP Rule</div>
+          <div className="card-title"><i className="ti ti-alert-triangle" /> {t("Late Mark & LOP Rule")}</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span className="badge badge-error" style={{ fontSize: 10 }}>Critical</span>
+            <span className="badge badge-error" style={{ fontSize: 10 }}>{t("Critical")}</span>
             <SectionSave section="late_mark_rules" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
           </div>
         </div>
         <div className="card-body">
           <div className="field-group" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
             <div>
-              <div className="field-label" style={{ marginBottom: 2 }}>Forgive late arrival when full hours are completed</div>
-              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Someone who arrives after the grace period but works the full-day hours is marked Present and gets no late mark. The late arrival stays as a note.</span>
+              <div className="field-label" style={{ marginBottom: 2 }}>{t("Forgive late arrival when full hours are completed")}</div>
+              <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Someone who arrives after the grace period but works the full-day hours is marked Present and gets no late mark. The late arrival stays as a note.")}</span>
             </div>
             <Toggle
               on={form.late_mark_rules.forgive_late_when_full_hours}
@@ -293,27 +290,27 @@ export default function AttendanceSettings() {
           </div>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Late Marks per LOP</label>
+              <label className="field-label">{t("Late Marks per LOP")}</label>
               <select className="field-input field-select" style={errStyle("late_mark_rules", "late_marks_per_lop")}
                 value={form.late_mark_rules.late_marks_per_lop}
                 onChange={e => setForm(f => ({ ...f, late_mark_rules: { ...f.late_mark_rules, late_marks_per_lop: Number(e.target.value) } }))}
               >
-                <option value={3}>3 late marks = 1 LOP</option>
-                <option value={2}>2 late marks = 1 LOP</option>
-                <option value={4}>4 late marks = 1 LOP</option>
-                <option value={0}>No LOP (tracking only)</option>
+                <option value={3}>{t("3 late marks = 1 LOP")}</option>
+                <option value={2}>{t("2 late marks = 1 LOP")}</option>
+                <option value={4}>{t("4 late marks = 1 LOP")}</option>
+                <option value={0}>{t("No LOP (tracking only)")}</option>
               </select>
-              <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>Resets each calendar month</span>
+              <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>{t("Resets each calendar month")}</span>
               {fieldErr("late_mark_rules", "late_marks_per_lop") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("late_mark_rules", "late_marks_per_lop")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">LOP Deduction Unit</label>
+              <label className="field-label">{t("LOP Deduction Unit")}</label>
               <select className="field-input field-select" style={errStyle("late_mark_rules", "lop_deduction_unit")}
                 value={form.late_mark_rules.lop_deduction_unit}
                 onChange={e => setForm(f => ({ ...f, late_mark_rules: { ...f.late_mark_rules, lop_deduction_unit: e.target.value } }))}
               >
-                <option value="full_day">1 day</option>
-                <option value="half_day">0.5 day (half)</option>
+                <option value="full_day">{t("1 day")}</option>
+                <option value="half_day">{t("0.5 day (half)")}</option>
               </select>
               {fieldErr("late_mark_rules", "lop_deduction_unit") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("late_mark_rules", "lop_deduction_unit")}</span>}
             </div>
@@ -324,7 +321,7 @@ export default function AttendanceSettings() {
       {/* Absence Alert */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-bell" /> Absence Alert</div>
+          <div className="card-title"><i className="ti ti-bell" /> {t("Absence Alert")}</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <SectionSave section="absence_alert" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
             <Toggle
@@ -335,30 +332,30 @@ export default function AttendanceSettings() {
         </div>
         <div className="card-body">
           <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 14 }}>
-            Notify HR and the manager when an employee is absent for N+ consecutive working days without approved leave.
+            {t("Notify HR and the manager when an employee is absent for N+ consecutive working days without approved leave.")}
           </p>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Alert After N Absent Days</label>
+              <label className="field-label">{t("Alert After N Absent Days")}</label>
               <select className="field-input field-select" style={errStyle("absence_alert", "alert_after_days")}
                 value={form.absence_alert.alert_after_days}
                 onChange={e => setForm(f => ({ ...f, absence_alert: { ...f.absence_alert, alert_after_days: Number(e.target.value) } }))}
               >
-                <option value={3}>3 days</option>
-                <option value={2}>2 days</option>
-                <option value={5}>5 days</option>
+                <option value={3}>{t("3 days")}</option>
+                <option value={2}>{t("2 days")}</option>
+                <option value={5}>{t("5 days")}</option>
               </select>
               {fieldErr("absence_alert", "alert_after_days") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("absence_alert", "alert_after_days")}</span>}
             </div>
             <div className="field-group">
-              <label className="field-label">Notify</label>
+              <label className="field-label">{t("Notify")}</label>
               <select className="field-input field-select" style={errStyle("absence_alert", "notify_whom")}
                 value={form.absence_alert.notify_whom}
                 onChange={e => setForm(f => ({ ...f, absence_alert: { ...f.absence_alert, notify_whom: e.target.value } }))}
               >
-                <option value="manager_and_hr">Manager + HR</option>
-                <option value="hr_only">HR only</option>
-                <option value="manager_only">Manager only</option>
+                <option value="manager_and_hr">{t("Manager + HR")}</option>
+                <option value="hr_only">{t("HR only")}</option>
+                <option value="manager_only">{t("Manager only")}</option>
               </select>
               {fieldErr("absence_alert", "notify_whom") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("absence_alert", "notify_whom")}</span>}
             </div>
@@ -369,9 +366,9 @@ export default function AttendanceSettings() {
       {/* Face ID Verification */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-face-id" /> Face ID Verification</div>
+          <div className="card-title"><i className="ti ti-face-id" /> {t("Face ID Verification")}</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span className="badge badge-error" style={{ fontSize: 10 }}>Critical</span>
+            <span className="badge badge-error" style={{ fontSize: 10 }}>{t("Critical")}</span>
             <SectionSave section="face_verification" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
             <Toggle
               on={form.face_verification.is_mandatory}
@@ -382,9 +379,9 @@ export default function AttendanceSettings() {
         <div className="card-body">
           <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>
             {form.face_verification.is_mandatory ? (
-              <>Face ID registration is <strong>mandatory</strong> for every employee. Every web punch needs a live face match against an approved Face ID; until one exists, web clock-in/out is blocked unless you allow the fallback below.</>
+              <>{t("Face ID registration is")} <strong>{t("mandatory")}</strong> {t("for every employee. Every web punch needs a live face match against an approved Face ID; until one exists, web clock-in/out is blocked unless you allow the fallback below.")}</>
             ) : (
-              <>Face ID verification is <strong>off</strong>. Employees cannot register a face ID or be asked to verify — their Profile page shows &ldquo;Contact admin to use this feature&rdquo;, and no punch requires a face match.</>
+              <>{t("Face ID verification is")} <strong>{t("off")}</strong>{t(". Employees cannot register a face ID or be asked to verify — their Profile page shows “Contact admin to use this feature”, and no punch requires a face match.")}</>
             )}
           </p>
           {fieldErr("face_verification", "is_mandatory") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 8, display: "block" }}>{fieldErr("face_verification", "is_mandatory")}</span>}
@@ -392,37 +389,37 @@ export default function AttendanceSettings() {
           {form.face_verification.is_mandatory && (
             <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
               <div className="form-group">
-                <label className="field-label">Who registers a Face ID</label>
+                <label className="field-label">{t("Who registers a Face ID")}</label>
                 <select
                   className="field-input field-select"
                   value={form.face_verification.registration_mode}
                   onChange={e => setForm(f => ({ ...f, face_verification: { ...f.face_verification, registration_mode: e.target.value as FaceIdMode } }))}
                 >
-                  {(Object.keys(FACE_ID_MODE_LABELS) as FaceIdMode[]).map(mode => <option key={mode} value={mode}>{FACE_ID_MODE_LABELS[mode]}</option>)}
+                  {(Object.keys(FACE_ID_MODE_LABELS) as FaceIdMode[]).map(mode => <option key={mode} value={mode}>{t(FACE_ID_MODE_LABELS[mode])}</option>)}
                 </select>
                 <span style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginTop: 4 }}>
-                  Every message (the clock-in error, the Profile page, the Face ID Registrations screen, the hire screen and the welcome email) follows this choice.
+                  {t("Every message (the clock-in error, the Profile page, the Face ID Registrations screen, the hire screen and the welcome email) follows this choice.")}
                 </span>
                 {fieldErr("face_verification", "registration_mode") && <span style={{ fontSize: 11, color: "var(--error)" }}>{fieldErr("face_verification", "registration_mode")}</span>}
               </div>
 
               <div className="form-group">
-                <label className="field-label">Before a Face ID exists (new hires)</label>
+                <label className="field-label">{t("Before a Face ID exists (new hires)")}</label>
                 <select
                   className="field-input field-select"
                   value={form.face_verification.fallback_policy}
                   onChange={e => setForm(f => ({ ...f, face_verification: { ...f.face_verification, fallback_policy: e.target.value as FaceIdFallbackPolicy } }))}
                 >
-                  {(Object.keys(FACE_ID_FALLBACK_LABELS) as FaceIdFallbackPolicy[]).map(policy => <option key={policy} value={policy}>{FACE_ID_FALLBACK_LABELS[policy]}</option>)}
+                  {(Object.keys(FACE_ID_FALLBACK_LABELS) as FaceIdFallbackPolicy[]).map(policy => <option key={policy} value={policy}>{t(FACE_ID_FALLBACK_LABELS[policy])}</option>)}
                 </select>
                 <span style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginTop: 4 }}>
-                  A fallback punch must still be from inside the office geofence. It is flagged on the punch and recorded in the Audit Log.
+                  {t("A fallback punch must still be from inside the office geofence. It is flagged on the punch and recorded in the Audit Log.")}
                 </span>
               </div>
 
               {form.face_verification.fallback_policy === "days_after_joining" && (
                 <div className="form-group" style={{ maxWidth: 220 }}>
-                  <label className="field-label">Days after joining</label>
+                  <label className="field-label">{t("Days after joining")}</label>
                   <input
                     className="field-input" type="number" min={1} max={90}
                     value={form.face_verification.fallback_days}
@@ -438,11 +435,11 @@ export default function AttendanceSettings() {
 
       {/* Save bar */}
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, paddingTop: 8 }}>
-        <button className="btn btn-ghost" onClick={reset} disabled={isBusy}>Discard Changes</button>
+        <button className="btn btn-ghost" onClick={reset} disabled={isBusy}>{t("Discard Changes")}</button>
         <button className="btn btn-filled" onClick={save} disabled={isBusy || loading}>
           {saving
-            ? <><Spin />&nbsp;Saving…</>
-            : <><i className="ti ti-device-floppy" /> Save All</>}
+            ? <><Spin />&nbsp;{t("Saving…")}</>
+            : <><i className="ti ti-device-floppy" /> {t("Save All")}</>}
         </button>
       </div>
 

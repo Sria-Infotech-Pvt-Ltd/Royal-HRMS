@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
@@ -24,6 +25,7 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
 ];
 
 export default function PayrollConfigPage() {
+  const t = useT();
   const router  = useRouter();
   const [tab,   setTab]   = useState<TabId>("run");
   const [saving, setSaving] = useState(false);
@@ -52,11 +54,11 @@ export default function PayrollConfigPage() {
     setSaveMsg(null);
     try {
       await clientApi.put(API.payroll.settings, form);
-      setSaveMsg({ text: "Settings saved.", isError: false });
+      setSaveMsg({ text: t("Settings saved."), isError: false });
       setForm({});
       refetch();
     } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message || "Failed to save. Please try again.";
+      const msg = (err as { message?: string })?.message || t("Failed to save. Please try again.");
       setSaveMsg({ text: msg, isError: true });
     } finally {
       setSaving(false);
@@ -75,11 +77,11 @@ export default function PayrollConfigPage() {
             onClick={() => router.push("/dashboard/settings")}
             className="flex items-center gap-1.5 text-[13px] text-[var(--on-variant)] hover:text-[var(--on-bg)] mb-2 transition-colors"
           >
-            <i className="ti ti-arrow-left text-sm" /> Settings
+            <i className="ti ti-arrow-left text-sm" /> {t("Settings")}
           </button>
-          <h1 className="text-[22px] font-bold leading-tight" style={{ color: "var(--on-bg)" }}>Payroll Configuration</h1>
+          <h1 className="text-[22px] font-bold leading-tight" style={{ color: "var(--on-bg)" }}>{t("Payroll Configuration")}</h1>
           <p className="text-[13px] mt-0.5" style={{ color: "var(--on-variant)" }}>
-            Salary structures, statutory rules, and payroll cycle settings
+            {t("Salary structures, statutory rules, and payroll cycle settings")}
           </p>
         </div>
         {tab === "run" && hasChanges && (
@@ -89,8 +91,8 @@ export default function PayrollConfigPage() {
             className="btn btn-filled disabled:opacity-50"
           >
             {saving
-              ? <><i className="ti ti-loader-2 animate-spin text-sm" /> Saving…</>
-              : <><i className="ti ti-device-floppy text-sm" /> Save Settings</>}
+              ? <><i className="ti ti-loader-2 animate-spin text-sm" /> {t("Saving…")}</>
+              : <><i className="ti ti-device-floppy text-sm" /> {t("Save Settings")}</>}
           </button>
         )}
       </div>
@@ -103,17 +105,17 @@ export default function PayrollConfigPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-5 p-1 rounded-xl w-fit" style={{ background: "var(--bg-mid)" }}>
-        {TABS.map(t => (
+        {TABS.map(tabItem => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={tabItem.id}
+            onClick={() => setTab(tabItem.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium transition-all ${
-              tab === t.id
+              tab === tabItem.id
                 ? "bg-[var(--surface)] text-[var(--primary)] shadow font-semibold"
                 : "text-[var(--on-variant)] hover:text-[var(--on-bg)]"
             }`}
           >
-            <i className={`ti ${t.icon} text-sm`} /> {t.label}
+            <i className={`ti ${tabItem.icon} text-sm`} /> {t(tabItem.label)}
           </button>
         ))}
       </div>
@@ -122,24 +124,24 @@ export default function PayrollConfigPage() {
       {tab === "run" && (
         <div className="card">
           <div className="px-5 py-4 border-b border-[var(--outline-v)]">
-            <div className="font-semibold" style={{ color: "var(--on-bg)" }}>Payroll Cycle & Approval Settings</div>
-            <div className="text-[12px] mt-0.5" style={{ color: "var(--outline)" }}>Controls how payroll cycles are defined, approved and paid</div>
+            <div className="font-semibold" style={{ color: "var(--on-bg)" }}>{t("Payroll Cycle & Approval Settings")}</div>
+            <div className="text-[12px] mt-0.5" style={{ color: "var(--outline)" }}>{t("Controls how payroll cycles are defined, approved and paid")}</div>
           </div>
 
           {loading ? (
             <div className="px-5 py-10 text-center text-sm" style={{ color: "var(--outline)" }}>
               <i className="ti ti-loader-2 animate-spin text-lg" />
-              <div className="mt-2">Loading settings…</div>
+              <div className="mt-2">{t("Loading settings…")}</div>
             </div>
           ) : (
             <>
               {/* Cycle dates */}
               <div className="px-5 py-5 border-b border-[var(--outline-v)]">
-                <div className="text-[12px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--on-variant)" }}>Salary Cycle</div>
+                <div className="text-[12px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--on-variant)" }}>{t("Salary Cycle")}</div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>Cycle Start Day</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Day of month the cycle begins</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("Cycle Start Day")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Day of month the cycle begins")}</div>
                     <input
                       type="number"
                       min={1} max={31}
@@ -149,8 +151,8 @@ export default function PayrollConfigPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>Cycle End Day</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Day of month the cycle ends</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("Cycle End Day")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Day of month the cycle ends")}</div>
                     <input
                       type="number"
                       min={1} max={31}
@@ -160,8 +162,8 @@ export default function PayrollConfigPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>Pay Day</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Day salary is credited to employees</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("Pay Day")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Day salary is credited to employees")}</div>
                     <input
                       type="number"
                       min={1} max={31}
@@ -175,11 +177,11 @@ export default function PayrollConfigPage() {
 
               {/* Approval */}
               <div className="px-5 py-5 border-b border-[var(--outline-v)]">
-                <div className="text-[12px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--on-variant)" }}>Approval Workflow</div>
+                <div className="text-[12px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--on-variant)" }}>{t("Approval Workflow")}</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>Attendance Approval Levels</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Who must approve attendance before payroll can run</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("Attendance Approval Levels")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Who must approve attendance before payroll can run")}</div>
                     <div className="flex gap-2">
                       {(["L1", "L1_L2"] as const).map(level => (
                         <button
@@ -191,14 +193,14 @@ export default function PayrollConfigPage() {
                               : "border-[var(--outline-v)] text-[var(--on-variant)] hover:border-[var(--primary-c)]"
                           }`}
                         >
-                          {level === "L1" ? "Manager only (L1)" : "Manager + HR (L1 + L2)"}
+                          {level === "L1" ? t("Manager only (L1)") : t("Manager + HR (L1 + L2)")}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>Employee Query Window (hours)</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>How long employees have to raise payslip queries</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("Employee Query Window (hours)")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("How long employees have to raise payslip queries")}</div>
                     <input
                       type="number"
                       min={1} max={168}
@@ -208,8 +210,8 @@ export default function PayrollConfigPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>Default Working Days per Month</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Used for a payslip when there is no attendance for the cycle yet</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("Default Working Days per Month")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Used for a payslip when there is no attendance for the cycle yet")}</div>
                     <input
                       type="number"
                       min={1} max={31}
@@ -223,14 +225,14 @@ export default function PayrollConfigPage() {
 
               {/* EPF / Statutory Rates */}
               <div className="px-5 py-5 border-b border-[var(--outline-v)]">
-                <div className="text-[12px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--on-variant)" }}>EPF / EDLI Statutory Rates</div>
+                <div className="text-[12px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--on-variant)" }}>{t("EPF / EDLI Statutory Rates")}</div>
                 <div className="text-[11px] mb-3" style={{ color: "var(--outline)" }}>
-                  EPFO-mandated rates. Update here when the law changes — no code change required.
+                  {t("EPFO-mandated rates. Update here when the law changes — no code change required.")}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>EPS Rate (%)</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Employer Pension Scheme contribution</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("EPS Rate (%)")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Employer Pension Scheme contribution")}</div>
                     <input
                       type="number" step="0.01" min={0} max={100}
                       value={draft.eps_rate ?? ""}
@@ -239,8 +241,8 @@ export default function PayrollConfigPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>EDLI Rate (%)</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Employees Deposit Linked Insurance</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("EDLI Rate (%)")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Employees Deposit Linked Insurance")}</div>
                     <input
                       type="number" step="0.01" min={0} max={100}
                       value={draft.edli_rate ?? ""}
@@ -249,8 +251,8 @@ export default function PayrollConfigPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>EDLI Wage Ceiling (₹)</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Monthly wage cap for EDLI computation</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("EDLI Wage Ceiling (₹)")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Monthly wage cap for EDLI computation")}</div>
                     <input
                       type="number" step="1" min={0}
                       value={draft.edli_wage_ceiling ?? ""}
@@ -259,8 +261,8 @@ export default function PayrollConfigPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>EPF Admin Rate (%)</label>
-                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>Administrative / inspection charges</div>
+                    <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--on-bg)" }}>{t("EPF Admin Rate (%)")}</label>
+                    <div className="text-[11px] mb-2" style={{ color: "var(--outline)" }}>{t("Administrative / inspection charges")}</div>
                     <input
                       type="number" step="0.01" min={0} max={100}
                       value={draft.epf_admin_rate ?? ""}
@@ -274,15 +276,15 @@ export default function PayrollConfigPage() {
               {/* Basic Pay editor visibility */}
               <div className="px-5 py-5 border-b border-[var(--outline-v)]">
                 <div className="text-[12px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--on-variant)" }}>
-                  Basic Pay Editor Fields
+                  {t("Basic Pay Editor Fields")}
                 </div>
                 <p className="text-[11px] mb-4" style={{ color: "var(--outline)" }}>
-                  Choose which rows appear in the employee Basic Pay editor. Hiding a row changes visibility only; it remains included in calculations and existing pay records.
+                  {t("Choose which rows appear in the employee Basic Pay editor. Hiding a row changes visibility only; it remains included in calculations and existing pay records.")}
                 </p>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   {PAY_BREAKUP_LINE_GROUPS.map(group => (
                     <fieldset key={group.label} className="rounded-xl border border-[var(--outline-v)] p-4">
-                      <legend className="px-1 text-[11px] font-semibold" style={{ color: "var(--on-bg)" }}>{group.label}</legend>
+                      <legend className="px-1 text-[11px] font-semibold" style={{ color: "var(--on-bg)" }}>{t(group.label)}</legend>
                       <div className="flex flex-col gap-3">
                         {group.lines.map(line => {
                           const visibleLines = draft.basic_pay_visible_lines ?? DEFAULT_VISIBLE_PAY_LINE_CODES;
@@ -294,7 +296,7 @@ export default function PayrollConfigPage() {
                                 disabled={!canEditPayroll}
                                 onChange={event => togglePayLineVisibility(line.code, event.target.checked)}
                               />
-                              <span>{line.name}</span>
+                              <span>{t(line.name)}</span>
                             </label>
                           );
                         })}
@@ -304,24 +306,24 @@ export default function PayrollConfigPage() {
                 </div>
                 {!canEditPayroll && (
                   <p className="text-[11px] mt-3" style={{ color: "var(--outline)" }}>
-                    You need payroll edit permission to change which fields are visible.
+                    {t("You need payroll edit permission to change which fields are visible.")}
                   </p>
                 )}
               </div>
 
               {/* Optional components */}
               <div className="px-5 py-5">
-                <div className="text-[12px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--on-variant)" }}>Optional Payroll Components</div>
+                <div className="text-[12px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--on-variant)" }}>{t("Optional Payroll Components")}</div>
                 <div className="flex flex-col gap-3">
                   <Toggle
-                    label="Reimbursements"
-                    description="Show reimbursements step in payroll wizard and include in payslips"
+                    label={t("Reimbursements")}
+                    description={t("Show reimbursements step in payroll wizard and include in payslips")}
                     value={draft.enable_reimbursements ?? false}
                     onChange={v => set("enable_reimbursements", v)}
                   />
                   <Toggle
-                    label="Bonuses"
-                    description="Show bonus step in payroll wizard and include in payslips"
+                    label={t("Bonuses")}
+                    description={t("Show bonus step in payroll wizard and include in payslips")}
                     value={draft.enable_bonuses ?? false}
                     onChange={v => set("enable_bonuses", v)}
                   />
@@ -330,20 +332,20 @@ export default function PayrollConfigPage() {
 
               {hasChanges && (
                 <div className="px-5 py-4 border-t border-[var(--outline-v)] flex items-center justify-between" style={{ background: "var(--bg-low)" }}>
-                  <span className="text-[12px]" style={{ color: "var(--on-variant)" }}>You have unsaved changes</span>
+                  <span className="text-[12px]" style={{ color: "var(--on-variant)" }}>{t("You have unsaved changes")}</span>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setForm({})}
                       className="btn btn-ghost btn-sm"
                     >
-                      Discard
+                      {t("Discard")}
                     </button>
                     <button
                       onClick={saveSettings}
                       disabled={saving}
                       className="btn btn-filled disabled:opacity-50"
                     >
-                      {saving ? "Saving…" : "Save Settings"}
+                      {saving ? t("Saving…") : t("Save Settings")}
                     </button>
                   </div>
                 </div>

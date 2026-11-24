@@ -6,6 +6,7 @@
 // cancelled from here, so the dialog says so instead of leaving the person looking for a button that does not exist.
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import Modal from "@/components/Modal";
 import { confirmDialog } from "@/components/DialogProvider";
 import { useToast } from "@/components/ToastProvider";
@@ -37,36 +38,38 @@ function dayCount(request: WorkFromHomeRequest): number {
 function StageRow({ label, approverName, status, remarks }: {
   label: string; approverName: string; status: "approved" | "rejected" | null; remarks: string;
 }) {
+  const t = useT();
   const badge = status === "approved" ? "badge badge-success" : status === "rejected" ? "badge badge-error" : "badge badge-warn";
   const text = status === "approved" ? "Approved" : status === "rejected" ? "Rejected" : "Pending";
   return (
     <div className="flex items-start justify-between gap-3 py-2 border-b border-[var(--outline-v)] last:border-b-0">
       <div>
         <div className="text-sm font-medium text-[var(--on-bg)]">{label}</div>
-        <div className="text-xs text-[var(--on-variant)] mt-0.5">{approverName || "Not yet assigned"}</div>
+        <div className="text-xs text-[var(--on-variant)] mt-0.5">{approverName || t("Not yet assigned")}</div>
         {remarks && <div className="text-xs text-[var(--on-variant)] bg-[var(--bg-low)] rounded-md px-2 py-1 mt-1.5">&ldquo;{remarks}&rdquo;</div>}
       </div>
-      <span className={badge}>{text}</span>
+      <span className={badge}>{t(text)}</span>
     </div>
   );
 }
 
 export default function WfhRequestDetailModal({ request, onClose, onChanged, readOnly = false }: WfhRequestDetailModalProps) {
+  const t = useT();
   const { showToast } = useToast();
   const [cancelling, setCancelling] = useState(false);
   const days = dayCount(request);
 
   async function cancelRequest() {
-    if (!(await confirmDialog("Cancel this work-from-home request?"))) return;
+    if (!(await confirmDialog(t("Cancel this work-from-home request?")))) return;
     setCancelling(true);
     try {
       const response = await clientApi.patch<{ message?: string }>(API.workFromHome.requestDetail(request.id));
-      showToast(response.data.message || "Work from home request cancelled.", "success");
+      showToast(response.data.message || t("Work from home request cancelled."), "success");
       onChanged();
       onClose();
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(message || "Failed to cancel request.", "error");
+      showToast(message || t("Failed to cancel request."), "error");
     } finally {
       setCancelling(false);
     }
@@ -74,7 +77,7 @@ export default function WfhRequestDetailModal({ request, onClose, onChanged, rea
 
   return (
     <Modal
-      title={<><i className="ti ti-home-2" style={{ marginRight: 8 }} />Work from home request</>}
+      title={<><i className="ti ti-home-2" style={{ marginRight: 8 }} />{t("Work from home request")}</>}
       onClose={onClose}
       closeDisabled={cancelling}
       maxWidth="min(480px, 95vw)"
@@ -82,63 +85,65 @@ export default function WfhRequestDetailModal({ request, onClose, onChanged, rea
         <>
           {request.can_cancel && !readOnly && (
             <button className="btn btn-ghost" type="button" onClick={cancelRequest} disabled={cancelling}>
-              {cancelling ? "Cancelling…" : "Cancel request"}
+              {cancelling ? t("Cancelling…") : t("Cancel request")}
             </button>
           )}
-          <button className="btn btn-ghost" type="button" onClick={onClose} disabled={cancelling}>Close</button>
+          <button className="btn btn-ghost" type="button" onClick={onClose} disabled={cancelling}>{t("Close")}</button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Dates</p>
+            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Dates")}</p>
             <p className="text-sm font-medium text-[var(--on-bg)]">
-              {day(request.start_date)} → {day(request.end_date)} · {days} day{days === 1 ? "" : "s"}
+              {day(request.start_date)} → {day(request.end_date)} · {days === 1 ? t("{count} day", { count: days }) : t("{count} days", { count: days })}
             </p>
           </div>
-          <span className={STATUS_BADGE_CLASS[toDisplayStatus(request.status)]}>{WFH_STATUS_LABELS[request.status]}</span>
+          <span className={STATUS_BADGE_CLASS[toDisplayStatus(request.status)]}>{t(WFH_STATUS_LABELS[request.status])}</span>
         </div>
 
         {request.location_label && (
           <div className="border-t border-[var(--outline-v)] pt-4">
-            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Location</p>
+            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Location")}</p>
             <p className="text-sm text-[var(--on-bg)]">{request.location_label}</p>
           </div>
         )}
 
         {request.status === "approved" && request.enforce_location !== undefined && (
           <div className="border-t border-[var(--outline-v)] pt-4">
-            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Location check</p>
+            <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Location check")}</p>
             <p className="text-sm text-[var(--on-bg)]">
               {request.enforce_location
-                ? "You must punch near this location. If you have moved, ask your manager or HR to allow punching from any location."
-                : `You can punch from any location on these days${request.location_unlocked_by_name ? ` (allowed by ${request.location_unlocked_by_name})` : ""}.`}
+                ? t("You must punch near this location. If you have moved, ask your manager or HR to allow punching from any location.")
+                : request.location_unlocked_by_name
+                  ? t("You can punch from any location on these days (allowed by {name}).", { name: request.location_unlocked_by_name })
+                  : t("You can punch from any location on these days.")}
             </p>
           </div>
         )}
 
         <div className="border-t border-[var(--outline-v)] pt-4">
-          <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Reason</p>
+          <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Reason")}</p>
           <p className="text-sm text-[var(--on-bg)]">{request.reason || "—"}</p>
         </div>
 
         <div className="border-t border-[var(--outline-v)] pt-3">
-          <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Approval Trail</p>
-          <StageRow label="Manager Approval" approverName={request.l1_approver_name} status={request.l1_status} remarks={request.l1_remarks} />
+          <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">{t("Approval Trail")}</p>
+          <StageRow label={t("Manager Approval")} approverName={request.l1_approver_name} status={request.l1_status} remarks={request.l1_remarks} />
           {request.l2_approver_name && (
-            <StageRow label="HR Approval" approverName={request.l2_approver_name} status={request.l2_status} remarks={request.l2_remarks} />
+            <StageRow label={t("HR Approval")} approverName={request.l2_approver_name} status={request.l2_status} remarks={request.l2_remarks} />
           )}
         </div>
 
         {request.status === "approved" && (
           <p className="text-xs text-[var(--on-variant)] bg-[var(--bg-low)] rounded-md px-3 py-2">
-            An approved request can&apos;t be cancelled from here. If your plans changed, ask your manager or HR.
+            {t("An approved request can't be cancelled from here. If your plans changed, ask your manager or HR.")}
           </p>
         )}
 
         <div className="text-xs text-[var(--on-variant)] border-t border-[var(--outline-v)] pt-3">
-          Submitted {fmtSubmitted(request.created_at)}
+          {t("Submitted {date}", { date: fmtSubmitted(request.created_at) })}
         </div>
       </div>
     </Modal>

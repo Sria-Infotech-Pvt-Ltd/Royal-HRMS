@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 import ConfirmModal from "@/components/ConfirmModal";
 import AppraisalGoalCard, { AppraisalGoalFormValue } from "./AppraisalGoalCard";
 import AppraisalStageTracker from "./AppraisalStageTracker";
@@ -84,6 +85,7 @@ function reviewCode(cycleName: string, employeeCode: string): string {
 }
 
 export default function AppraisalsTab() {
+  const t = useT();
   const { data: review, loading: reviewLoading, error: reviewErr, refetch: refetchReview } =
     useFetch<ApiReview | null>(API.performance.myReview);
   const { data: goals, loading: goalsLoading, refetch: refetchGoals } =
@@ -138,12 +140,12 @@ export default function AppraisalsTab() {
         ...Object.entries(goalForms).map(([goalId, value]) =>
           clientApi.patch(API.performance.myGoalDetail(goalId), value)),
       ]);
-      setMsg("Draft saved.");
+      setMsg(t("Draft saved."));
       refetchReview();
       refetchGoals();
     } catch (e: unknown) {
       const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(m ?? "Failed to save. Is there an active review cycle?");
+      setErr(m ?? t("Failed to save. Is there an active review cycle?"));
       throw e;
     } finally {
       setSaving(false);
@@ -156,11 +158,11 @@ export default function AppraisalsTab() {
     try {
       await handleSave();
       await clientApi.post(API.performance.submitMyReview);
-      setMsg("Self-review submitted.");
+      setMsg(t("Self-review submitted."));
       refetchReview();
     } catch (e: unknown) {
       const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(m ?? "Failed to submit.");
+      setErr(m ?? t("Failed to submit."));
     } finally {
       setSubmitting(false);
     }
@@ -171,11 +173,11 @@ export default function AppraisalsTab() {
     setErr(null); setMsg(null); setAcknowledging(true);
     try {
       await clientApi.post(API.performance.acknowledgeReview(review.id), { comment });
-      setMsg("Outcome acknowledged.");
+      setMsg(t("Outcome acknowledged."));
       refetchReview();
     } catch (e: unknown) {
       const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(m ?? "Failed to acknowledge outcome.");
+      setErr(m ?? t("Failed to acknowledge outcome."));
     } finally {
       setAcknowledging(false);
     }
@@ -184,7 +186,7 @@ export default function AppraisalsTab() {
   // Only block the page on the very first load — refetches after save/submit
   // must not blank the form or swallow the success message.
   if ((reviewLoading && !review) || (goalsLoading && !goals)) {
-    return <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>Loading…</h3></div>;
+    return <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>{t("Loading…")}</h3></div>;
   }
 
   if (reviewErr) {
@@ -194,25 +196,26 @@ export default function AppraisalsTab() {
   if (!review || !review.id) {
     return (
       <div>
-        <h2 style={{ margin: "0 0 16px", fontSize: "1.3rem" }}>My appraisal</h2>
+        <h2 style={{ margin: "0 0 16px", fontSize: "1.3rem" }}>{t("My appraisal")}</h2>
         <div className="empty-state">
           <i className="ti ti-file-text" />
-          <h3>No active review cycle</h3>
-          <p>Your appraisal form will appear here once HR opens a review cycle.</p>
+          <h3>{t("No active review cycle")}</h3>
+          <p>{t("Your appraisal form will appear here once HR opens a review cycle.")}</p>
         </div>
       </div>
     );
   }
 
   const goalList = goals ?? [];
-  const statusLinkLabel = STATUS_LINK_LABEL[review.status] ?? review.status_display;
+  const mappedStatusLabel = STATUS_LINK_LABEL[review.status];
+  const statusLinkLabel = mappedStatusLabel ? t(mappedStatusLabel) : review.status_display;
   const needsAcknowledge = !!review.published_at && !review.acknowledged_at;
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: "1.3rem" }}>My appraisal</h2>
+          <h2 style={{ margin: 0, fontSize: "1.3rem" }}>{t("My appraisal")}</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--on-variant)" }}>
             {review.cycle_name} · {review.employee_name} · {reviewCode(review.cycle_name, review.employee_code)}
           </p>
@@ -224,33 +227,33 @@ export default function AppraisalsTab() {
       {msg && <div className="alert alert-success mb-16">{msg}</div>}
       {isSubmitted && (
         <div className="alert alert-info mb-16">
-          Your self-review has been submitted and can no longer be edited.
+          {t("Your self-review has been submitted and can no longer be edited.")}
         </div>
       )}
       {review.status === "returned" && (
         <div className="pay-callout mb-16">
-          <b>Returned for changes</b>
-          <p>{review.return_reason || "Please revise your self-review."}</p>
+          <b>{t("Returned for changes")}</b>
+          <p>{review.return_reason || t("Please revise your self-review.")}</p>
         </div>
       )}
       {needsAcknowledge && (
-        <div className="alert alert-info mb-16">Your appraisal outcome has been published. Review it below and acknowledge it.</div>
+        <div className="alert alert-info mb-16">{t("Your appraisal outcome has been published. Review it below and acknowledge it.")}</div>
       )}
 
       <div className="ess-split-wide">
         <div style={{ minWidth: 0 }}>
           <div className="card mb-16">
             <div className="card-header">
-              <div className="card-title"><i className="ti ti-file-text" /> Self-review</div>
+              <div className="card-title"><i className="ti ti-file-text" /> {t("Self-review")}</div>
             </div>
             <div style={{ padding: "16px 20px 4px" }}>
               <p style={{ fontSize: 12, color: "var(--on-variant)", margin: 0 }}>
-                Record outcomes against each goal, with evidence that your manager can verify.
+                {t("Record outcomes against each goal, with evidence that your manager can verify.")}
               </p>
             </div>
             <div style={{ padding: "12px 20px 20px" }}>
               {goalList.length === 0 ? (
-                <p style={{ fontSize: 13, color: "var(--on-variant)" }}>No goals set for this cycle yet.</p>
+                <p style={{ fontSize: 13, color: "var(--on-variant)" }}>{t("No goals set for this cycle yet.")}</p>
               ) : (
                 goalList.map(goal => (
                   <AppraisalGoalCard
@@ -268,10 +271,10 @@ export default function AppraisalsTab() {
               {!isSubmitted && (
                 <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
                   <button className="btn btn-ghost" onClick={handleSave} disabled={saving || submitting}>
-                    {saving ? "Saving…" : "Save draft"}
+                    {saving ? t("Saving…") : t("Save draft")}
                   </button>
                   <button className="btn btn-filled" onClick={() => setShowSubmitConfirm(true)} disabled={saving || submitting}>
-                    {submitting ? "Submitting…" : "Submit self-review"}
+                    {submitting ? t("Submitting…") : t("Submit self-review")}
                   </button>
                 </div>
               )}
@@ -284,9 +287,9 @@ export default function AppraisalsTab() {
 
         {showSubmitConfirm && (
           <ConfirmModal
-            title="Submit self-review?"
-            body="Once submitted, your self-review answers and ratings are locked and can no longer be edited. Your manager will be notified to complete their review."
-            confirmLabel="Submit Self-Review"
+            title={t("Submit self-review?")}
+            body={t("Once submitted, your self-review answers and ratings are locked and can no longer be edited. Your manager will be notified to complete their review.")}
+            confirmLabel={t("Submit Self-Review")}
             danger
             saving={submitting}
             onConfirm={handleSubmit}

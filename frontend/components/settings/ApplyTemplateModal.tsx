@@ -7,6 +7,7 @@
 // edits).
 
 import { useMemo, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function ApplyTemplateModal({ template, onClose, onApplied }: Props) {
+  const t = useT();
   const { data: positionsData, error: loadError } = useFetch<{ results: Position[] }>(
     `${API.orgStructure.positions.list}?page_size=1000`,
   );
@@ -72,7 +74,7 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
       setApplyError(
         (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
           ?? (err as { message?: string })?.message
-          ?? "Could not apply this template.",
+          ?? t("Could not apply this template."),
       );
     } finally {
       setIsApplying(false);
@@ -85,18 +87,18 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
   if (step === "confirm") {
     return (
       <Modal
-        title={<>Confirm applying <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{template.name}</span></>}
+        title={<>{t("Confirm applying")} <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{template.name}</span></>}
         onClose={onClose}
         maxWidth={640}
         scrollBody
         footer={
           <>
             <button className="btn btn-ghost" type="button" onClick={() => setStep("select")} disabled={isApplying}>
-              <i className="ti ti-arrow-left" /> Back
+              <i className="ti ti-arrow-left" /> {t("Back")}
             </button>
             <button className="btn btn-filled" type="button" style={{ background: "var(--error)" }} onClick={apply} disabled={isApplying}>
               <i className={`ti ${isApplying ? "ti-loader-2 animate-spin" : "ti-alert-triangle"}`} />
-              {isApplying ? "Applying…" : `Yes, apply to ${selected.size} position${selected.size === 1 ? "" : "s"}`}
+              {isApplying ? t("Applying…") : selected.size === 1 ? t("Yes, apply to {count} position", { count: selected.size }) : t("Yes, apply to {count} positions", { count: selected.size })}
             </button>
           </>
         }
@@ -104,20 +106,18 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-[var(--error)] bg-[var(--error-c)] p-3 text-sm leading-6 text-[var(--on-bg)]">
           <i className="ti ti-alert-triangle mt-0.5 shrink-0 text-base text-[var(--error)]" />
           <p>
-            <strong>This replaces, not adds to, each position&apos;s current permissions.</strong> Any permission a
-            selected position already has that isn&apos;t part of &quot;{template.name}&quot; below will be removed.
-            This can&apos;t be undone automatically — you&apos;d have to re-set it manually afterward.
+            <strong>{t("This replaces, not adds to, each position's current permissions.")}</strong> {t("Any permission a selected position already has that isn't part of")} &quot;{template.name}&quot; {t("below will be removed. This can't be undone automatically — you'd have to re-set it manually afterward.")}
           </p>
         </div>
 
         <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.06em] text-[var(--on-variant)]">
-          &quot;{template.name}&quot; will give these positions
+          &quot;{template.name}&quot; {t("will give these positions")}
         </h4>
         <div className="mb-4 flex flex-wrap gap-2">
-          {template.can_manage_team && <span className="rounded-full bg-[var(--sec-c)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">Team manager</span>}
-          {template.can_manage_branch && <span className="rounded-full bg-[var(--sec-c)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">Branch-wide access</span>}
+          {template.can_manage_team && <span className="rounded-full bg-[var(--sec-c)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">{t("Team manager")}</span>}
+          {template.can_manage_branch && <span className="rounded-full bg-[var(--sec-c)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">{t("Branch-wide access")}</span>}
           {template.permission_codenames.length === 0 ? (
-            <span className="text-xs text-[var(--on-variant)]">No module permissions.</span>
+            <span className="text-xs text-[var(--on-variant)]">{t("No module permissions.")}</span>
           ) : (
             template.permission_codenames.map(codename => (
               <span key={codename} className="rounded-full bg-[var(--bg-low)] px-2.5 py-1 font-mono text-[11px] text-[var(--on-variant)]">{codename}</span>
@@ -126,13 +126,13 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
         </div>
 
         <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.06em] text-[var(--on-variant)]">
-          On these {selectedPositions.length} position{selectedPositions.length === 1 ? "" : "s"}
+          {selectedPositions.length === 1 ? t("On these {count} position", { count: selectedPositions.length }) : t("On these {count} positions", { count: selectedPositions.length })}
         </h4>
         <div className="rounded-xl border border-[var(--outline-v)]" style={{ maxHeight: 280, overflowY: "auto" }}>
           {selectedPositions.map(position => (
             <div key={position.id} className="border-b border-[var(--outline-v)] px-3 py-2.5 last:border-b-0">
               <span className="block truncate text-sm font-semibold text-[var(--on-bg)]">{position.title}</span>
-              <span className="block truncate text-xs text-[var(--on-variant)]">{position.org_unit_name} · {position.holder_name ?? "Vacant"}</span>
+              <span className="block truncate text-xs text-[var(--on-variant)]">{position.org_unit_name} · {position.holder_name ?? t("Vacant")}</span>
             </div>
           ))}
         </div>
@@ -144,16 +144,16 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
 
   return (
     <Modal
-      title={<>Apply <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{template.name}</span></>}
+      title={<>{t("Apply")} <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{template.name}</span></>}
       onClose={onClose}
       maxWidth={640}
       scrollBody
       footer={
         <>
-          <span className="mr-auto text-xs text-[var(--on-variant)]">{selected.size} position{selected.size === 1 ? "" : "s"} selected</span>
-          <button className="btn btn-ghost" type="button" onClick={onClose}>Cancel</button>
+          <span className="mr-auto text-xs text-[var(--on-variant)]">{selected.size === 1 ? t("{count} position selected", { count: selected.size }) : t("{count} positions selected", { count: selected.size })}</span>
+          <button className="btn btn-ghost" type="button" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" type="button" onClick={() => setStep("confirm")} disabled={selected.size === 0}>
-            Review & apply <i className="ti ti-arrow-right" />
+            {t("Review & apply")} <i className="ti ti-arrow-right" />
           </button>
         </>
       }
@@ -161,8 +161,7 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
       <div className="mb-3 flex items-start gap-2 rounded-xl border border-[var(--warn-c)] bg-[var(--warn-c)] p-3 text-xs leading-5 text-[var(--on-bg)]">
         <i className="ti ti-alert-triangle mt-0.5 shrink-0 text-base text-[var(--warn)]" />
         <p>
-          <strong>Heads up:</strong> applying this <strong>replaces</strong> each selected position&apos;s current permissions and scope
-          flags — it doesn&apos;t add on top of what they already have. You&apos;ll see exactly what changes before anything is saved.
+          <strong>{t("Heads up:")}</strong> {t("applying this")} <strong>{t("replaces")}</strong> {t("each selected position's current permissions and scope flags — it doesn't add on top of what they already have. You'll see exactly what changes before anything is saved.")}
         </p>
       </div>
 
@@ -173,22 +172,22 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
           type="search"
           value={search}
           onChange={event => setSearch(event.target.value)}
-          placeholder="Search positions, org units, or holder names"
-          aria-label="Search positions"
+          placeholder={t("Search positions, org units, or holder names")}
+          aria-label={t("Search positions")}
         />
       </label>
 
       {loadError && <div className="alert alert-error mb-3" role="alert"><i className="ti ti-alert-circle" />{loadError}</div>}
 
       {!positions && !loadError ? (
-        <p className="py-10 text-center text-sm text-[var(--on-variant)]"><i className="ti ti-loader-2 mr-2 animate-spin text-[var(--primary)]" />Loading positions…</p>
+        <p className="py-10 text-center text-sm text-[var(--on-variant)]"><i className="ti ti-loader-2 mr-2 animate-spin text-[var(--primary)]" />{t("Loading positions…")}</p>
       ) : filtered.length === 0 ? (
-        <p className="py-10 text-center text-sm text-[var(--on-variant)]">No positions match that search.</p>
+        <p className="py-10 text-center text-sm text-[var(--on-variant)]">{t("No positions match that search.")}</p>
       ) : (
         <div className="rounded-xl border border-[var(--outline-v)]">
           <label className="flex items-center gap-2 border-b border-[var(--outline-v)] bg-[var(--bg-low)] px-3 py-2 text-xs font-semibold text-[var(--on-variant)]">
             <input type="checkbox" className="h-4 w-4 accent-[var(--primary)]" checked={allFilteredSelected} onChange={selectAllFiltered} />
-            Select all {term ? "matching" : ""} positions ({filtered.length})
+            {term ? t("Select all matching positions ({count})", { count: filtered.length }) : t("Select all positions ({count})", { count: filtered.length })}
           </label>
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
             {filtered.map(position => (
@@ -202,7 +201,7 @@ export default function ApplyTemplateModal({ template, onClose, onApplied }: Pro
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-[var(--on-bg)]">{position.title}</span>
                   <span className="block truncate text-xs text-[var(--on-variant)]">
-                    {position.org_unit_name} · {position.holder_name ?? "Vacant"}
+                    {position.org_unit_name} · {position.holder_name ?? t("Vacant")}
                   </span>
                 </span>
               </label>

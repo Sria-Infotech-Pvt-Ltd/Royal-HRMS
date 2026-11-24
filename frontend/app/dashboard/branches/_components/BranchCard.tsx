@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { geofenceBadge, type Branch } from "./_data";
 
 interface Props {
@@ -10,6 +11,9 @@ interface Props {
 }
 
 export default function BranchCard({ branch, canEdit, onEdit, onDelete }: Props) {
+  const t = useT();
+  // The server sends the status as a lower-case code; show it in the person's language.
+  const statusLabel = branch.status === "active" ? t("Active") : branch.status === "inactive" ? t("Inactive") : branch.status.charAt(0).toUpperCase() + branch.status.slice(1);
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="card-body" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -26,12 +30,12 @@ export default function BranchCard({ branch, canEdit, onEdit, onDelete }: Props)
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
             {branch.is_headquarter && (
               <span className="badge" style={{ background: "var(--bg-high)", color: "var(--on-variant)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", padding: "4px 8px" }}>
-                <i className="ti ti-star-filled" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> HEADQUARTER
+                <i className="ti ti-star-filled" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> {t("HEADQUARTER")}
               </span>
             )}
             {branch.is_metro && (
               <span className="badge" style={{ background: "var(--bg-high)", color: "var(--on-variant)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", padding: "4px 8px" }}>
-                <i className="ti ti-map-pin" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> METRO
+                <i className="ti ti-map-pin" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> {t("METRO")}
               </span>
             )}
           </div>
@@ -50,29 +54,29 @@ export default function BranchCard({ branch, canEdit, onEdit, onDelete }: Props)
 
         <div style={{ display: "flex", gap: "16px", padding: "12px 16px", background: "var(--bg-low)", borderRadius: "var(--radius)", marginBottom: "16px" }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Employees</div>
+            <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>{t("Employees")}</div>
             <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--on-bg)" }}>{branch.employees_count}</div>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Status</div>
+            <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>{t("Status")}</div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 500, color: branch.status === "active" ? "var(--success)" : "var(--on-variant)" }}>
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: branch.status === "active" ? "var(--success)" : "var(--outline)" }} />
-              {branch.status.charAt(0).toUpperCase() + branch.status.slice(1)}
+              {statusLabel}
             </div>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Geofencing</div>
+            <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>{t("Geofencing")}</div>
             <span className={`badge ${geofenceBadge(branch).cls}`}>{geofenceBadge(branch).label}</span>
             {!!branch.location_warnings?.length && (
               <div style={{ marginTop: "4px" }}>
                 <span className="badge badge-warn" title={branch.location_warnings.join(" ")}>
-                  <i className="ti ti-alert-triangle" /> Check location
+                  <i className="ti ti-alert-triangle" /> {t("Check location")}
                 </span>
               </div>
             )}
             {branch.geofencing_enabled && branch.has_coordinates && (
               <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "4px" }}>
-                {branch.allowed_radius_meters} m radius<br />
+                {t("{radius} m radius", { radius: branch.allowed_radius_meters ?? "" })}<br />
                 {branch.latitude}, {branch.longitude}
               </div>
             )}
@@ -86,14 +90,14 @@ export default function BranchCard({ branch, canEdit, onEdit, onDelete }: Props)
               style={{ flex: 1, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
               onClick={() => onEdit(branch)}
             >
-              <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> Edit
+              <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> {t("Edit")}
             </button>
             <button
               className="btn btn-ghost"
               style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
               onClick={() => onDelete(branch)}
-              title={`Delete ${branch.branch_name}`}
-              aria-label={`Delete ${branch.branch_name}`}
+              title={t("Delete {name}", { name: branch.branch_name })}
+              aria-label={t("Delete {name}", { name: branch.branch_name })}
             >
               <i className="ti ti-trash" style={{ fontSize: "16px" }} />
             </button>

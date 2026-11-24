@@ -1,6 +1,7 @@
 // Pure helpers for the weekly timesheet screens: hour parsing, totals, week dates, status labels, and turning the grid
 // back into the save request. No React and no network, so every rule here is unit-tested on its own.
 
+import { tr } from "@/lib/i18n/tr";
 import type { StatusPillTone } from "@/components/employees/StatusPill";
 import type {
   GridLine, TimesheetDay, TimesheetLine, TimesheetSavePayload, TimesheetStatus, WeeklyTimesheetSummary,
@@ -173,15 +174,15 @@ export interface CardState {
 /** What the Home and Attendance cards say about this week, from the real timesheet's state (and the old tick-box). */
 export function timesheetCardState(summary: WeeklyTimesheetSummary, dueDay: string): CardState {
   const status = summary.timesheet_status;
-  if (status === "approved") return { subtitle: "Approved. This week is locked.", badge: "APPROVED", badgeClass: "badge-success", isDone: true };
-  if (status === "submitted") return { subtitle: "Submitted. Waiting for approval.", badge: "SUBMITTED", badgeClass: "badge-success", isDone: true };
-  if (status === "returned") return { subtitle: "Sent back by your approver. Fix the hours and resubmit.", badge: "RETURNED", badgeClass: "badge-error", isDone: false };
-  if (summary.submitted) return { subtitle: "Submitted. Thank you.", badge: "SUBMITTED", badgeClass: "badge-success", isDone: true };
+  if (status === "approved") return { subtitle: tr("Approved. This week is locked."), badge: tr("APPROVED"), badgeClass: "badge-success", isDone: true };
+  if (status === "submitted") return { subtitle: tr("Submitted. Waiting for approval."), badge: tr("SUBMITTED"), badgeClass: "badge-success", isDone: true };
+  if (status === "returned") return { subtitle: tr("Sent back by your approver. Fix the hours and resubmit."), badge: tr("RETURNED"), badgeClass: "badge-error", isDone: false };
+  if (summary.submitted) return { subtitle: tr("Submitted. Thank you."), badge: tr("SUBMITTED"), badgeClass: "badge-success", isDone: true };
   const remaining = Math.max(0, summary.target_hours - summary.hours_logged);
   const subtitle = remaining > 0
-    ? `${remaining} hour${remaining === 1 ? "" : "s"} remaining. Enter your hours per project, then submit.`
-    : "Target reached. Ready to submit.";
-  return { subtitle, badge: `DUE ${dueDay}`, badgeClass: "badge-warn", isDone: false };
+    ? (remaining === 1 ? tr("{count} hour remaining. Enter your hours per project, then submit.", { count: remaining }) : tr("{count} hours remaining. Enter your hours per project, then submit.", { count: remaining }))
+    : tr("Target reached. Ready to submit.");
+  return { subtitle, badge: tr("DUE {day}", { day: dueDay }), badgeClass: "badge-warn", isDone: false };
 }
 
 /** A short chip for days that are not ordinary working days; null for a normal day. */

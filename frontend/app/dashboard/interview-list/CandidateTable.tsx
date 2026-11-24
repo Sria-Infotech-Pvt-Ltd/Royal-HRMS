@@ -3,6 +3,7 @@
 import { Branch, Candidate, CandidateStatus } from "./_data";
 import { interviewSummary, needsDetails } from "./_filters";
 import { Avatar, StatusBadge, StatusDropdown } from "./_pageHelpers";
+import { useT } from "@/hooks/useI18n";
 
 interface CandidateTableProps {
   candidates: Candidate[];
@@ -31,15 +32,16 @@ export default function CandidateTable({
   canEditRec, sendingPortal, page, totalPages, onPageChange,
   onOpenLogs, onEdit, onStatusChanged, onMarkRequest, onSendPortalLogin, onOpenFeedback,
 }: CandidateTableProps) {
+  const t = useT();
   return (
     <div className="card">
       <div className="card-header">
         <span className="card-title">
           <i className="ti ti-users" />
-          {activeBranch ? `${activeBranch.branch_name} Candidates` : "All Candidates"} ({totalCount})
+          {activeBranch ? t("{branch} Candidates", { branch: activeBranch.branch_name }) : t("All Candidates")} ({totalCount})
         </span>
-        <span className="cand-hint" title="Move candidates through the stages. Selected candidates receive the nine-step self-service onboarding wizard; direct hires use the HR hiring form and skip it.">
-          <i className="ti ti-info-circle" aria-hidden="true" /> How the pipeline works
+        <span className="cand-hint" title={t("Move candidates through the stages. Selected candidates receive the nine-step self-service onboarding wizard; direct hires use the HR hiring form and skip it.")}>
+          <i className="ti ti-info-circle" aria-hidden="true" /> {t("How the pipeline works")}
         </span>
       </div>
 
@@ -51,7 +53,7 @@ export default function CandidateTable({
 
       <div className="table-wrap">
         {loading ? (
-          <div className="cand-skeleton" role="status" aria-label="Loading candidates">
+          <div className="cand-skeleton" role="status" aria-label={t("Loading candidates")}>
             {[0, 1, 2, 3, 4].map(row => (
               <div key={row} className="cand-skeleton-row">
                 <span className="cand-skeleton-dot" /><span className="cand-skeleton-bar" /><span className="cand-skeleton-bar short" />
@@ -62,16 +64,16 @@ export default function CandidateTable({
           <div className="empty-state cand-empty">
             <i className={`ti ${hasFilters ? "ti-search-off" : "ti-users"}`} />
             <h3>
-              {hasFilters ? "No candidates match your filters"
-                : activeBranch ? `No candidates in ${activeBranch.branch_name}` : "No candidates yet"}
+              {hasFilters ? t("No candidates match your filters")
+                : activeBranch ? t("No candidates in {branch}", { branch: activeBranch.branch_name }) : t("No candidates yet")}
             </h3>
             <p>
-              {hasFilters ? "Try a different search or stage, or clear the filters to see everyone."
-                : "Add a candidate or bulk-import a sheet to start building your pipeline."}
+              {hasFilters ? t("Try a different search or stage, or clear the filters to see everyone.")
+                : t("Add a candidate or bulk-import a sheet to start building your pipeline.")}
             </p>
             {hasFilters && (
               <button type="button" className="btn btn-ghost" onClick={onClearFilters}>
-                <i className="ti ti-filter-off" /> Clear filters
+                <i className="ti ti-filter-off" /> {t("Clear filters")}
               </button>
             )}
           </div>
@@ -79,8 +81,8 @@ export default function CandidateTable({
           <table>
             <thead>
               <tr>
-                <th>Candidate</th><th>Position</th><th>Company Code</th>
-                <th>Interview</th><th>Status</th><th>Actions</th>
+                <th>{t("Candidate")}</th><th>{t("Position")}</th><th>{t("Company Code")}</th>
+                <th>{t("Interview")}</th><th>{t("Status")}</th><th>{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -95,7 +97,7 @@ export default function CandidateTable({
                         {c.referral_by !== null && (
                           <div style={{ fontSize: 11, color: "var(--brand)", display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
                             <i className="ti ti-user-plus" style={{ fontSize: 10 }} />
-                            Referred by {c.referral_by_name || "Employee"}
+                            {t("Referred by {name}", { name: c.referral_by_name || t("Employee") })}
                           </div>
                         )}
                       </div>
@@ -116,18 +118,18 @@ export default function CandidateTable({
                           <span>{summary.mode}{summary.interviewer ? ` · ${summary.interviewer}` : ""}</span>
                         </div>
                       ) : (
-                        <div className="cand-interview"><span>Not scheduled</span><span>{summary.mode}</span></div>
+                        <div className="cand-interview"><span>{t("Not scheduled")}</span><span>{summary.mode}</span></div>
                       );
                     })()}
                   </td>
                   <td><StatusBadge status={c.status} /></td>
                   <td>
                     <div className="cand-actions">
-                      <button className="btn btn-ghost btn-sm cand-icon-btn" title="Activity log" aria-label={`Activity log for ${c.name}`} onClick={() => onOpenLogs(c)}>
+                      <button className="btn btn-ghost btn-sm cand-icon-btn" title={t("Activity log")} aria-label={t("Activity log for {name}", { name: c.name })} onClick={() => onOpenLogs(c)}>
                         <i className="ti ti-history" />
                       </button>
 
-                      <button className="btn btn-ghost btn-sm cand-icon-btn" title="Interview feedback" aria-label={`Interview feedback for ${c.name}`} onClick={() => onOpenFeedback(c)}>
+                      <button className="btn btn-ghost btn-sm cand-icon-btn" title={t("Interview feedback")} aria-label={t("Interview feedback for {name}", { name: c.name })} onClick={() => onOpenFeedback(c)}>
                         <i className="ti ti-message-2-star" />
                       </button>
 
@@ -136,7 +138,7 @@ export default function CandidateTable({
                         <button className="btn btn-ghost btn-sm" onClick={() => onEdit(c)} suppressHydrationWarning
                           style={needsDetails(c) ? { color: "var(--warn)" } : undefined}>
                           <i className="ti ti-pencil" />
-                          {needsDetails(c) ? " Set Details" : " Edit"}
+                          {" "}{needsDetails(c) ? t("Set Details") : t("Edit")}
                         </button>
                       )}
 
@@ -160,8 +162,8 @@ export default function CandidateTable({
                           suppressHydrationWarning
                         >
                           {sendingPortal === c.id
-                            ? <><i className="ti ti-loader-2 animate-spin" /> Sending…</>
-                            : <><i className="ti ti-send" /> Send Onboarding Link</>
+                            ? <><i className="ti ti-loader-2 animate-spin" /> {t("Sending…")}</>
+                            : <><i className="ti ti-send" /> {t("Send Onboarding Link")}</>
                           }
                         </button>
                       )}
@@ -169,14 +171,14 @@ export default function CandidateTable({
                       {/* Offer sent: portal credentials already sent */}
                       {c.status === "offer_sent" && (
                         <span className="badge badge-success" style={{ fontSize: ".75rem" }}>
-                          <i className="ti ti-mail-check" /> Link Sent
+                          <i className="ti ti-mail-check" /> {t("Link Sent")}
                         </span>
                       )}
 
                       {/* Converted to employee */}
                       {c.status === "converted" && (
                         <span className="badge badge-neutral" style={{ fontSize: ".75rem" }}>
-                          <i className="ti ti-user-check" /> Employee
+                          <i className="ti ti-user-check" /> {t("Employee")}
                         </span>
                       )}
                     </div>
@@ -192,7 +194,7 @@ export default function CandidateTable({
       {totalPages > 1 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderTop: "1px solid var(--outline-v)" }}>
           <span style={{ fontSize: 13, color: "var(--on-variant)" }}>
-            Page {page} of {totalPages} · {totalCount} total
+            {t("Page {page} of {totalPages} · {totalCount} total", { page, totalPages, totalCount })}
           </span>
           <div style={{ display: "flex", gap: 6 }}>
             <button
@@ -201,7 +203,7 @@ export default function CandidateTable({
               disabled={page <= 1 || loading}
               suppressHydrationWarning
             >
-              <i className="ti ti-chevron-left" /> Prev
+              <i className="ti ti-chevron-left" /> {t("Prev")}
             </button>
             {(() => {
               const delta = 1;
@@ -235,7 +237,7 @@ export default function CandidateTable({
               disabled={page >= totalPages || loading}
               suppressHydrationWarning
             >
-              Next <i className="ti ti-chevron-right" />
+              {t("Next")} <i className="ti ti-chevron-right" />
             </button>
           </div>
         </div>

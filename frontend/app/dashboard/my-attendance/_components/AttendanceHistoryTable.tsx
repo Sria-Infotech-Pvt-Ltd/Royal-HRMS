@@ -74,7 +74,7 @@ export default function AttendanceHistoryTable({ data, onRegularize, readOnly = 
                   <td>
                     {STATUS_BADGE[row.status] && (
                       <span className={STATUS_BADGE[row.status]}>
-                        {STATUS_LABEL[row.status] ?? row.status}
+                        {tr(STATUS_LABEL[row.status] ?? row.status)}
                       </span>
                     )}
                   </td>

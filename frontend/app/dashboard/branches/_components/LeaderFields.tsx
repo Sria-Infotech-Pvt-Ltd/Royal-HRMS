@@ -1,6 +1,7 @@
 "use client";
 
 import SearchableSelect from "@/components/SearchableSelect";
+import { useT } from "@/hooks/useI18n";
 import type { ApiEmployeeOption, BranchAdminSeat, CurrentBranchAdmin, LeaderForm } from "./_data";
 
 export default function LeaderFields({
@@ -16,6 +17,7 @@ export default function LeaderFields({
   /** Edit only: who is the admin right now, shown above the fields. */
   currentAdmin?: CurrentBranchAdmin | null;
 }) {
+  const t = useT();
   function set<K extends keyof LeaderForm>(k: K, v: LeaderForm[K]) {
     setForm(f => ({ ...f, [k]: v }));
   }
@@ -34,7 +36,7 @@ export default function LeaderFields({
         <div className="alert alert-success mb-16" style={{ alignItems: "flex-start" }}>
           <i className="ti ti-user-shield" />
           <div style={{ fontSize: 13 }}>
-            <div><b>Current admin:</b> {currentAdmin.employee.full_name} ({currentAdmin.employee.employee_id})</div>
+            <div><b>{t("Current admin:")}</b> {currentAdmin.employee.full_name} ({currentAdmin.employee.employee_id})</div>
             <div>{currentAdmin.employee.email} · {currentAdmin.positionTitle}</div>
           </div>
         </div>
@@ -48,7 +50,7 @@ export default function LeaderFields({
               checked={form.mode === "existing"}
               onChange={e => set("mode", e.target.checked ? "existing" : "new")}
             />
-            <span>Assign an existing employee instead</span>
+            <span>{t("Assign an existing employee instead")}</span>
           </label>
         )}
       </div>
@@ -60,7 +62,7 @@ export default function LeaderFields({
             className="field-input"
             value={form.search}
             onChange={e => set("search", e.target.value)}
-            placeholder="Search by name, email, or employee ID…"
+            placeholder={t("Search by name, email, or employee ID…")}
             style={{ marginBottom: "8px" }}
           />
           <select
@@ -68,10 +70,10 @@ export default function LeaderFields({
             value={form.employeeId}
             onChange={e => set("employeeId", e.target.value)}
           >
-            <option value="">— Select employee —</option>
+            <option value="">{t("— Select employee —")}</option>
             {filtered.map(e => (
               <option key={e.id} value={e.id}>
-                {e.full_name} ({e.employee_id}) — {e.branch || "no branch"}
+                {e.full_name} ({e.employee_id}) — {e.branch || t("no branch")}
               </option>
             ))}
           </select>
@@ -85,7 +87,7 @@ export default function LeaderFields({
               className={`field-input${errors[`${prefix}Name`] ? " field-error" : ""}`}
               value={form.name}
               onChange={e => set("name", e.target.value)}
-              placeholder="Full name"
+              placeholder={t("Full name")}
             />
             {errors[`${prefix}Name`] && <p className="field-error-msg">{errors[`${prefix}Name`]}</p>}
           </div>
@@ -95,7 +97,7 @@ export default function LeaderFields({
               className={`field-input${errors[`${prefix}Email`] ? " field-error" : ""}`}
               value={form.email}
               onChange={e => set("email", e.target.value)}
-              placeholder="Work email"
+              placeholder={t("Work email")}
             />
             {errors[`${prefix}Email`] && <p className="field-error-msg">{errors[`${prefix}Email`]}</p>}
           </div>
@@ -108,14 +110,13 @@ export default function LeaderFields({
           inputClassName="field-input"
           value={form.positionId}
           onChange={v => set("positionId", v)}
-          placeholder={seats.length ? "— Position with branch-wide access —" : "No position with branch-wide access yet"}
-          options={seats.map(s => ({ value: s.id, label: `${s.title} — ${s.org_unit_name}${s.holder_name ? ` (held by ${s.holder_name})` : ""}` }))}
+          placeholder={seats.length ? t("— Position with branch-wide access —") : t("No position with branch-wide access yet")}
+          options={seats.map(s => ({ value: s.id, label: `${s.title} — ${s.org_unit_name}${s.holder_name ? ` ${t("(held by {name})", { name: s.holder_name })}` : ""}` }))}
         />
         {!seats.length && (
           <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "4px" }}>
             <i className="ti ti-info-circle" style={{ marginRight: "4px" }} />
-            No vacant position with branch-wide access. In Org Chart, add a position (or pick a vacant one), open its
-            Permissions and turn on &ldquo;Branch-wide access&rdquo;, then come back — or leave this section blank and save.
+            {t("No vacant position with branch-wide access. In Org Chart, add a position (or pick a vacant one), open its Permissions and turn on “Branch-wide access”, then come back — or leave this section blank and save.")}
           </div>
         )}
         {errors[`${prefix}Position`] && <p className="field-error-msg">{errors[`${prefix}Position`]}</p>}

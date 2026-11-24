@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { useToast } from "@/components/ToastProvider";
+import { useT } from "@/hooks/useI18n";
 import { useApiErrors } from "@/hooks/useApiErrors";
 import ConfirmModal from "@/components/ConfirmModal";
 import FieldError from "@/components/shared/FieldError";
@@ -34,6 +35,7 @@ const MANUAL_FIELDS: { key: keyof SettlementItem; label: string; addsToNet: bool
 ];
 
 export default function SettlementSection({ r }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const { data: settlement, loading, refetch } = useFetch<SettlementItem>(API.separation.settlement(r.id));
 
@@ -73,12 +75,12 @@ export default function SettlementSection({ r }: Props) {
     clearAll();
     try {
       await clientApi.patch(API.separation.settlement(r.id), { ...form, is_recovery: isRecovery });
-      showToast("Settlement updated.", "success");
+      showToast(t("Settlement updated."), "success");
       setEditing(false);
       refetch();
     } catch (err: unknown) {
       // Stay in edit mode: the person fixes the field the message points at and saves again.
-      handleError(err, "Failed to update the settlement.");
+      handleError(err, t("Failed to update the settlement."));
     } finally {
       setSaving(false);
     }
@@ -90,10 +92,10 @@ export default function SettlementSection({ r }: Props) {
     clearAll();
     try {
       await clientApi.post(API.separation.settlementFinalize(r.id), {});
-      showToast("Settlement finalized.", "success");
+      showToast(t("Settlement finalized."), "success");
       refetch();
     } catch (err: unknown) {
-      handleError(err, "Failed to finalize the settlement.");
+      handleError(err, t("Failed to finalize the settlement."));
     } finally {
       setFinalizing(false);
     }
@@ -102,8 +104,8 @@ export default function SettlementSection({ r }: Props) {
   if (loading) {
     return (
       <div className="card mb-16">
-        <div className="card-header"><span className="card-title"><i className="ti ti-cash" /> Full &amp; Final Settlement</span></div>
-        <div className="card-body"><p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}><i className="ti ti-loader-2 spin" /> Loading…</p></div>
+        <div className="card-header"><span className="card-title"><i className="ti ti-cash" /> {t("Full & Final Settlement")}</span></div>
+        <div className="card-body"><p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}><i className="ti ti-loader-2 spin" /> {t("Loading…")}</p></div>
       </div>
     );
   }
@@ -112,7 +114,7 @@ export default function SettlementSection({ r }: Props) {
   return (
     <div className="card mb-16">
       <div className="card-header">
-        <span className="card-title"><i className="ti ti-cash" /> Full &amp; Final Settlement</span>
+        <span className="card-title"><i className="ti ti-cash" /> {t("Full & Final Settlement")}</span>
         <span className={`badge ${settlement.status === "finalized" ? "badge-success" : "badge-warn"}`}>
           {settlement.status_display}
         </span>
@@ -120,25 +122,23 @@ export default function SettlementSection({ r }: Props) {
       <div className="card-body">
         {formError && <div className="alert alert-error" style={{ marginBottom: 12 }}><i className="ti ti-alert-circle" /> {formError}</div>}
         <p style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 0, marginBottom: 16 }}>
-          Pro-rated salary, leave encashment, and notice-period shortfall are computed automatically
-          (CTC ÷ 30, Earned Leave balance) — a starting estimate to review, not a final figure.
-          Gratuity, bonus, reimbursements, advances, and TDS are always entered by hand.
+          {t("Pro-rated salary, leave encashment, and notice-period shortfall are computed automatically (CTC ÷ 30, Earned Leave balance) — a starting estimate to review, not a final figure. Gratuity, bonus, reimbursements, advances, and TDS are always entered by hand.")}
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 8 }}>
-          <Stat label="Pro-rata Salary" value={INR(settlement.pro_rata_salary)} />
+          <Stat label={t("Pro-rata Salary")} value={INR(settlement.pro_rata_salary)} />
           <Stat
-            label="Leave Encashment"
+            label={t("Leave Encashment")}
             value={INR(settlement.leave_encashment_amount)}
-            sub={`${settlement.leave_encashment_days} earned leave day(s)`}
+            sub={t("{count} earned leave day(s)", { count: settlement.leave_encashment_days })}
           />
           <Stat
-            label="Notice Period Recovery"
+            label={t("Notice Period Recovery")}
             value={`− ${INR(settlement.notice_period_recovery_amount)}`}
             sub={
               settlement.notice_period_shortfall_days > 0
-                ? `${settlement.notice_period_served_days}/${settlement.notice_period_required_days} days served — ${settlement.notice_period_shortfall_days} day shortfall`
-                : `Full ${settlement.notice_period_required_days}-day notice served`
+                ? t("{served}/{required} days served — {short} day shortfall", { served: settlement.notice_period_served_days, required: settlement.notice_period_required_days, short: settlement.notice_period_shortfall_days })
+                : t("Full {required}-day notice served", { required: settlement.notice_period_required_days })
             }
             warn={settlement.notice_period_shortfall_days > 0}
           />
@@ -148,9 +148,7 @@ export default function SettlementSection({ r }: Props) {
           <div className="alert alert-warning" role="status" style={{ marginBottom: 12 }}>
             <i className="ti ti-alert-triangle" />
             <div>
-              <b>Notice period shortfall:</b> {settlement.notice_period_served_days} of {settlement.notice_period_required_days} days served
-              ({settlement.notice_period_shortfall_days} short). A recovery of {INR(settlement.notice_period_recovery_amount)} has been calculated.
-              Confirm with HR or finance whether this recovery applies before finalising.
+              <b>{t("Notice period shortfall:")}</b> {t("{served} of {required} days served ({short} short). A recovery of {amount} has been calculated. Confirm with HR or finance whether this recovery applies before finalising.", { served: settlement.notice_period_served_days, required: settlement.notice_period_required_days, short: settlement.notice_period_shortfall_days, amount: INR(settlement.notice_period_recovery_amount) })}
             </div>
           </div>
         )}
@@ -161,14 +159,14 @@ export default function SettlementSection({ r }: Props) {
               {MANUAL_FIELDS.map(f => (
                 <Stat
                   key={f.key}
-                  label={f.label}
+                  label={t(f.label)}
                   value={`${f.addsToNet ? "+" : "−"} ${INR(settlement[f.key] as string)}`}
                 />
               ))}
             </div>
             {Number(settlement.other_adjustment_amount) !== 0 && (
               <p style={{ fontSize: 13, marginBottom: 16 }}>
-                Other Adjustment: {INR(settlement.other_adjustment_amount)}
+                {t("Other Adjustment: {amount}", { amount: INR(settlement.other_adjustment_amount) })}
                 {settlement.other_adjustment_note && ` — ${settlement.other_adjustment_note}`}
               </p>
             )}
@@ -176,29 +174,29 @@ export default function SettlementSection({ r }: Props) {
             <div style={{ borderTop: "1px solid var(--outline-v)", paddingTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--on-variant)" }}>
-                  {settlement.is_recovery ? "Net Recoverable from Employee" : "Net Payable"}
+                  {settlement.is_recovery ? t("Net Recoverable from Employee") : t("Net Payable")}
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: settlement.is_recovery ? "var(--error)" : undefined }}>
                   {INR(settlement.net_payable_amount)}
                 </div>
                 {settlement.is_recovery && (
                   <div style={{ fontSize: 11, color: "var(--error)", marginTop: 2 }}>
-                    Deductions exceed earnings — this amount is owed back by the employee, not paid to them.
+                    {t("Deductions exceed earnings — this amount is owed back by the employee, not paid to them.")}
                   </div>
                 )}
               </div>
               {settlement.status === "finalized" ? (
                 <div style={{ fontSize: 12, color: "var(--on-variant)", textAlign: "right" }}>
-                  Finalized by {settlement.finalized_by_name}
+                  {t("Finalized by {name}", { name: settlement.finalized_by_name })}
                   {settlement.finalized_at && <><br />{fmtDateTime(settlement.finalized_at)}</>}
                 </div>
               ) : settlement.can_edit && (
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="btn btn-ghost btn-sm" onClick={startEdit} suppressHydrationWarning>
-                    <i className="ti ti-edit" /> Edit
+                    <i className="ti ti-edit" /> {t("Edit")}
                   </button>
                   <button className="btn btn-success btn-sm" onClick={() => setConfirmFinalize(true)} disabled={finalizing} suppressHydrationWarning>
-                    {finalizing ? "Finalizing…" : <><i className="ti ti-check" /> Finalize</>}
+                    {finalizing ? t("Finalizing…") : <><i className="ti ti-check" /> {t("Finalize")}</>}
                   </button>
                 </div>
               )}
@@ -209,7 +207,7 @@ export default function SettlementSection({ r }: Props) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
               {MANUAL_FIELDS.map(f => (
                 <div className="field-group" key={f.key}>
-                  <label className="field-label">{f.label}</label>
+                  <label className="field-label">{t(f.label)}</label>
                   <input
                     className={`field-input${fieldErrors[f.key] ? " field-error" : ""}`} type="number" min="0"
                     value={form[f.key] ?? ""}
@@ -220,7 +218,7 @@ export default function SettlementSection({ r }: Props) {
               ))}
             </div>
             <div className="field-group">
-              <label className="field-label">Other Adjustment (+/−)</label>
+              <label className="field-label">{t("Other Adjustment (+/−)")}</label>
               <input
                 className={`field-input${fieldErrors.other_adjustment_amount ? " field-error" : ""}`} type="number"
                 value={form.other_adjustment_amount ?? ""}
@@ -229,9 +227,9 @@ export default function SettlementSection({ r }: Props) {
               <FieldError message={fieldErrors.other_adjustment_amount} />
             </div>
             <div className="field-group">
-              <label className="field-label">Other Adjustment Note</label>
+              <label className="field-label">{t("Other Adjustment Note")}</label>
               <input
-                className={`field-input${fieldErrors.other_adjustment_note ? " field-error" : ""}`} placeholder="What this adjustment is for"
+                className={`field-input${fieldErrors.other_adjustment_note ? " field-error" : ""}`} placeholder={t("What this adjustment is for")}
                 value={form.other_adjustment_note ?? ""}
                 onChange={e => setFormField("other_adjustment_note", e.target.value)}
               />
@@ -240,16 +238,16 @@ export default function SettlementSection({ r }: Props) {
             <div className="field-group">
               <label className="module-check">
                 <input type="checkbox" checked={isRecovery} onChange={e => { setIsRecovery(e.target.checked); clearField("is_recovery"); }} />
-                <span>This is a recovery — the employee owes the company (net payable may be negative)</span>
+                <span>{t("This is a recovery — the employee owes the company (net payable may be negative)")}</span>
               </label>
               <FieldError message={fieldErrors.is_recovery} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)} disabled={saving} suppressHydrationWarning>
-                Cancel
+                {t("Cancel")}
               </button>
               <button className="btn btn-filled btn-sm" onClick={save} disabled={saving} suppressHydrationWarning>
-                {saving ? "Saving…" : "Save"}
+                {saving ? t("Saving…") : t("Save")}
               </button>
             </div>
           </div>
@@ -258,9 +256,11 @@ export default function SettlementSection({ r }: Props) {
 
       {confirmFinalize && (
         <ConfirmModal
-          title="Finalize this settlement?"
-          body={`This locks the full & final settlement at a net ${settlement.is_recovery ? "recoverable from the employee" : "payable"} of ${INR(settlement.net_payable_amount)}. Once finalized, no field on this settlement — gratuity, bonus, reimbursements, advances, TDS, or adjustments — can be edited again. This cannot be undone.`}
-          confirmLabel="Finalize"
+          title={t("Finalize this settlement?")}
+          body={settlement.is_recovery
+            ? t("This locks the full & final settlement at a net recoverable from the employee of {amount}. Once finalized, no field on this settlement — gratuity, bonus, reimbursements, advances, TDS, or adjustments — can be edited again. This cannot be undone.", { amount: INR(settlement.net_payable_amount) })
+            : t("This locks the full & final settlement at a net payable of {amount}. Once finalized, no field on this settlement — gratuity, bonus, reimbursements, advances, TDS, or adjustments — can be edited again. This cannot be undone.", { amount: INR(settlement.net_payable_amount) })}
+          confirmLabel={t("Finalize")}
           danger
           saving={finalizing}
           onConfirm={finalize}

@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import type { PaginatedResponse } from "@/app/dashboard/leave/_data";
 import { WFH_STATUS_LABELS, type WorkFromHomeRequest } from "@/types/workFromHome";
+import { useT } from "@/hooks/useI18n";
 import { formatDate } from "@/lib/formatDate";
 
 const STATUS_BADGE: Record<WorkFromHomeRequest["status"], string> = {
@@ -23,6 +24,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }) {
+  const t = useT();
   const { showToast } = useToast();
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const { data, loading, error, refetch } = useFetch<PaginatedResponse<WorkFromHomeRequest>>(
@@ -43,7 +45,7 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
       refetch();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to cancel request.", "error");
+      showToast(msg || t("Failed to cancel request."), "error");
     } finally {
       setCancellingId(null);
     }
@@ -53,7 +55,7 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
     return (
       <div className="flex items-center justify-center py-20 gap-2 text-[13px] text-[var(--on-variant)]">
         <i className="ti ti-loader-2 animate-spin text-[22px]" style={{ color: "var(--primary)" }} />
-        Loading your requests…
+        {t("Loading your requests…")}
       </div>
     );
   }
@@ -63,7 +65,7 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
       <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] p-10 text-center">
         <p className="text-sm text-[var(--on-variant)] mb-4">{error}</p>
         <button onClick={refetch} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "var(--primary)" }}>
-          Try again
+          {t("Try again")}
         </button>
       </div>
     );
@@ -73,7 +75,7 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
     return (
       <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] p-12 text-center">
         <i className="ti ti-home-2 text-4xl text-[var(--outline)] block mb-3" />
-        <p className="text-sm text-[var(--on-variant)]">You haven&apos;t submitted any work-from-home requests yet.</p>
+        <p className="text-sm text-[var(--on-variant)]">{t("You haven't submitted any work-from-home requests yet.")}</p>
       </div>
     );
   }
@@ -87,14 +89,14 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
               <span className="text-sm font-semibold text-[var(--on-bg)]">
                 {fmtDate(req.start_date)} → {fmtDate(req.end_date)}
               </span>
-              <span className={`badge ${STATUS_BADGE[req.status]}`}>{WFH_STATUS_LABELS[req.status]}</span>
+              <span className={`badge ${STATUS_BADGE[req.status]}`}>{t(WFH_STATUS_LABELS[req.status])}</span>
             </div>
             {req.location_label && <div className="text-xs text-[var(--on-variant)]">{req.location_label}</div>}
             {req.reason && <div className="text-xs text-[var(--on-variant)] mt-1">{req.reason}</div>}
           </div>
           <div className="text-xs text-[var(--on-variant)] text-right min-w-[160px]">
-            {req.l1_approver_name && <div>L1: {req.l1_approver_name}{req.l1_status ? ` (${req.l1_status})` : ""}</div>}
-            {req.l2_approver_name && <div>L2: {req.l2_approver_name}{req.l2_status ? ` (${req.l2_status})` : ""}</div>}
+            {req.l1_approver_name && <div>{t("L1:")} {req.l1_approver_name}{req.l1_status ? ` (${req.l1_status})` : ""}</div>}
+            {req.l2_approver_name && <div>{t("L2:")} {req.l2_approver_name}{req.l2_status ? ` (${req.l2_status})` : ""}</div>}
           </div>
           {req.can_cancel && (
             <button
@@ -103,7 +105,7 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
               suppressHydrationWarning
               className="px-3.5 py-2 rounded-lg text-xs font-semibold border border-[var(--outline-v)] text-[var(--on-variant)] hover:bg-[var(--bg-low)] disabled:opacity-60"
             >
-              {cancellingId === req.id ? "Cancelling…" : "Cancel"}
+              {cancellingId === req.id ? t("Cancelling…") : t("Cancel")}
             </button>
           )}
         </div>

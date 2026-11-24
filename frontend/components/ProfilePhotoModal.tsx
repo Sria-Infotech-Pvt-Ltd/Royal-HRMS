@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { useProfilePhotoCapture } from "@/hooks/useProfilePhotoCapture";
 import { useProfilePhotoUpload } from "@/hooks/useProfilePhotoUpload";
 import FaceStatusPanel from "@/components/FaceStatusPanel";
+import { useT } from "@/hooks/useI18n";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png"];
 const ACCEPT_ATTR     = ".jpg,.jpeg,.png,image/jpeg,image/png";
@@ -25,6 +26,7 @@ interface ProfilePhotoModalProps {
 type Mode = "choose" | "device" | "camera";
 
 export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhoto, onRemoved }: ProfilePhotoModalProps) {
+  const t = useT();
   const [mode, setMode]                 = useState<Mode>("choose");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl]     = useState<string | null>(null);
@@ -84,13 +86,13 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
     // The <input> has no `multiple` attribute so the browser only ever offers
     // one, but a defensive check costs nothing and covers pasted/dropped lists.
     if (files.length > 1) {
-      setValidationError("Please select only one photo.");
+      setValidationError(t("Please select only one photo."));
       input.value = "";
       return;
     }
     const file = files[0];
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      setValidationError("Only JPG, JPEG, and PNG files are allowed.");
+      setValidationError(t("Only JPG, JPEG, and PNG files are allowed."));
       input.value = "";
       return;
     }
@@ -136,13 +138,13 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
         <div className="flex items-center justify-between px-5 py-3.5 flex-shrink-0" style={{ background: "var(--primary)" }}>
           <div className="flex items-center gap-2.5">
             <i className="ti ti-user-circle text-white text-[18px]" />
-            <p className="text-[14px] font-semibold text-white leading-tight">Profile Photo</p>
+            <p className="text-[14px] font-semibold text-white leading-tight">{t("Profile Photo")}</p>
           </div>
           <button
             onClick={handleClose}
             suppressHydrationWarning
             className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/15 transition-colors"
-           aria-label="Close">
+           aria-label={t("Close")}>
             <i className="ti ti-x text-[18px]" />
           </button>
         </div>
@@ -160,10 +162,10 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
             <>
               <FaceStatusPanel
                 icon="ti-user-circle" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)"
-                title="Add a profile photo"
-                message="JPG, JPEG, or PNG — resized automatically to fit. Choose one photo, or capture a new one with your camera."
-                action={{ label: "Capture Photo", onClick: handleChooseCamera }}
-                secondaryAction={{ label: "Upload from Device", onClick: handleChooseDevice }}
+                title={t("Add a profile photo")}
+                message={t("JPG, JPEG, or PNG — resized automatically to fit. Choose one photo, or capture a new one with your camera.")}
+                action={{ label: t("Capture Photo"), onClick: handleChooseCamera }}
+                secondaryAction={{ label: t("Upload from Device"), onClick: handleChooseDevice }}
               />
               {hasExistingPhoto && (
                 <div className="flex justify-center -mt-3">
@@ -175,7 +177,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
                     disabled={uploading}
                     suppressHydrationWarning
                   >
-                    {uploading ? "Removing…" : "Remove Current Photo"}
+                    {uploading ? t("Removing…") : t("Remove Current Photo")}
                   </button>
                 </div>
               )}
@@ -185,27 +187,27 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
           {mode === "camera" && cameraPhase === "requesting_camera" && (
             <FaceStatusPanel
               icon="ti-camera" iconColor="var(--primary)" iconBg="color-mix(in srgb, var(--brand) 8%, transparent)" spinning
-              title="Requesting camera access" message="Please allow camera access in the browser prompt."
+              title={t("Requesting camera access")} message={t("Please allow camera access in the browser prompt.")}
             />
           )}
 
           {mode === "camera" && cameraPhase === "camera_denied" && (
             <FaceStatusPanel
               icon="ti-camera-off" iconColor="var(--error)" iconBg="rgba(239,68,68,0.08)"
-              title="Camera access denied"
-              message="Allow camera access for this site in your browser's settings, then try again — or upload a photo from your device instead."
-              action={{ label: "Try Again", onClick: handleChooseCamera }}
-              secondaryAction={{ label: "Upload Instead", onClick: handleChooseDevice }}
+              title={t("Camera access denied")}
+              message={t("Allow camera access for this site in your browser's settings, then try again — or upload a photo from your device instead.")}
+              action={{ label: t("Try Again"), onClick: handleChooseCamera }}
+              secondaryAction={{ label: t("Upload Instead"), onClick: handleChooseDevice }}
             />
           )}
 
           {mode === "camera" && cameraPhase === "error" && (
             <FaceStatusPanel
               icon="ti-alert-circle" iconColor="var(--error)" iconBg="rgba(239,68,68,0.08)"
-              title="Something went wrong"
-              message={cameraError ?? "Please try again."}
-              action={{ label: "Try Again", onClick: handleChooseCamera }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              title={t("Something went wrong")}
+              message={cameraError ?? t("Please try again.")}
+              action={{ label: t("Try Again"), onClick: handleChooseCamera }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
 
@@ -216,7 +218,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
               </div>
               <canvas ref={canvasRef} className="hidden" />
               <button className="btn btn-primary btn-sm mt-4" suppressHydrationWarning onClick={capture}>
-                <i className="ti ti-camera" /> Capture
+                <i className="ti ti-camera" /> {t("Capture")}
               </button>
             </div>
           )}
@@ -226,7 +228,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
               {/* eslint-disable-next-line @next/next/no-img-element -- transient blob: preview URL, not a static/remote asset next/image can optimise */}
               <img
                 src={previewUrl}
-                alt="Selected profile photo preview"
+                alt={t("Selected profile photo preview")}
                 className="rounded-2xl object-cover"
                 style={{ width: 200, height: 200 }}
               />
@@ -235,12 +237,12 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
               )}
               <div className="flex gap-3 mt-4">
                 <button className="btn btn-ghost btn-sm" suppressHydrationWarning onClick={handleRetake} disabled={uploading}>
-                  {mode === "camera" ? "Retake" : "Choose Another"}
+                  {mode === "camera" ? t("Retake") : t("Choose Another")}
                 </button>
                 <button className="btn btn-primary btn-sm" suppressHydrationWarning onClick={handleConfirm} disabled={uploading}>
                   {uploading
-                    ? <><i className="ti ti-loader-2 animate-spin" /> Uploading…</>
-                    : <>Use This Photo</>}
+                    ? <><i className="ti ti-loader-2 animate-spin" /> {t("Uploading…")}</>
+                    : <>{t("Use This Photo")}</>}
                 </button>
               </div>
             </div>
@@ -256,10 +258,10 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
               icon={validationError ? "ti-alert-circle" : "ti-photo"}
               iconColor={validationError ? "var(--error)" : "var(--primary)"}
               iconBg={validationError ? "rgba(239,68,68,0.08)" : "color-mix(in srgb, var(--brand) 8%, transparent)"}
-              title={validationError ? "That photo won't work" : "No photo selected"}
-              message={validationError ?? "Choose a JPG or PNG from your device to continue."}
-              action={{ label: "Choose Another", onClick: handleChooseDevice }}
-              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+              title={validationError ? t("That photo won't work") : t("No photo selected")}
+              message={validationError ?? t("Choose a JPG or PNG from your device to continue.")}
+              action={{ label: t("Choose Another"), onClick: handleChooseDevice }}
+              secondaryAction={{ label: t("Cancel"), onClick: handleClose }}
             />
           )}
         </div>

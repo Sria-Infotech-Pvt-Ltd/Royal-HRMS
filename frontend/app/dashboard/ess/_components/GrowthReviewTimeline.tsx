@@ -8,6 +8,8 @@
 // of inventing new stepper CSS.
 
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 export interface GrowthTimelineInput {
   cycleName: string;
@@ -38,34 +40,35 @@ function buildSteps(input: GrowthTimelineInput): { title: string; desc: string; 
 
   return [
     {
-      title: "Goals agreed",
-      desc: `${input.cycleName} cycle opened ${input.cycleOpenedAt ? formatDate(input.cycleOpenedAt) : "—"}`,
+      title: tr("Goals agreed"),
+      desc: tr("{cycle} cycle opened {date}", { cycle: input.cycleName, date: input.cycleOpenedAt ? formatDate(input.cycleOpenedAt) : "—" }),
       state: "done",
     },
     {
-      title: "Self review",
-      desc: `Due ${input.selfReviewDue ? formatDate(input.selfReviewDue) : "—"}`,
+      title: tr("Self review"),
+      desc: tr("Due {date}", { date: input.selfReviewDue ? formatDate(input.selfReviewDue) : "—" }),
       state: selfDone ? "done" : "current",
     },
     {
-      title: "Manager review",
-      desc: `Due ${input.managerReviewDue ? formatDate(input.managerReviewDue) : "—"}`,
+      title: tr("Manager review"),
+      desc: tr("Due {date}", { date: input.managerReviewDue ? formatDate(input.managerReviewDue) : "—" }),
       state: managerDone ? "done" : selfDone ? "current" : "upcoming",
     },
   ];
 }
 
 export default function GrowthReviewTimeline({ input }: { input: GrowthTimelineInput }) {
+  const t = useT();
   const steps = buildSteps(input);
 
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-timeline" /> Review timeline</div>
+        <div className="card-title"><i className="ti ti-timeline" /> {t("Review timeline")}</div>
       </div>
       <div style={{ padding: "4px 20px 20px" }}>
         <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "var(--on-variant)" }}>
-          Self review and manager review remain visible to the employee.
+          {t("Self review and manager review remain visible to the employee.")}
         </p>
         <div className="timeline">
           {steps.map(step => (

@@ -10,6 +10,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import { useToast } from "@/components/ToastProvider";
+import { useT } from "@/hooks/useI18n";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import type { AttendanceRow, DashboardData, PaginatedAttendance } from "@/types/attendance";
 import ImportModal from "./ImportModal";
@@ -43,6 +44,7 @@ function toQuery(params: Record<string, string | number | undefined>): string {
 }
 
 export default function AttendanceTab({ onMutated, status, onStatusChange }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
@@ -93,7 +95,7 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
 
   function openRow(row: AttendanceRow) {
     if (row.record_id) setViewingId(row.record_id);
-    else showToast("No attendance record to view — employee was absent this day.", "info");
+    else showToast(t("No attendance record to view — employee was absent this day."), "info");
   }
 
   async function handleExport() {
@@ -109,7 +111,7 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
       link.click();
       URL.revokeObjectURL(blobUrl);
     } catch (err: unknown) {
-      const message = (err as { message?: string })?.message ?? "Failed to export attendance data.";
+      const message = (err as { message?: string })?.message ?? t("Failed to export attendance data.");
       showToast(message, "error");
     } finally {
       setExporting(false);
@@ -129,18 +131,18 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
           lockedBranchName={effectiveBranch}
         />
         <select className="field-input field-select" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
-          <option value="">All Org Units</option>
+          <option value="">{t("All Org Units")}</option>
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
         <div style={{ flex: 1 }} />
         {canExport && (
           <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={exporting}>
-            <i className="ti ti-download" /> {exporting ? "Exporting…" : "Export CSV"}
+            <i className="ti ti-download" /> {exporting ? t("Exporting…") : t("Export CSV")}
           </button>
         )}
         {canImport && (
           <button className="btn btn-filled btn-sm" onClick={() => setShowImport(true)}>
-            <i className="ti ti-upload" /> Import Attendance
+            <i className="ti ti-upload" /> {t("Import Attendance")}
           </button>
         )}
       </div>
@@ -157,16 +159,16 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
           <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-            {records ? `Showing ${records.count} ${records.count === 1 ? "employee" : "employees"}` : ""}
-            {records && records.total_pages > 1 ? ` · Page ${records.page} of ${records.total_pages}` : ""}
+            {records ? (records.count === 1 ? t("Showing {count} employee", { count: records.count }) : t("Showing {count} employees", { count: records.count })) : ""}
+            {records && records.total_pages > 1 ? ` · ${t("Page {page} of {total}", { page: records.page, total: records.total_pages })}` : ""}
           </span>
           {records && records.total_pages > 1 && (
             <div style={{ display: "flex", gap: 6 }}>
               <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(p - 1, 1))}>
-                <i className="ti ti-chevron-left" /> Prev
+                <i className="ti ti-chevron-left" /> {t("Prev")}
               </button>
               <button className="btn btn-ghost btn-sm" disabled={page >= records.total_pages} onClick={() => setPage(p => Math.min(p + 1, records.total_pages))}>
-                Next <i className="ti ti-chevron-right" />
+                {t("Next")} <i className="ti ti-chevron-right" />
               </button>
             </div>
           )}
@@ -184,9 +186,9 @@ export default function AttendanceTab({ onMutated, status, onStatusChange }: Pro
             }
             refetchAll();
             if (result.failed > 0) {
-              showToast(`Import complete: ${result.successful} succeeded, ${result.failed} failed.`, "error");
+              showToast(t("Import complete: {successful} succeeded, {failed} failed.", { successful: result.successful, failed: result.failed }), "error");
             } else {
-              showToast(`Import complete: ${result.successful} record(s) imported.`, "success");
+              showToast(t("Import complete: {successful} record(s) imported.", { successful: result.successful }), "success");
             }
           }}
         />

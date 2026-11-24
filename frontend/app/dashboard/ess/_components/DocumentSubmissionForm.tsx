@@ -11,6 +11,7 @@ import DateInput from "@/components/shared/DateInput";
 import {
   ACCEPTED_EXTENSIONS, ACCEPTED_TYPES_LABEL, MAX_FILE_SIZE_LABEL, formatFileSize, validateDocumentFile,
 } from "@/lib/documentFile";
+import { useT } from "@/hooks/useI18n";
 
 const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "identity",   label: "Identity" },
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export default function DocumentSubmissionForm({ submitting, submitError, onSubmit }: Props) {
+  const t = useT();
   const [category, setCategory]     = useState<DocumentCategory | "">("");
   const [expiryDate, setExpiryDate] = useState("");
   const [file, setFile]             = useState<File | null>(null);
@@ -70,11 +72,11 @@ export default function DocumentSubmissionForm({ submitting, submitError, onSubm
   async function handleSubmit() {
     setFormError(null);
     if (!category) {
-      setFormError("Please choose a document category.");
+      setFormError(t("Please choose a document category."));
       return;
     }
     if (!file) {
-      setFormError("Please choose a file.");
+      setFormError(t("Please choose a file."));
       return;
     }
     const isSubmitted = await onSubmit({ category, file, expiry_date: expiryDate || null });
@@ -89,10 +91,10 @@ export default function DocumentSubmissionForm({ submitting, submitError, onSubm
     <div className={`upload-zone${file ? " upload-zone--active" : ""}`} style={{ marginBottom: 20, cursor: "default" }}>
       <i className="ti ti-cloud-upload" />
       <p style={{ fontWeight: 600, color: "var(--on-bg)", marginBottom: 2 }}>
-        Submit a document for verification
+        {t("Submit a document for verification")}
       </p>
       <small style={{ display: "block", marginBottom: 20 }}>
-        HR will review your document and mark it verified or rejected. You can view or delete it below until it is verified.
+        {t("HR will review your document and mark it verified or rejected. You can view or delete it below until it is verified.")}
       </small>
 
       <div style={{ maxWidth: 880, margin: "0 auto", textAlign: "left" }}>
@@ -104,25 +106,25 @@ export default function DocumentSubmissionForm({ submitting, submitError, onSubm
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 16 }}>
           <div className="field-group">
-            <label className="field-label">Document category</label>
+            <label className="field-label">{t("Document category")}</label>
             <select
               className="field-input field-select"
               style={{ height: CONTROL_HEIGHT }}
               value={category}
               onChange={event => { setCategory(event.target.value as DocumentCategory); setFormError(null); }}
             >
-              <option value="">Choose category</option>
-              {CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              <option value="">{t("Choose category")}</option>
+              {CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
             </select>
           </div>
 
           <div className="field-group">
-            <label className="field-label">Expiry date (if applicable)</label>
+            <label className="field-label">{t("Expiry date (if applicable)")}</label>
             <DateInput className="field-input" style={{ height: CONTROL_HEIGHT }} value={expiryDate} onChange={setExpiryDate} />
           </div>
 
           <div className="field-group">
-            <label className="field-label">Document file</label>
+            <label className="field-label">{t("Document file")}</label>
             <input
               ref={fileInputRef}
               id="my-documents-file-input"
@@ -133,14 +135,14 @@ export default function DocumentSubmissionForm({ submitting, submitError, onSubm
             />
             <FileField file={file} previewUrl={previewUrl} onRemove={clearFile} />
             <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 6 }}>
-              Accepted: {ACCEPTED_TYPES_LABEL} · Max {MAX_FILE_SIZE_LABEL}
+              {t("Accepted: {types} · Max {size}", { types: ACCEPTED_TYPES_LABEL, size: MAX_FILE_SIZE_LABEL })}
             </div>
           </div>
         </div>
 
         <div style={{ marginTop: 20, textAlign: "center" }}>
           <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit for verification"}
+            {submitting ? t("Submitting…") : t("Submit for verification")}
           </button>
         </div>
       </div>
@@ -153,6 +155,7 @@ function FileField({ file, previewUrl, onRemove }: {
   previewUrl: string | null;
   onRemove: () => void;
 }) {
+  const t = useT();
   const iconButtonStyle = {
     display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26,
     border: 0, borderRadius: 6, background: "none", color: "var(--on-variant)", cursor: "pointer", flexShrink: 0,
@@ -168,7 +171,7 @@ function FileField({ file, previewUrl, onRemove }: {
         style={{ height: CONTROL_HEIGHT, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: "var(--on-variant)" }}
       >
         <i className="ti ti-paperclip" style={iconStyle} />
-        <span>Choose file</span>
+        <span>{t("Choose file")}</span>
       </label>
     );
   }
@@ -187,14 +190,14 @@ function FileField({ file, previewUrl, onRemove }: {
       </span>
       <span style={{ fontSize: 11, color: "var(--on-variant)", flexShrink: 0 }}>{formatFileSize(file.size)}</span>
       {previewUrl && (
-        <a href={previewUrl} target="_blank" rel="noopener noreferrer" title="View file" aria-label="View file" style={iconButtonStyle}>
+        <a href={previewUrl} target="_blank" rel="noopener noreferrer" title={t("View file")} aria-label={t("View file")} style={iconButtonStyle}>
           <i className="ti ti-eye" style={iconStyle} />
         </a>
       )}
-      <label htmlFor="my-documents-file-input" title="Change file" aria-label="Change file" style={iconButtonStyle}>
+      <label htmlFor="my-documents-file-input" title={t("Change file")} aria-label={t("Change file")} style={iconButtonStyle}>
         <i className="ti ti-replace" style={iconStyle} />
       </label>
-      <button type="button" onClick={onRemove} title="Remove file" aria-label="Remove file" style={iconButtonStyle}>
+      <button type="button" onClick={onRemove} title={t("Remove file")} aria-label={t("Remove file")} style={iconButtonStyle}>
         <i className="ti ti-x" style={iconStyle} />
       </button>
     </div>

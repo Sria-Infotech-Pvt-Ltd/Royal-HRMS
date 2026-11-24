@@ -3,6 +3,7 @@
 // ESS tax declaration — the form definition (items + limits, from the server) and
 // the save / submit actions. Reading the employee's own declaration stays in TaxTab.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
@@ -39,7 +40,7 @@ export function useTaxDeclarationActions() {
 
   /** Saves the declaration as a draft (not yet sent to payroll). */
   function save(input: TaxDeclarationSaveInput): Promise<boolean> {
-    return run(() => clientApi.patch(API.payroll.myTaxDeclaration, input), "Failed to save the declaration.");
+    return run(() => clientApi.patch(API.payroll.myTaxDeclaration, input), tr("Failed to save the declaration."));
   }
 
   /** Saves, then sends the declaration to payroll for review with the employee's confirmation. */
@@ -47,7 +48,7 @@ export function useTaxDeclarationActions() {
     return run(async () => {
       await clientApi.patch(API.payroll.myTaxDeclaration, input);
       await clientApi.post(API.payroll.submitTaxDeclaration, { confirm: true });
-    }, "Failed to submit the declaration.");
+    }, tr("Failed to submit the declaration."));
   }
 
   return { isBusy, error, setError, save, saveAndSubmit };

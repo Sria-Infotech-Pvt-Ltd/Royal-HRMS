@@ -60,7 +60,7 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid var(--outline-v)", background: "var(--bg-low)" }}>
         {DAY_NAMES.map(d => (
           <div key={d} style={{ padding: "6px 0", textAlign: "center", fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--on-variant)" }}>
-            {d}
+            {tr(d)}
           </div>
         ))}
       </div>
@@ -80,8 +80,8 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
           return (
             <div
               key={idx}
-              title={record?.status ? `${attendanceDate}: ${record.status}` : undefined}
-              aria-label={record?.status ? `${attendanceDate}: ${record.status}` : undefined}
+              title={record?.status ? `${attendanceDate}: ${tr(record.status)}` : undefined}
+              aria-label={record?.status ? `${attendanceDate}: ${tr(record.status)}` : undefined}
               style={{
                 minHeight: 48,
                 padding: "5px 5px",
@@ -106,8 +106,8 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                     </div>
                     {label && (
                       <span
-                        title={status}
-                        aria-label={status}
+                        title={tr(status)}
+                        aria-label={tr(status)}
                         style={{ fontSize: 8.5, fontWeight: 800, color: fg, letterSpacing: "0.04em" }}
                       >
                         {label}
@@ -128,7 +128,7 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                   )}
 
                   {shortHoursText(record) && (
-                    <div title={`Hours not completed: short by ${shortHoursText(record)}`} style={{ fontSize: 8, fontWeight: 800, color: "var(--warn, #b45309)" }}>
+                    <div title={tr("Hours not completed: short by {time}", { time: shortHoursText(record) ?? "" })} style={{ fontSize: 8, fontWeight: 800, color: "var(--warn, #b45309)" }}>
                       <i className="ti ti-alert-triangle" aria-hidden="true" /> {tr("Short")} {shortHoursText(record)}
                     </div>
                   )}

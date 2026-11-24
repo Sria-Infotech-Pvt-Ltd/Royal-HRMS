@@ -6,6 +6,8 @@
 // globals.css) rather than inventing new stepper CSS.
 
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 export interface AppraisalStageInput {
   selfSubmittedAt: string | null;
@@ -49,39 +51,40 @@ function buildSteps(input: AppraisalStageInput): Step[] {
 
   return [
     {
-      title: "Self-review",
-      desc: "Employee reflects on outcomes and evidence",
+      title: tr("Self-review"),
+      desc: tr("Employee reflects on outcomes and evidence"),
       state: selfDone ? "done" : "current",
     },
     {
-      title: "Manager review",
-      desc: "Reporting manager assesses performance",
+      title: tr("Manager review"),
+      desc: tr("Reporting manager assesses performance"),
       state: managerDone ? "done" : selfDone ? "current" : "pending",
     },
     {
-      title: "HR calibration",
-      desc: "HR confirms the final rating and consistency",
+      title: tr("HR calibration"),
+      desc: tr("HR confirms the final rating and consistency"),
       state: hrDone ? "done" : managerDone ? "current" : "pending",
     },
     {
-      title: "Publish & acknowledge",
-      desc: "Employee reads and acknowledges the outcome",
+      title: tr("Publish & acknowledge"),
+      desc: tr("Employee reads and acknowledges the outcome"),
       state: publishDone ? "done" : hrDone ? "current" : "pending",
     },
   ];
 }
 
 export default function AppraisalStageTracker({ input }: { input: AppraisalStageInput }) {
+  const t = useT();
   const steps = buildSteps(input);
 
   return (
     <div className="card mb-16">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-timeline" /> Review stages</div>
+        <div className="card-title"><i className="ti ti-timeline" /> {t("Review stages")}</div>
       </div>
       <div style={{ padding: "4px 20px 16px" }}>
         <p style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 8 }}>
-          Due: self-review {input.selfReviewDue ? formatDate(input.selfReviewDue) : "—"} · manager review {input.managerReviewDue ? formatDate(input.managerReviewDue) : "—"}.
+          {t("Due: self-review {selfDue} · manager review {managerDue}.", { selfDue: input.selfReviewDue ? formatDate(input.selfReviewDue) : "—", managerDue: input.managerReviewDue ? formatDate(input.managerReviewDue) : "—" })}
         </p>
         <div className="timeline">
           {steps.map(step => (

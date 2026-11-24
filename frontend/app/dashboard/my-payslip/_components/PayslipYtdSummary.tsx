@@ -29,9 +29,9 @@ export default function PayslipYtdSummary({ monthRangeLabel, ytdGross, ytdNet, y
         <div className="text-xs mt-0.5" style={{ color: "var(--on-variant)" }}>{tr("{range} cumulative payroll.", { range: monthRangeLabel })}</div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4">
-        <YtdTile label="Gross earnings" value={INR(ytdGross)} caption={`${periodCount} payroll period${periodCount === 1 ? "" : "s"}`} />
-        <YtdTile label="Income tax" value={INR(ytdIncomeTax)} caption="Deducted to date" />
-        <YtdTile label="Net pay" value={INR(ytdNet)} caption="Credited to date" />
+        <YtdTile label={tr("Gross earnings")} value={INR(ytdGross)} caption={periodCount === 1 ? tr("{count} payroll period", { count: periodCount }) : tr("{count} payroll periods", { count: periodCount })} />
+        <YtdTile label={tr("Income tax")} value={INR(ytdIncomeTax)} caption={tr("Deducted to date")} />
+        <YtdTile label={tr("Net pay")} value={INR(ytdNet)} caption={tr("Credited to date")} />
       </div>
     </div>
   );

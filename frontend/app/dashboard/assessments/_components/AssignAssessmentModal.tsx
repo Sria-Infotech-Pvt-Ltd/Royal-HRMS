@@ -1,4 +1,5 @@
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import type { Assessment, AssignEmployee, EmailTemplateOption } from "../_types";
 
 interface AssignAssessmentModalProps {
@@ -26,18 +27,19 @@ export default function AssignAssessmentModal({
   emailTemplateOptions, assignCandidates, filteredCandidates,
   assigning, assignErr, assignOk, doAssign,
 }: AssignAssessmentModalProps) {
+  const t = useT();
   return (
     <Modal
-      title={`Assign — ${assignFor.title}`}
+      title={t("Assign — {title}", { title: assignFor.title })}
       onClose={onClose}
       maxWidth={500}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Close</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>
           <button className="btn btn-primary" onClick={doAssign} disabled={assigning || assignCids.length === 0}>
             {assigning
-              ? <><i className="ti ti-loader-2 spin" /> Assigning…</>
-              : <><i className="ti ti-user-plus" /> Assign{assignCids.length > 1 ? ` (${assignCids.length})` : ""}</>}
+              ? <><i className="ti ti-loader-2 spin" /> {t("Assigning…")}</>
+              : <><i className="ti ti-user-plus" /> {assignCids.length > 1 ? t("Assign ({count})", { count: assignCids.length }) : t("Assign")}</>}
           </button>
         </>
       }
@@ -47,17 +49,17 @@ export default function AssignAssessmentModal({
 
           {/* Notification template */}
           <div className="field-group mb-12">
-            <label className="field-label">Notification Email Template</label>
+            <label className="field-label">{t("Notification Email Template")}</label>
             <select
               className="field-input field-select"
               value={assignTemplate}
               onChange={e => setAssignTemplate(e.target.value)}
             >
               {!emailTemplateOptions || emailTemplateOptions.length === 0 ? (
-                <option value="assessment_assigned">Assessment Assigned (default)</option>
+                <option value="assessment_assigned">{t("Assessment Assigned (default)")}</option>
               ) : (
-                emailTemplateOptions.map(t => (
-                  <option key={t.name} value={t.name}>{t.display_name}</option>
+                emailTemplateOptions.map(option => (
+                  <option key={option.name} value={option.name}>{option.display_name}</option>
                 ))
               )}
             </select>
@@ -70,7 +72,7 @@ export default function AssignAssessmentModal({
               <input
                 className="field-input"
                 style={{ paddingLeft: 32 }}
-                placeholder="Search by name, email or ID…"
+                placeholder={t("Search by name, email or ID…")}
                 value={assignSearch}
                 onChange={e => setAssignSearch(e.target.value)}
               />
@@ -85,10 +87,10 @@ export default function AssignAssessmentModal({
               onClick={toggleSelectAll}
               disabled={filteredCandidates.length === 0}
             >
-              {assignCids.length === filteredCandidates.length && filteredCandidates.length > 0 ? "Deselect All" : "Select All"}
+              {assignCids.length === filteredCandidates.length && filteredCandidates.length > 0 ? t("Deselect All") : t("Select All")}
             </button>
             <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              {assignCids.length} selected · {filteredCandidates.length} shown
+              {t("{selected} selected · {shown} shown", { selected: assignCids.length, shown: filteredCandidates.length })}
             </span>
           </div>
 
@@ -96,7 +98,7 @@ export default function AssignAssessmentModal({
           <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--outline-v)", borderRadius: 8 }}>
             {filteredCandidates.length === 0 && (
               <div style={{ padding: "20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-                {assignCandidates.length === 0 ? <><i className="ti ti-loader-2 spin mr-6" />Loading…</> : "No employees match."}
+                {assignCandidates.length === 0 ? <><i className="ti ti-loader-2 spin mr-6" />{t("Loading…")}</> : t("No employees match.")}
               </div>
             )}
             {filteredCandidates.map((e, idx) => {

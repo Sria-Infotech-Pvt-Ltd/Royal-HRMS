@@ -5,6 +5,7 @@ import type { EducationExperienceFieldConfig } from "@/types/onboardingFieldConf
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import SearchableSelect from "@/components/SearchableSelect";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 // ── Step: Education ──────────────────────────────────────────────────────────
 // A genuinely repeatable, unbounded list of qualifications (two Bachelor's
@@ -116,6 +117,7 @@ export default function EducationChecklist({
   entries, fieldConfig, onAdd, onFieldChange, onRemove, error,
   onSetHighest, documents, uploading, onUploadDoc, onDeleteDoc, certificateTypeFor,
 }: Props) {
+  const t = useT();
   // Local-only UI state: which entries currently have "Other" picked in
   // the Specialization dropdown (so the free-text box under it stays open
   // even while that text box is empty) — not part of EducationEntry itself
@@ -148,12 +150,12 @@ export default function EducationChecklist({
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
       <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
-        Add each qualification you&apos;ve completed — at least one is required before you can submit.
+        {t("Add each qualification you've completed — at least one is required before you can submit.")}
       </p>
 
       {entries.length === 0 && (
         <p style={{ color: "var(--on-variant)", fontSize: ".9rem", marginBottom: 16 }}>
-          No education added yet — click below to add your first one.
+          {t("No education added yet — click below to add your first one.")}
         </p>
       )}
 
@@ -163,39 +165,39 @@ export default function EducationChecklist({
         return (
           <div key={key} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>Qualification</span>
+              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>{t("Qualification")}</span>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {onSetHighest && (
                   <label className="module-check" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
                     <input type="checkbox" checked={!!entry.is_highest} onChange={() => onSetHighest(entry.id)} />
-                    <span>Highest</span>
+                    <span>{t("Highest")}</span>
                   </label>
                 )}
                 <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)} style={{ color: "var(--error)" }}>
-                  Remove
+                  {t("Remove")}
                 </button>
               </div>
             </div>
             <div className="form-row cols-2">
               <div className="field-group">
-                <label className="field-label">Education Level</label>
+                <label className="field-label">{t("Education Level")}</label>
                 <select className="field-input field-select" value={entry.level} onChange={e => onFieldChange(entry.id, "level", e.target.value)}>
-                  <option value="" disabled>Select…</option>
-                  {EDUCATION_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                  <option value="" disabled>{t("Select…")}</option>
+                  {EDUCATION_LEVELS.map(l => <option key={l.value} value={l.value}>{t(l.label)}</option>)}
                 </select>
               </div>
               {entry.level === "other" && (
                 <div className="field-group">
-                  <label className="field-label">Name it</label>
+                  <label className="field-label">{t("Name it")}</label>
                   <input
-                    className="field-input" placeholder="e.g. PMP Certification"
+                    className="field-input" placeholder={t("e.g. PMP Certification")}
                     value={entry.custom_level_label}
                     onChange={e => onFieldChange(entry.id, "custom_level_label", e.target.value)}
                   />
                 </div>
               )}
               <div className="field-group">
-                <label className="field-label">Institution</label>
+                <label className="field-label">{t("Institution")}</label>
                 <input className="field-input" value={entry.institution} onChange={e => onFieldChange(entry.id, "institution", e.target.value)} />
               </div>
               {isVisible("specialization") && (() => {
@@ -203,7 +205,7 @@ export default function EducationChecklist({
                 if (!list) {
                   return (
                     <div className="field-group">
-                      <label className="field-label">Specialization{isRequired("specialization") && <Req />}</label>
+                      <label className="field-label">{t("Specialization")}{isRequired("specialization") && <Req />}</label>
                       <input className="field-input" value={entry.specialization} onChange={e => onFieldChange(entry.id, "specialization", e.target.value)} />
                     </div>
                   );
@@ -214,7 +216,7 @@ export default function EducationChecklist({
                 return (
                   <>
                     <div className="field-group">
-                      <label className="field-label">Specialization{isRequired("specialization") && <Req />}</label>
+                      <label className="field-label">{t("Specialization")}{isRequired("specialization") && <Req />}</label>
                       {/* A native <select> here left the browser free to
                           open the options list upward whenever it decided
                           there wasn't room below, overlapping the fields
@@ -223,15 +225,15 @@ export default function EducationChecklist({
                       <SearchableSelect
                         value={selectValue}
                         onChange={v => handleSpecializationChange(entry.id, v)}
-                        placeholder="Select…"
-                        options={list.map(s => ({ value: s, label: s }))}
+                        placeholder={t("Select…")}
+                        options={list.map(s => ({ value: s, label: t(s) }))}
                       />
                     </div>
                     {showCustom && (
                       <div className="field-group">
-                        <label className="field-label">Specify Specialization</label>
+                        <label className="field-label">{t("Specify Specialization")}</label>
                         <input
-                          className="field-input" placeholder="e.g. Robotics"
+                          className="field-input" placeholder={t("e.g. Robotics")}
                           value={entry.specialization}
                           onChange={e => onFieldChange(entry.id, "specialization", e.target.value)}
                         />
@@ -242,19 +244,19 @@ export default function EducationChecklist({
               })()}
               {isVisible("percentage") && (
                 <div className="field-group">
-                  <label className="field-label">Percentage / Grade{isRequired("percentage") && <Req />}</label>
-                  <input className="field-input" placeholder="e.g. 85% or 8.5 CGPA" value={entry.percentage} onChange={e => onFieldChange(entry.id, "percentage", e.target.value)} />
+                  <label className="field-label">{t("Percentage / Grade")}{isRequired("percentage") && <Req />}</label>
+                  <input className="field-input" placeholder={t("e.g. 85% or 8.5 CGPA")} value={entry.percentage} onChange={e => onFieldChange(entry.id, "percentage", e.target.value)} />
                 </div>
               )}
               {isVisible("start_date") && (
                 <div className="field-group">
-                  <label className="field-label">Start Date{isRequired("start_date") && <Req />}</label>
+                  <label className="field-label">{t("Start Date")}{isRequired("start_date") && <Req />}</label>
                   <DateInput className="field-input" value={entry.start_date} onChange={isoDate => onFieldChange(entry.id, "start_date", isoDate)} />
                 </div>
               )}
               {isVisible("end_date") && (
                 <div className="field-group">
-                  <label className="field-label">End Date{isRequired("end_date") && <Req />}</label>
+                  <label className="field-label">{t("End Date")}{isRequired("end_date") && <Req />}</label>
                   <DateInput className="field-input" value={entry.end_date} onChange={isoDate => onFieldChange(entry.id, "end_date", isoDate)} />
                 </div>
               )}
@@ -263,7 +265,7 @@ export default function EducationChecklist({
               <div style={{ marginTop: 4 }}>
                 <DocUploadButton
                   documentType={certificateType}
-                  label="certificate"
+                  label={t("certificate")}
                   entryRef={entry.id}
                   existing={documents?.find(d => d.entry_ref === entry.id && CERTIFICATE_TYPES.has(d.document_type))}
                   uploading={uploading === `${certificateType}:${entry.id}`}
@@ -277,7 +279,7 @@ export default function EducationChecklist({
       })}
 
       <button className="btn btn-ghost" type="button" onClick={onAdd}>
-        <i className="ti ti-plus" /> Add Education
+        <i className="ti ti-plus" /> {t("Add Education")}
       </button>
     </div>
   );

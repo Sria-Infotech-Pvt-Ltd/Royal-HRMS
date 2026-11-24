@@ -5,10 +5,12 @@ import ClockInButton from "@/components/ClockInButton";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { HRKPIs, LeaveUpdatePayload } from "@/types/dashboard";
+import { useT } from "@/hooks/useI18n";
 
 interface Props { firstName: string }
 
 export default function HrConsole({ firstName }: Props) {
+  const t = useT();
   const { data: kpis, loading, refetch } = useFetch<HRKPIs>(API.dashboard.hrKpis);
   // Live pending_actions count pushed by the backend over WebSocket.
   const [livePendingActions, setLivePendingActions] = useState<number | null>(null);
@@ -35,10 +37,10 @@ export default function HrConsole({ firstName }: Props) {
   });
 
   const stats = [
-    { icon: "ti-users",      val: loading ? "—" : String(kpis?.total_workforce               ?? 0), lbl: "Total Workforce",     sub: "Active employees"   },
-    { icon: "ti-checks",     val: loading ? "—" : String(livePendingActions ?? kpis?.pending_actions ?? 0), lbl: "Pending Actions",     sub: "Awaiting review"    },
-    { icon: "ti-video",      val: loading ? "—" : String(kpis?.active_interviews              ?? 0), lbl: "Active Interviews",   sub: "In pipeline"        },
-    { icon: "ti-calendar-x", val: loading ? "—" : String(kpis?.attendance_correction_pending ?? 0), lbl: "Corrections Pending", sub: "Needs attention"    },
+    { icon: "ti-users",      val: loading ? "—" : String(kpis?.total_workforce               ?? 0), lbl: t("Total Workforce"),     sub: t("Active employees")   },
+    { icon: "ti-checks",     val: loading ? "—" : String(livePendingActions ?? kpis?.pending_actions ?? 0), lbl: t("Pending Actions"),     sub: t("Awaiting review")    },
+    { icon: "ti-video",      val: loading ? "—" : String(kpis?.active_interviews              ?? 0), lbl: t("Active Interviews"),   sub: t("In pipeline")        },
+    { icon: "ti-calendar-x", val: loading ? "—" : String(kpis?.attendance_correction_pending ?? 0), lbl: t("Corrections Pending"), sub: t("Needs attention")    },
   ];
 
   const isClockedIn = kpis?.clocked_in;
@@ -63,8 +65,8 @@ export default function HrConsole({ firstName }: Props) {
             <i className="ti ti-users-group" />
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>HR Operations</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>Welcome back, {firstName}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>{t("HR Operations")}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>{t("Welcome back, {name}", { name: firstName })}</div>
           </div>
         </div>
 
@@ -79,7 +81,7 @@ export default function HrConsole({ firstName }: Props) {
               border: `1px solid ${isClockedIn ? "rgba(74,222,128,0.3)" : "rgba(248,113,113,0.3)"}`,
             }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: isClockedIn ? "#4ade80" : "#f87171", flexShrink: 0 }} />
-              {isClockedIn ? "Punched In" : "Not Punched In"}
+              {isClockedIn ? t("Punched In") : t("Not Punched In")}
             </span>
           )}
           <ClockInButton onPunchSuccess={refetch} />

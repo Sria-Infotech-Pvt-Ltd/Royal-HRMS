@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useMyBirthdayWidgets } from "@/hooks/useEmployeeDashboard";
 import { SendWishModal } from "@/components/dashboard/SendWishModal";
+import { useT } from "@/hooks/useI18n";
 
 // Only shown to direct reports of the manager whose birthday it is today.
 export default function ManagerBirthdayCard() {
+  const t = useT();
   const { data, loading } = useMyBirthdayWidgets();
   const manager = data?.manager;
   const [sending, setSending] = useState(false);
@@ -25,10 +27,10 @@ export default function ManagerBirthdayCard() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#9333ea", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 2 }}>
-            🎂 Manager Birthday
+            {t("🎂 Manager Birthday")}
           </div>
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
-            Today is your manager&apos;s birthday. Wish {manager.full_name} a wonderful birthday.
+            {t("Today is your manager's birthday. Wish {name} a wonderful birthday.", { name: manager.full_name })}
           </div>
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
             {manager.message}
@@ -40,7 +42,7 @@ export default function ManagerBirthdayCard() {
           style={{ flexShrink: 0 }}
           onClick={() => setSending(true)}
         >
-          <i className="ti ti-confetti" /> Send Wishes
+          <i className="ti ti-confetti" /> {t("Send Wishes")}
         </button>
       </div>
 

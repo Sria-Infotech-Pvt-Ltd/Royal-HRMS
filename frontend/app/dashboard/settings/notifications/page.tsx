@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import ToggleSwitch from "@/components/ToggleSwitch";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 
 interface NotificationSettingsForm {
@@ -42,6 +43,7 @@ const CATEGORIES: { field: keyof NotificationSettingsForm; icon: string; label: 
 
 export default function NotificationsConfigPage() {
   const router  = useRouter();
+  const t = useT();
   const canEdit = usePermission("settings.edit");
 
   const [settings,     setSettings]     = useState<NotificationSettingsForm>(DEFAULT_SETTINGS);
@@ -65,7 +67,7 @@ export default function NotificationsConfigPage() {
       const data = res.data?.data;
       if (data) setSettings(data);
     } catch (err: unknown) {
-      setError((err as { message?: string }).message ?? "Failed to load notification settings");
+      setError((err as { message?: string }).message ?? t("Failed to load notification settings"));
     } finally {
       setLoading(false);
     }
@@ -79,10 +81,10 @@ export default function NotificationsConfigPage() {
       const res = await clientApi.patch<{ data: NotificationSettingsForm }>(API.notifications.settings, { [field]: checked });
       const updated = res.data?.data;
       if (updated) setSettings(updated);
-      showToast("Notification settings updated");
+      showToast(t("Notification settings updated"));
     } catch (err: unknown) {
       setSettings(previous);
-      showToast((err as { message?: string }).message ?? "Failed to update notification settings", false);
+      showToast((err as { message?: string }).message ?? t("Failed to update notification settings"), false);
     } finally {
       setSavingField(null);
     }
@@ -99,19 +101,19 @@ export default function NotificationsConfigPage() {
 
       <div className="page-header">
         <div>
-          <div className="page-title">Notification Settings</div>
-          <div className="page-sub">Manage which HRMS notifications users receive.</div>
+          <div className="page-title">{t("Notification Settings")}</div>
+          <div className="page-sub">{t("Manage which HRMS notifications users receive.")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} suppressHydrationWarning>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
         </div>
       </div>
 
       {loading && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 260, gap: 10, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "spin 1s linear infinite" }} /> Loading notification settings…
+          <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "spin 1s linear infinite" }} /> {t("Loading notification settings…")}
         </div>
       )}
 
@@ -119,8 +121,8 @@ export default function NotificationsConfigPage() {
         <div className="alert alert-error mb-24">
           <i className="ti ti-alert-circle" />
           <div>
-            <strong>Failed to load</strong> — {error}
-            <div style={{ marginTop: 8 }}><button className="btn btn-ghost btn-sm" onClick={loadSettings} suppressHydrationWarning>Retry</button></div>
+            <strong>{t("Failed to load")}</strong> — {error}
+            <div style={{ marginTop: 8 }}><button className="btn btn-ghost btn-sm" onClick={loadSettings} suppressHydrationWarning>{t("Retry")}</button></div>
           </div>
         </div>
       )}
@@ -141,8 +143,8 @@ export default function NotificationsConfigPage() {
                   <i className={`ti ${cat.icon}`} style={{ fontSize: 16, color: "var(--primary)" }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>{cat.label}</div>
-                  <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>{cat.desc}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>{t(cat.label)}</div>
+                  <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>{t(cat.desc)}</div>
                 </div>
               </div>
               <ToggleSwitch

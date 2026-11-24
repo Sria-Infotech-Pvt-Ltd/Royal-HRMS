@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { formatDate as sharedFormatDate } from "@/lib/formatDate";
@@ -69,6 +70,7 @@ interface Props {
 }
 
 export default function ExpenseClaims({ autoOpenNew = false }: Props) {
+  const t = useT();
   const [showNewExpense,  setShowNewExpense]  = useState(autoOpenNew);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
@@ -92,8 +94,8 @@ export default function ExpenseClaims({ autoOpenNew = false }: Props) {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span aria-hidden="true" style={{ width: 50, height: 50, borderRadius: 15, display: "grid", placeItems: "center", fontSize: 26, color: "#fff", background: EXPENSE_COLOUR.brand, boxShadow: `0 6px 16px ${tint(EXPENSE_COLOUR.brand, 0.35)}` }}><i className="ti ti-receipt-2" /></span>
           <div>
-            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "var(--on-bg)" }}>Expenses</h1>
-            <p style={{ margin: "2px 0 0", fontSize: 13.5, color: "var(--on-variant)" }}>Submit and track your reimbursement claims</p>
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "var(--on-bg)" }}>{t("Expenses")}</h1>
+            <p style={{ margin: "2px 0 0", fontSize: 13.5, color: "var(--on-variant)" }}>{t("Submit and track your reimbursement claims")}</p>
           </div>
         </div>
       </div>

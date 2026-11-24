@@ -63,6 +63,8 @@ import {
   type HireActionData,
   STEPS,
 } from "./_wizardData";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 const APPROVER_FIELDS = ["reporting_manager_id", "l1_approver_id", "hr_id"] as const;
 
@@ -74,6 +76,7 @@ function approverErrorsOf(fieldErrors: Record<string, string>): Record<string, s
 }
 
 export default function HireWizardClient({ hireActionId, onClose, onHired }: { hireActionId: string; onClose: () => void; onHired: () => void }) {
+  const t = useT();
   const [action, setAction] = useState<HireActionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
@@ -147,7 +150,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       ]);
     } catch (err: unknown) {
       // Shows the server's reason (wrong type, over 5 MB, too small ...) on whichever step the upload came from.
-      setDocError(handleApiError(err, "Failed to upload document.").message);
+      setDocError(handleApiError(err, t("Failed to upload document.")).message);
     } finally {
       setDocUploading(null);
     }
@@ -165,7 +168,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       await clientApi.delete(API.hireActions.documentDetail(hireActionId, doc.id));
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
     } catch (err: unknown) {
-      const message = handleApiError(err, "Failed to remove document.").message;
+      const message = handleApiError(err, t("Failed to remove document.")).message;
       // The list on screen can be stale (the file was already removed, e.g. in another tab). Then
       // every View/Delete on that row got "not found" and the row could never go away. Re-read the
       // list from the server: if the document is already gone, the goal is met and there is no error.
@@ -414,7 +417,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       await patchAction({ employment_type: type });
       setEmployment(e => ({ ...e, employment_type: type }));
     } catch (e) {
-      setStepErr((e as { message?: string })?.message || "Could not set employment type.");
+      setStepErr((e as { message?: string })?.message || t("Could not set employment type."));
     }
   }
 
@@ -544,17 +547,17 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         const blocking = result.warnings?.find(w => w.severity === "error");
         setApproverErrors({});
         setAutosaveStatus(blocking ? "warning" : "saved");
-        setAutosaveMessage(blocking ? `${blocking.message} Your changes are saved.` : "");
+        setAutosaveMessage(blocking ? t("{message} Your changes are saved.", { message: blocking.message }) : "");
       })
       .catch((e: unknown) => {
-        const parsed = parseApiError(e, "Could not reach the server.");
+        const parsed = parseApiError(e, t("Could not reach the server."));
         // A 400 means the server refused only the fields named in the message and still saved the rest of the form.
         const partlySaved = parsed.status === 400 && Object.keys(parsed.fieldErrors).length > 0;
         setApproverErrors(approverErrorsOf(parsed.fieldErrors));
         setAutosaveStatus("error");
         setAutosaveMessage(partlySaved
-          ? `Not saved: ${parsed.message} Everything else was saved.`
-          : `${parsed.message} Your entries are still on this screen but are not saved yet.`);
+          ? t("Not saved: {message} Everything else was saved.", { message: parsed.message })
+          : t("{message} Your entries are still on this screen but are not saved yet.", { message: parsed.message }));
       });
   }
 
@@ -667,13 +670,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       const duplicate = saved.warnings?.find(w => w.severity === "error");
       if (duplicate) {
         setContactErrors({ email: duplicate.field === "email" ? duplicate.message : undefined, phone: duplicate.field === "phone" ? duplicate.message : undefined });
-        setStepErr(`${duplicate.message} Your changes are saved; change it to continue.`);
+        setStepErr(t("{message} Your changes are saved; change it to continue.", { message: duplicate.message }));
         return;
       }
       setHighestSaved(h => Math.max(h, tab));
-      setTab(t => Math.min(t + 1, STEPS.length - 1));
+      setTab(current => Math.min(current + 1, STEPS.length - 1));
     } catch (e) {
-      const parsed = parseApiError(e, "Could not save this step.");
+      const parsed = parseApiError(e, t("Could not save this step."));
       setContactErrors({ email: parsed.fieldErrors.email, phone: parsed.fieldErrors.phone });
       setApproverErrors(approverErrorsOf(parsed.fieldErrors));
       setStepErr(parsed.message);
@@ -699,12 +702,12 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         // The server answered "saved", but is its copy really what is on screen? If not, say which fields, and do not hire.
         const notKept = fieldsTheServerDidNotKeep(payload, held.draft_data);
         if (notKept.length > 0) {
-          setHireError(`The server did not keep: ${notKept.join(", ")}. Nothing was hired. Open that step, re-enter it, wait for "Saved", and press Hire again.`);
+          setHireError(t("The server did not keep: {fields}. Nothing was hired. Open that step, re-enter it, wait for \"Saved\", and press Hire again.", { fields: notKept.join(", ") }));
           return;
         }
       } catch (saveError) {
-        const parsed = parseApiError(saveError, "Could not reach the server.");
-        setHireError(`Your entries could not be saved, so nothing was hired. ${parsed.message}`);
+        const parsed = parseApiError(saveError, t("Could not reach the server."));
+        setHireError(t("Your entries could not be saved, so nothing was hired. {message}", { message: parsed.message }));
         return;
       }
       const response = await clientApi.post<{ data?: { face_id?: FaceIdHireSummary; reserved_employee_id?: string; reporting_manager?: { name: string | null; source: string } } }>(API.hireActions.complete(hireActionId));
@@ -713,7 +716,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       if (faceId) setCompletedHire({ faceId, code: response.data?.data?.reserved_employee_id ?? "", reportingManager: response.data?.data?.reporting_manager ?? null });
       else onHired();
     } catch (e) {
-      setHireError((e as { message?: string })?.message || "Could not hire this employee.");
+      setHireError((e as { message?: string })?.message || t("Could not hire this employee."));
     } finally {
       setHiring(false);
     }
@@ -736,26 +739,26 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     // never actually reflected these (it was a static "7" from _wizardData
     // that never changed no matter what was filled in).
     m[0] = [
-      !firstName.trim() && "First name", !lastName.trim() && "Last name",
-      !form.date_of_birth && "Date of birth", !form.gender && "Gender",
-      !nationality.trim() && "Nationality", !email.trim() && "Personal email",
-      !phone.trim() && "Mobile number",
+      !firstName.trim() && tr("First name"), !lastName.trim() && tr("Last name"),
+      !form.date_of_birth && tr("Date of birth"), !form.gender && tr("Gender"),
+      !nationality.trim() && tr("Nationality"), !email.trim() && tr("Personal email"),
+      !phone.trim() && tr("Mobile number"),
     ].filter(Boolean) as string[];
     m[1] = [
-      !employment.employment_type && "Employment type",
-      !employment.branch && "Company code",
+      !employment.employment_type && tr("Employment type"),
+      !employment.branch && tr("Company code"),
     ].filter(Boolean) as string[];
     m[3] = [
-      !statutory.pan_number.trim() && "PAN",
-      !statutory.aadhaar_number.trim() && "Aadhaar",
-      !statutory.account_holder_name.trim() && "Account holder name",
-      !statutory.account_number.trim() && "Account number",
-      !statutory.ifsc_code.trim() && "IFSC code",
+      !statutory.pan_number.trim() && tr("PAN"),
+      !statutory.aadhaar_number.trim() && tr("Aadhaar"),
+      !statutory.account_holder_name.trim() && tr("Account holder name"),
+      !statutory.account_number.trim() && tr("Account number"),
+      !statutory.ifsc_code.trim() && tr("IFSC code"),
     ].filter(Boolean) as string[];
-    m[5] = educationEntries.some(e => e.institution?.trim()) ? [] : ["At least one education entry"];
+    m[5] = educationEntries.some(e => e.institution?.trim()) ? [] : [tr("At least one education entry")];
     m[6] = (() => {
       const uploadedTypes = new Set(documents.map(d => d.document_type));
-      return REQUIRED_DOC_KEYS.filter(k => !uploadedTypes.has(k)).map(k => REQUIRED_DOC_LABELS[k] ?? k);
+      return REQUIRED_DOC_KEYS.filter(k => !uploadedTypes.has(k)).map(k => tr(REQUIRED_DOC_LABELS[k] ?? k));
     })();
     return m;
   }, [
@@ -767,9 +770,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
   if (loading || !action) {
     return (
-      <Modal title="Hire an employee" onClose={onClose}>
+      <Modal title={t("Hire an employee")} onClose={onClose}>
         <div style={{ padding: 40, textAlign: "center", color: loading ? "var(--on-variant)" : "var(--error)" }}>
-          {loading ? "Loading…" : "Hire action not found."}
+          {loading ? t("Loading…") : t("Hire action not found.")}
         </div>
       </Modal>
     );
@@ -788,7 +791,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   if (completedHire) {
     return (
       <HireCompletionPanel
-        employeeName={[firstName, lastName].filter(Boolean).join(" ") || "The new hire"}
+        employeeName={[firstName, lastName].filter(Boolean).join(" ") || t("The new hire")}
         employeeCode={completedHire.code}
         faceId={completedHire.faceId}
         reportingManager={completedHire.reportingManager}
@@ -802,11 +805,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     <Modal
       title={
         <div className="hw-head">
-          <div className="hw-title">Hire an <em>employee</em></div>
+          <div className="hw-title">{t("Hire an")} <em>{t("employee")}</em></div>
           <div className="hw-meta">
-            <span className="hw-chip is-brand"><i className="ti ti-user-plus" /> Hire</span>
+            <span className="hw-chip is-brand"><i className="ti ti-user-plus" /> {t("Hire")}</span>
             {action.reason_display && <span className="hw-chip">{action.reason_display}</span>}
-            <span className="hw-chip"><i className="ti ti-calendar" /> Effective {formatDate(action.effective_from)}</span>
+            <span className="hw-chip"><i className="ti ti-calendar" /> {t("Effective {date}", { date: formatDate(action.effective_from) })}</span>
             {action.position_title && <span className="hw-chip"><i className="ti ti-briefcase" /> {action.position_title}</span>}
           </div>
         </div>
@@ -824,23 +827,23 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       footer={tab < 8 ? (
         <div className="hw-foot">
           <div className="hw-progress">
-            <div className="hw-progress-top"><strong>{progressPct}% complete</strong><span>Step {tab + 1} of {STEPS.length}</span></div>
+            <div className="hw-progress-top"><strong>{t("{percent}% complete", { percent: progressPct })}</strong><span>{t("Step {current} of {total}", { current: tab + 1, total: STEPS.length })}</span></div>
             <div className="hw-progress-bar" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progressPct}%` }} /></div>
           </div>
           <div className="hw-actions">
-            <button type="button" onClick={draftActions.openDiscard} className="hw-link is-danger"><i className="ti ti-trash" /> Discard</button>
-            <button type="button" onClick={draftActions.saveAndExit} disabled={draftActions.isSaving} className="hw-link"><i className="ti ti-door-exit" /> Save &amp; exit</button>
-            <button type="button" onClick={draftActions.saveDraft} disabled={draftActions.isSaving} className="hw-link"><i className="ti ti-device-floppy" /> Save draft</button>
-            <button type="button" onClick={() => setShowScanFill(true)} className="hw-link"><i className="ti ti-scan" /> Scan &amp; fill</button>
+            <button type="button" onClick={draftActions.openDiscard} className="hw-link is-danger"><i className="ti ti-trash" /> {t("Discard")}</button>
+            <button type="button" onClick={draftActions.saveAndExit} disabled={draftActions.isSaving} className="hw-link"><i className="ti ti-door-exit" /> {t("Save & exit")}</button>
+            <button type="button" onClick={draftActions.saveDraft} disabled={draftActions.isSaving} className="hw-link"><i className="ti ti-device-floppy" /> {t("Save draft")}</button>
+            <button type="button" onClick={() => setShowScanFill(true)} className="hw-link"><i className="ti ti-scan" /> {t("Scan & fill")}</button>
             <span className="hw-sep" aria-hidden="true" />
-            {tab > 0 && <button type="button" onClick={() => goToStep(Math.max(0, tab - 1))} className="btn btn-ghost hw-btn"><i className="ti ti-arrow-left" /> Back</button>}
+            {tab > 0 && <button type="button" onClick={() => goToStep(Math.max(0, tab - 1))} className="btn btn-ghost hw-btn"><i className="ti ti-arrow-left" /> {t("Back")}</button>}
             <button type="button" onClick={handleNext} disabled={isNavigating} className="btn btn-filled hw-btn">
-              {isNavigating ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <>Next <i className="ti ti-arrow-right" /></>}
+              {isNavigating ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : <>{t("Next")} <i className="ti ti-arrow-right" /></>}
             </button>
           </div>
         </div>
       ) : (
-        <button onClick={onClose} className="btn btn-ghost">Close</button>
+        <button onClick={onClose} className="btn btn-ghost">{t("Close")}</button>
       )}
     >
       <div className="wiz hire-wiz">
@@ -850,21 +853,21 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         <div className="wiz-main">
           <div className="stephead">
             <div>
-              <h3>{STEPS[tab].label.split(" ").slice(0, -1).join(" ")} <em className="hl">{STEPS[tab].label.split(" ").slice(-1)}</em></h3>
-              <p>{STEPS[tab].sub}</p>
+              <h3>{t(STEPS[tab].label).split(" ").slice(0, -1).join(" ")} <em className="hl">{t(STEPS[tab].label).split(" ").slice(-1)}</em></h3>
+              <p>{t(STEPS[tab].sub)}</p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               {autosaveStatus !== "idle" && (
                 <span className="text-[11.5px]" style={{ color: autosaveStatus === "error" ? "var(--error)" : "var(--on-variant)", display: "flex", alignItems: "center", gap: 4 }}>
-                  {autosaveStatus === "saving" && <><i className="ti ti-loader-2 animate-spin" /> Saving…</>}
-                  {autosaveStatus === "saved" && <><i className="ti ti-circle-check" /> All changes saved</>}
-                  {autosaveStatus === "warning" && <><i className="ti ti-alert-circle" /> Saved, with a problem</>}
-                  {autosaveStatus === "error" && <><i className="ti ti-alert-circle" /> Autosave problem</>}
+                  {autosaveStatus === "saving" && <><i className="ti ti-loader-2 animate-spin" /> {t("Saving…")}</>}
+                  {autosaveStatus === "saved" && <><i className="ti ti-circle-check" /> {t("All changes saved")}</>}
+                  {autosaveStatus === "warning" && <><i className="ti ti-alert-circle" /> {t("Saved, with a problem")}</>}
+                  {autosaveStatus === "error" && <><i className="ti ti-alert-circle" /> {t("Autosave problem")}</>}
                   {(autosaveStatus === "error" || autosaveStatus === "warning") && autosaveMessage && (
                     <span role="alert" title={autosaveMessage} style={{ maxWidth: 360, whiteSpace: "normal" }}>{autosaveMessage}</span>
                   )}
                   {autosaveStatus === "error" && (
-                    <button type="button" className="btn btn-ghost" style={{ padding: "2px 8px", fontSize: 11.5 }} onClick={retryAutosave}>Retry</button>
+                    <button type="button" className="btn btn-ghost" style={{ padding: "2px 8px", fontSize: 11.5 }} onClick={retryAutosave}>{t("Retry")}</button>
                   )}
                 </span>
               )}
@@ -877,7 +880,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
             ref={errorRef}
             issues={issues}
             serverMessage={stepErr}
-            autosaveProblem={autosaveStatus === "error" || autosaveStatus === "warning" ? (autosaveMessage || "Autosave did not complete.") : ""}
+            autosaveProblem={autosaveStatus === "error" || autosaveStatus === "warning" ? (autosaveMessage || t("Autosave did not complete.")) : ""}
             onRetryAutosave={retryAutosave}
             onGoToField={focusField}
           />
@@ -886,183 +889,183 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
             <div className="mstep on">
               <EmployeePhotoUpload hireActionId={hireActionId} photoUrl={photoUrl} onPhotoChange={setPhotoUrl} />
 
-              <div className="hw-section">Identity</div>
+              <div className="hw-section">{t("Identity")}</div>
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Salutation</label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Salutation")}</label>
                   <select value={salutation} onChange={e => setSalutation(e.target.value)} className="field-input field-select">
-                    <option value="">Select</option>
-                    {["Mr.", "Ms.", "Mrs.", "Dr."].map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="">{t("Select")}</option>
+                    {["Mr.", "Ms.", "Mrs.", "Dr."].map(s => <option key={s} value={s}>{t(s)}</option>)}
                   </select>
                 </div>
                 <div {...fieldProps("first_name")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">First name <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="e.g. Rahul" className="field-input" />
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("First name")} <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder={t("e.g. Rahul")} className="field-input" />
                   <FieldError message={issueMessages.first_name} />
                 </div>
                 <div {...fieldProps("middle_name")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Middle name</label>
-                  <input value={middleName} onChange={e => setMiddleName(e.target.value)} placeholder="e.g. Kumar" className="field-input" />
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Middle name")}</label>
+                  <input value={middleName} onChange={e => setMiddleName(e.target.value)} placeholder={t("e.g. Kumar")} className="field-input" />
                   <FieldError message={issueMessages.middle_name} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div {...fieldProps("last_name")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Last name <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="e.g. Sharma" className="field-input" />
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Last name")} <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder={t("e.g. Sharma")} className="field-input" />
                   <FieldError message={issueMessages.last_name} />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Display name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Display name")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("auto")}</span></label>
                   <div className="flex gap-2">
-                    <input value={displayName} onChange={e => { displayNameTouchedRef.current = true; setDisplayName(e.target.value); }} placeholder="Generated from name" className="field-input" />
+                    <input value={displayName} onChange={e => { displayNameTouchedRef.current = true; setDisplayName(e.target.value); }} placeholder={t("Generated from name")} className="field-input" />
                     <button type="button" className="hw-suggest" onClick={() => {
                       const suggestion = [salutation, firstName, middleName, lastName].filter(Boolean).join(" ");
-                      if (!firstName.trim() && !lastName.trim()) { setSuggestHint({ field: "display_name", text: "Type the first and last name first. Suggest builds the display name from them." }); return; }
+                      if (!firstName.trim() && !lastName.trim()) { setSuggestHint({ field: "display_name", text: t("Type the first and last name first. Suggest builds the display name from them.") }); return; }
                       displayNameTouchedRef.current = false;
                       setSuggestHint(null);
                       setDisplayName(suggestion);
-                    }}><i className="ti ti-wand" /> Suggest</button>
+                    }}><i className="ti ti-wand" /> {t("Suggest")}</button>
                   </div>
                   {suggestHint?.field === "display_name"
                     ? <p className="hint bad" role="status" style={{ marginTop: 4 }}>{suggestHint.text}</p>
-                    : <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>}
+                    : <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Shown across the app and in approvals.")}</p>}
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Employee number <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Employee number")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("auto")}</span></label>
                   <div className="field-input" style={{ background: "var(--bg-low)", color: action.reserved_employee_id ? "var(--on-bg)" : "var(--on-variant)" }}>
-                    {action.reserved_employee_id || "Assigned on employment type"}
+                    {action.reserved_employee_id || t("Assigned on employment type")}
                   </div>
-                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Each employment type has its own series — set the type in step 2 and the number is reserved here.</p>
+                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Each employment type has its own series — set the type in step 2 and the number is reserved here.")}</p>
                 </div>
               </div>
 
-              <div className="hw-section">Basic details</div>
+              <div className="hw-section">{t("Basic details")}</div>
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div {...fieldProps("date_of_birth")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Date of birth <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Date of birth")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <DateInput value={form.date_of_birth} onChange={iso => setForm(f => ({ ...f, date_of_birth: iso }))} className="field-input" separator="-" />
                   <FieldError message={issueMessages.date_of_birth} />
                 </div>
                 <div {...fieldProps("gender")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Gender <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Gender")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))} className="field-input field-select">
-                    <option value="">Select</option>
-                    <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                    <option value="">{t("Select")}</option>
+                    <option value="male">{t("Male")}</option><option value="female">{t("Female")}</option><option value="other">{t("Other")}</option>
                   </select>
                   <FieldError message={issueMessages.gender} />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Blood group</label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Blood group")}</label>
                   <select value={form.blood_group} onChange={e => setForm(f => ({ ...f, blood_group: e.target.value }))} className="field-input field-select">
-                    <option value="">Select</option>
+                    <option value="">{t("Select")}</option>
                     {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Marital status</label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Marital status")}</label>
                   <select value={form.marital_status} onChange={e => setForm(f => ({ ...f, marital_status: e.target.value }))} className="field-input field-select">
-                    {MARITAL_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    {MARITAL_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
                   </select>
                 </div>
                 <div {...fieldProps("nationality")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Nationality <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Nationality")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <CountrySelect value={nationality} onChange={setNationality} mode="demonym" />
                   <FieldError message={issueMessages.nationality} />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth</label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Place of birth")}</label>
                   <div className="flex gap-2">
-                    <input value={placeOfBirth} onChange={e => setPlaceOfBirth(e.target.value)} placeholder="City / town" className="field-input" />
+                    <input value={placeOfBirth} onChange={e => setPlaceOfBirth(e.target.value)} placeholder={t("City / town")} className="field-input" />
                     <button type="button" className="hw-suggest" onClick={() => {
                       const place = form.current_village || form.current_district;
-                      if (!place) { setSuggestHint({ field: "place_of_birth", text: "Fill in the city or district of the current address (further down) first. Suggest uses it." }); return; }
+                      if (!place) { setSuggestHint({ field: "place_of_birth", text: t("Fill in the city or district of the current address (further down) first. Suggest uses it.") }); return; }
                       setSuggestHint(null);
                       setPlaceOfBirth(place);
-                    }}><i className="ti ti-wand" /> Suggest</button>
+                    }}><i className="ti ti-wand" /> {t("Suggest")}</button>
                   </div>
                   {suggestHint?.field === "place_of_birth" && <p className="hint bad" role="status" style={{ marginTop: 4 }}>{suggestHint.text}</p>}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Father&apos;s name</label>
-                  <input value={form.father_name} onChange={e => setParentName("father", e.target.value)} placeholder="e.g. Suresh Sharma" className="field-input" />
-                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Also added to Family &amp; nomination.</p>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Father's name")}</label>
+                  <input value={form.father_name} onChange={e => setParentName("father", e.target.value)} placeholder={t("e.g. Suresh Sharma")} className="field-input" />
+                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Also added to Family & nomination.")}</p>
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Mother&apos;s name</label>
-                  <input value={identityExtras.mother_name} onChange={e => setParentName("mother", e.target.value)} placeholder="e.g. Sunita Sharma" className="field-input" />
-                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Required on EPF Form 2. Also added to Family &amp; nomination.</p>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Mother's name")}</label>
+                  <input value={identityExtras.mother_name} onChange={e => setParentName("mother", e.target.value)} placeholder={t("e.g. Sunita Sharma")} className="field-input" />
+                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Required on EPF Form 2. Also added to Family & nomination.")}</p>
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Languages known</label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Languages known")}</label>
                   <LanguagesSelect value={identityExtras.languages_known}
                     onChange={v => setIdentityExtras(x => ({ ...x, languages_known: v }))} />
                 </div>
               </div>
 
-              <div className="hw-section">Statutory declarations</div>
+              <div className="hw-section">{t("Statutory declarations")}</div>
               <div className="grid grid-cols-2 gap-3 mb-5">
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    Specially abled
+                    {t("Specially abled")}
                     <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--warn)", background: "var(--warn-c)", borderRadius: 99, padding: "1px 6px" }}>RPwD</span>
                   </label>
                   <select value={identityExtras.specially_abled} onChange={e => setIdentityExtras(x => ({ ...x, specially_abled: e.target.value }))} className="field-input field-select">
-                    <option value="no">No</option><option value="yes">Yes</option>
+                    <option value="no">{t("No")}</option><option value="yes">{t("Yes")}</option>
                   </select>
-                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Record-keeping obligation under the RPwD Act 2016.</p>
+                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Record-keeping obligation under the RPwD Act 2016.")}</p>
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    International worker
+                    {t("International worker")}
                     <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--warn)", background: "var(--warn-c)", borderRadius: 99, padding: "1px 6px" }}>GOI</span>
                   </label>
                   <select value={identityExtras.international_worker} onChange={e => setIdentityExtras(x => ({ ...x, international_worker: e.target.value }))} className="field-input field-select">
-                    <option value="no">No</option><option value="yes">Yes</option>
+                    <option value="no">{t("No")}</option><option value="yes">{t("Yes")}</option>
                   </select>
-                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Mandatory declaration on EPF Form 11.</p>
+                  <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Mandatory declaration on EPF Form 11.")}</p>
                 </div>
               </div>
 
-              <div className="hw-section">Voluntary self-declaration</div>
+              <div className="hw-section">{t("Voluntary self-declaration")}</div>
               <p className="text-[11.5px] mb-2" style={{ color: "var(--on-variant)" }}>
-                Not required of a private employer. Collect only where a government, PSU or aided establishment must report it, or a state incentive scheme requires it. Self-declared, and hidden from reporting managers.
+                {t("Not required of a private employer. Collect only where a government, PSU or aided establishment must report it, or a state incentive scheme requires it. Self-declared, and hidden from reporting managers.")}
               </p>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Category / community</label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Category / community")}</label>
                   <select value={identityExtras.category} onChange={e => setIdentityExtras(x => ({ ...x, category: e.target.value }))} className="field-input field-select">
-                    <option value="prefer_not_to_say">Prefer not to say</option>
-                    <option value="general">General</option>
+                    <option value="prefer_not_to_say">{t("Prefer not to say")}</option>
+                    <option value="general">{t("General")}</option>
                     <option value="obc">OBC</option>
                     <option value="sc">SC</option>
                     <option value="st">ST</option>
-                    <option value="other">Other</option>
+                    <option value="other">{t("Other")}</option>
                   </select>
                 </div>
               </div>
 
-              <div className="hw-section">Contact</div>
+              <div className="hw-section">{t("Contact")}</div>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div {...fieldProps("email")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Personal email <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Personal email")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <input type="email" value={email} onChange={e => { setEmail(e.target.value); setContactErrors(c => ({ ...c, email: undefined })); }} placeholder="name@example.com" className="field-input" />
                   <FieldError message={contactErrors.email ?? issueMessages.email} />
                 </div>
                 <div {...fieldProps("phone")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Mobile number <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Mobile number")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <PhoneInput value={phone} onChange={value => { setPhone(value); setContactErrors(c => ({ ...c, phone: undefined })); }} placeholder="90000 00000" />
                   <FieldError message={contactErrors.phone ?? issueMessages.phone} />
                 </div>
                 <div {...fieldProps("alternate_mobile")}>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile</label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">{t("Alternate mobile")}</label>
                   <PhoneInput value={identityExtras.alternate_mobile}
                     onChange={v => setIdentityExtras(x => ({ ...x, alternate_mobile: v }))}
-                    placeholder="Optional" />
+                    placeholder={t("Optional")} />
                   <FieldError message={issueMessages.alternate_mobile} />
                 </div>
               </div>
@@ -1175,16 +1178,16 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               />
 
               <div className="divider" />
-              <div className="sechead">SKILLS &amp; CERTIFICATIONS</div>
+              <div className="sechead">{t("SKILLS & CERTIFICATIONS")}</div>
               <div className="g3">
                 <div className="f">
-                  <label>Core skills</label>
-                  <input value={coreSkills} onChange={e => setCoreSkills(e.target.value)} placeholder="e.g. React, payroll operations, team leadership" className="finput" />
-                  <div className="hint">Use comma-separated skills; keep this relevant to the role.</div>
+                  <label>{t("Core skills")}</label>
+                  <input value={coreSkills} onChange={e => setCoreSkills(e.target.value)} placeholder={t("e.g. React, payroll operations, team leadership")} className="finput" />
+                  <div className="hint">{t("Use comma-separated skills; keep this relevant to the role.")}</div>
                 </div>
                 <div className="f">
-                  <label>Certifications</label>
-                  <input value={certifications} onChange={e => setCertifications(e.target.value)} placeholder="Certification and year" className="finput" />
+                  <label>{t("Certifications")}</label>
+                  <input value={certifications} onChange={e => setCertifications(e.target.value)} placeholder={t("Certification and year")} className="finput" />
                 </div>
               </div>
             </div>
@@ -1242,9 +1245,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
     {draftActions.isDiscardOpen && (
       <ConfirmModal
-        title="Discard this draft?"
-        body="The draft and everything entered so far will be deleted, and its reserved employee number is released. This cannot be undone. To keep it, use Save & exit instead."
-        confirmLabel="Discard draft"
+        title={t("Discard this draft?")}
+        body={t("The draft and everything entered so far will be deleted, and its reserved employee number is released. This cannot be undone. To keep it, use Save & exit instead.")}
+        confirmLabel={t("Discard draft")}
         danger
         saving={draftActions.isDiscarding}
         onConfirm={draftActions.confirmDiscard}
@@ -1253,9 +1256,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     )}
     {documentToRemove && (
       <ConfirmModal
-        title="Remove this document?"
-        body="You will need to upload it again before hiring."
-        confirmLabel="Remove"
+        title={t("Remove this document?")}
+        body={t("You will need to upload it again before hiring.")}
+        confirmLabel={t("Remove")}
         danger
         onConfirm={() => removeDocument(documentToRemove)}
         onCancel={() => setDocumentToRemove(null)}

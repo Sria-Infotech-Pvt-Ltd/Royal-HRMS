@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import DocPreviewModal from "@/components/DocPreviewModal";
+import { useT } from "@/hooks/useI18n";
 import { LeaveRequest } from "../../leave/_data";
 import { ApprovalItem, CorrectionRequest, ExpenseRequest, fmtAmount, fmtSubmitted, initials } from "../_data";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
@@ -56,13 +57,14 @@ function TimelineDot({ status }: { status: StageStatus }) {
 }
 
 function TimelineRow({ label, status, sub }: { label: string; status: StageStatus; sub?: string | null }) {
+  const t = useT();
   return (
     <div className="ta-timeline-item">
       <TimelineDot status={status} />
       <div>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ta-text)" }}>{label}</div>
         <div style={{ fontSize: 12, color: "var(--ta-text-muted)", marginTop: 1 }}>
-          {status ? (status === "approved" ? "Approved" : "Rejected") : "Pending"}
+          {status ? (status === "approved" ? t("Approved") : t("Rejected")) : t("Pending")}
           {sub ? ` · ${sub}` : ""}
         </div>
       </div>
@@ -79,6 +81,7 @@ function reasonText(item: ApprovalItem): string {
 }
 
 export default function RequestDetailDrawer({ item, onClose, onApprove, onReject }: Props) {
+  const t = useT();
   const [preview, setPreview] = useState<{ name: string; url: string; fileName: string } | null>(null);
 
   return (
@@ -88,8 +91,8 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
         {item && (
           <>
             <div className="drawer-header">
-              <div className="drawer-title">Request Details</div>
-              <button className="drawer-close" onClick={onClose} suppressHydrationWarning aria-label="Close">
+              <div className="drawer-title">{t("Request Details")}</div>
+              <button className="drawer-close" onClick={onClose} suppressHydrationWarning aria-label={t("Close")}>
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -97,7 +100,7 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
             <div className="drawer-body">
               {/* Employee Information */}
               <div className="ta-drawer-section">
-                <div className="ta-drawer-label">Employee Information</div>
+                <div className="ta-drawer-label">{t("Employee Information")}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
                   <div className="ta-emp-avatar" style={{ width: 42, height: 42, fontSize: 14 }}>
                     {initials(item.employeeName)}
@@ -117,46 +120,46 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
 
               {/* Request Details */}
               <div className="ta-drawer-section">
-                <div className="ta-drawer-label">Request Details</div>
+                <div className="ta-drawer-label">{t("Request Details")}</div>
 
                 {isLeave(item) && (
                   <>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Leave Type</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.leave_type_display}</span></div>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Duration</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.duration_display}</span></div>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Dates</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailSecondary}</span></div>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Total Days</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.total_days}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Leave Type")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.leave_type_display}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Duration")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.duration_display}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Dates")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailSecondary}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Total Days")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.total_days}</span></div>
                     {item.raw.lop_days > 0 && (
-                      <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>LOP Days</span><span style={{ fontWeight: 600, fontSize: 13, color: "#B45309" }}>{item.raw.lop_days}</span></div>
+                      <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("LOP Days")}</span><span style={{ fontWeight: 600, fontSize: 13, color: "#B45309" }}>{item.raw.lop_days}</span></div>
                     )}
                   </>
                 )}
 
                 {isExpense(item) && (
                   <>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Title</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.title}</span></div>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Category</span><span style={{ fontWeight: 600, fontSize: 13, textTransform: "capitalize" }}>{item.raw.category}</span></div>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Amount</span><span style={{ fontWeight: 700, fontSize: 14 }}>{fmtAmount(item.raw.amount)}</span></div>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Expense Date</span><span style={{ fontWeight: 600, fontSize: 13 }}>{fmtSubmitted(item.raw.expense_date)}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Title")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.title}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Category")}</span><span style={{ fontWeight: 600, fontSize: 13, textTransform: "capitalize" }}>{item.raw.category}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Amount")}</span><span style={{ fontWeight: 700, fontSize: 14 }}>{fmtAmount(item.raw.amount)}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Expense Date")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{fmtSubmitted(item.raw.expense_date)}</span></div>
                   </>
                 )}
 
                 {isWfh(item) && (
                   <>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Dates</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailSecondary}</span></div>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Total Days</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailTertiary}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Dates")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailSecondary}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Total Days")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailTertiary}</span></div>
                     {item.raw.location_label && (
-                      <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Location</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.location_label}</span></div>
+                      <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Location")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.location_label}</span></div>
                     )}
                   </>
                 )}
 
                 {isCorrection(item) && (
                   <>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Correction Type</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailPrimary}</span></div>
-                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Date</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailTertiary}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Correction Type")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailPrimary}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{t("Date")}</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailTertiary}</span></div>
                     {item.detailSecondary.split("  ·  ").map((line, i) => (
                       <div className="ta-drawer-row" key={i}>
-                        <span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{item.raw.punch_type === "BOTH" ? (i === 0 ? "Check-in" : "Check-out") : (item.raw.punch_type === "IN" ? "Check-in" : "Check-out")}</span>
+                        <span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>{item.raw.punch_type === "BOTH" ? (i === 0 ? t("Check-in") : t("Check-out")) : (item.raw.punch_type === "IN" ? t("Check-in") : t("Check-out"))}</span>
                         <span style={{ fontWeight: 600, fontSize: 13, fontVariantNumeric: "tabular-nums" }}>{line}</span>
                       </div>
                     ))}
@@ -166,7 +169,7 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
 
               {/* Reason */}
               <div className="ta-drawer-section">
-                <div className="ta-drawer-label">Reason</div>
+                <div className="ta-drawer-label">{t("Reason")}</div>
                 <p style={{ fontSize: 13, color: "var(--ta-text)", lineHeight: 1.6 }}>
                   {reasonText(item)}
                 </p>
@@ -178,24 +181,24 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
               {/* Attachments */}
               {(isLeave(item) && item.raw.document_url) || (isExpense(item) && item.raw.receipts?.length > 0) ? (
                 <div className="ta-drawer-section">
-                  <div className="ta-drawer-label">Attachments</div>
+                  <div className="ta-drawer-label">{t("Attachments")}</div>
                   {isLeave(item) && item.raw.document_url && (
                     <div
                       className="ta-attachment"
-                      onClick={() => setPreview({ name: "Supporting Document", url: item.raw.document_url as string, fileName: fileNameFromUrl(item.raw.document_url as string) })}
+                      onClick={() => setPreview({ name: t("Supporting Document"), url: item.raw.document_url as string, fileName: fileNameFromUrl(item.raw.document_url as string) })}
                     >
                       <i className="ti ti-paperclip" />
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>Supporting Document</span>
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>{t("Supporting Document")}</span>
                     </div>
                   )}
                   {isExpense(item) && item.raw.receipts.map((r, idx) => r.url && (
                     <div
                       key={r.id}
                       className="ta-attachment"
-                      onClick={() => setPreview({ name: `Receipt ${idx + 1}`, url: r.url as string, fileName: fileNameFromUrl(r.url as string) })}
+                      onClick={() => setPreview({ name: t("Receipt {number}", { number: idx + 1 }), url: r.url as string, fileName: fileNameFromUrl(r.url as string) })}
                     >
                       <i className="ti ti-receipt" />
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>Receipt {idx + 1}</span>
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>{t("Receipt {number}", { number: idx + 1 })}</span>
                     </div>
                   ))}
                 </div>
@@ -203,38 +206,38 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
 
               {/* Approval Timeline */}
               <div className="ta-drawer-section">
-                <div className="ta-drawer-label">Approval Timeline</div>
-                <TimelineRow label="Submitted" status={null} sub={fmtSubmitted(item.submittedAt)} />
+                <div className="ta-drawer-label">{t("Approval Timeline")}</div>
+                <TimelineRow label={t("Submitted")} status={null} sub={fmtSubmitted(item.submittedAt)} />
 
                 {isLeave(item) && (
                   <>
-                    <TimelineRow label="Manager Approval" status={item.raw.l1_status as StageStatus} sub={item.raw.l1_approver_name || undefined} />
+                    <TimelineRow label={t("Manager Approval")} status={item.raw.l1_status as StageStatus} sub={item.raw.l1_approver_name || undefined} />
                     {item.raw.l2_approver_name && (
-                      <TimelineRow label="HR Approval" status={item.raw.l2_status as StageStatus} sub={item.raw.l2_approver_name || undefined} />
+                      <TimelineRow label={t("HR Approval")} status={item.raw.l2_status as StageStatus} sub={item.raw.l2_approver_name || undefined} />
                     )}
                   </>
                 )}
 
                 {isCorrection(item) && (
                   <>
-                    <TimelineRow label="Manager Approval" status={item.raw.l1_status} sub={item.raw.l1_approver_name || undefined} />
+                    <TimelineRow label={t("Manager Approval")} status={item.raw.l1_status} sub={item.raw.l1_approver_name || undefined} />
                     {item.raw.l2_approver_name && (
-                      <TimelineRow label="HR Approval" status={item.raw.l2_status} sub={item.raw.l2_approver_name || undefined} />
+                      <TimelineRow label={t("HR Approval")} status={item.raw.l2_status} sub={item.raw.l2_approver_name || undefined} />
                     )}
                   </>
                 )}
 
                 {isWfh(item) && (
                   <>
-                    <TimelineRow label="Manager Approval" status={item.raw.l1_status} sub={item.raw.l1_approver_name || undefined} />
+                    <TimelineRow label={t("Manager Approval")} status={item.raw.l1_status} sub={item.raw.l1_approver_name || undefined} />
                     {item.raw.l2_approver_name && (
-                      <TimelineRow label="HR Approval" status={item.raw.l2_status} sub={item.raw.l2_approver_name || undefined} />
+                      <TimelineRow label={t("HR Approval")} status={item.raw.l2_status} sub={item.raw.l2_approver_name || undefined} />
                     )}
                   </>
                 )}
 
                 {isExpense(item) && item.displayStatus !== "pending" && (
-                  <TimelineRow label="Decision" status={item.displayStatus === "approved" ? "approved" : "rejected"} />
+                  <TimelineRow label={t("Decision")} status={item.displayStatus === "approved" ? "approved" : "rejected"} />
                 )}
               </div>
 
@@ -242,14 +245,14 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
               {(() => {
                 const comments: { label: string; text: string }[] = [];
                 if (isLeave(item) || isCorrection(item) || isWfh(item)) {
-                  if (item.raw.l1_remarks) comments.push({ label: item.raw.l1_approver_name || "Manager", text: item.raw.l1_remarks });
-                  if (item.raw.l2_remarks) comments.push({ label: item.raw.l2_approver_name || "HR", text: item.raw.l2_remarks });
+                  if (item.raw.l1_remarks) comments.push({ label: item.raw.l1_approver_name || t("Manager"), text: item.raw.l1_remarks });
+                  if (item.raw.l2_remarks) comments.push({ label: item.raw.l2_approver_name || t("HR"), text: item.raw.l2_remarks });
                 }
-                if (isExpense(item) && item.raw.remarks) comments.push({ label: "Approver", text: item.raw.remarks });
+                if (isExpense(item) && item.raw.remarks) comments.push({ label: t("Approver"), text: item.raw.remarks });
                 if (comments.length === 0) return null;
                 return (
                   <div className="ta-drawer-section">
-                    <div className="ta-drawer-label">Comments</div>
+                    <div className="ta-drawer-label">{t("Comments")}</div>
                     {comments.map((c, i) => (
                       <div key={i} className="ta-comment">
                         <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 3 }}>{c.label}</div>
@@ -269,7 +272,7 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
                   onClick={() => onReject(item)}
                   suppressHydrationWarning
                 >
-                  <i className="ti ti-x" /> Reject
+                  <i className="ti ti-x" /> {t("Reject")}
                 </button>
                 <button
                   className="ta-bulk-btn ta-bulk-approve"
@@ -277,7 +280,7 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
                   onClick={() => onApprove(item)}
                   suppressHydrationWarning
                 >
-                  <i className="ti ti-check" /> Approve
+                  <i className="ti ti-check" /> {t("Approve")}
                 </button>
               </div>
             )}

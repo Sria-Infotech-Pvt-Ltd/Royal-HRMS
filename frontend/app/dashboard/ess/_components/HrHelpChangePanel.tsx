@@ -3,6 +3,7 @@
 // Inside an open HR Help row: for a profile correction that carries a new value, shows what is asked (current -> requested) and lets
 // HR / the System Admin open the employee's record, apply the requested value (which also resolves the ticket) or decline it.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
@@ -39,7 +40,7 @@ export default function HrHelpChangePanel({ entry, note, onDecided }: HrHelpChan
       onDecided();
     } catch (caught: unknown) {
       const message = (caught as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(message ?? "Could not update this request.");
+      setError(message ?? tr("Could not update this request."));
     } finally {
       setBusy(null);
     }
@@ -48,46 +49,46 @@ export default function HrHelpChangePanel({ entry, note, onDecided }: HrHelpChan
   return (
     <div style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: 12, marginBottom: 12, background: "var(--surface)" }}>
       <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--outline)", marginBottom: 6 }}>
-        Requested change · {entry.change_label || suggested?.label || "profile field"}
+        {tr("Requested change · {field}", { field: entry.change_label || suggested?.label || tr("profile field") })}
       </div>
       {needsValue ? (
         <div className="field-group" style={{ marginBottom: 10, maxWidth: 420 }}>
-          <label className="field-label">New {(suggested?.label ?? "value").toLowerCase()} (as the employee asked in the request)</label>
-          {suggested ? <ProfileChangeValueInput spec={suggested} value={typedValue} onChange={setTypedValue} /> : <p style={{ fontSize: 12, margin: 0 }}>Loading…</p>}
+          <label className="field-label">{tr("New {field} (as the employee asked in the request)", { field: (suggested?.label ?? tr("value")).toLowerCase() })}</label>
+          {suggested ? <ProfileChangeValueInput spec={suggested} value={typedValue} onChange={setTypedValue} /> : <p style={{ fontSize: 12, margin: 0 }}>{tr("Loading…")}</p>}
         </div>
       ) : (
         <div style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-          <span style={{ color: "var(--on-variant)" }}>{entry.change_old_value || "(empty)"}</span>
+          <span style={{ color: "var(--on-variant)" }}>{entry.change_old_value || tr("(empty)")}</span>
           <i className="ti ti-arrow-right" />
           <strong>{entry.change_new_value}</strong>
         </div>
       )}
       {entry.change_decision ? (
-        <p style={{ fontSize: 12, margin: 0, color: "var(--on-variant)" }}>{DECISION_TEXT[entry.change_decision]}</p>
+        <p style={{ fontSize: 12, margin: 0, color: "var(--on-variant)" }}>{tr(DECISION_TEXT[entry.change_decision])}</p>
       ) : (
         <>
           {error && <div className="alert alert-error" style={{ marginBottom: 10 }}>{error}</div>}
           {entry.change_is_sensitive && (
             <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "0 0 8px" }}>
-              Bank detail: check it against the employee&apos;s passbook or a cancelled cheque before applying. The number is shown masked once decided.
+              {tr("Bank detail: check it against the employee's passbook or a cancelled cheque before applying. The number is shown masked once decided.")}
             </p>
           )}
           {entry.change_needs_system_admin && (
-            <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "0 0 8px" }}>Only a System Admin can change the date of joining.</p>
+            <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "0 0 8px" }}>{tr("Only a System Admin can change the date of joining.")}</p>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a className="btn btn-ghost btn-sm" href={`/dashboard/employees?open=${encodeURIComponent(entry.submitted_by_code)}`}>
-              <i className="ti ti-user-search" /> Open employee record
+              <i className="ti ti-user-search" /> {tr("Open employee record")}
             </a>
             <button type="button" className="btn btn-filled btn-sm" onClick={() => decide("approve")} disabled={busy !== null || (needsValue && !typedValue.trim())} suppressHydrationWarning>
-              {busy === "approve" ? "Applying…" : "Apply requested change"}
+              {busy === "approve" ? tr("Applying…") : tr("Apply requested change")}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => decide("reject")} disabled={busy !== null} suppressHydrationWarning>
-              {busy === "reject" ? "Declining…" : "Decline"}
+              {busy === "reject" ? tr("Declining…") : tr("Decline")}
             </button>
           </div>
           <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "8px 0 0" }}>
-            Applying updates the record and resolves this request. Declining needs a reason in the Response box.
+            {tr("Applying updates the record and resolves this request. Declining needs a reason in the Response box.")}
           </p>
         </>
       )}

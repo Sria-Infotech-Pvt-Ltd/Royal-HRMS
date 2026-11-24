@@ -7,6 +7,8 @@
 // exact same step-by-step wizard experience instead of two different UIs for
 // the same underlying flow.
 
+import { useT } from "@/hooks/useI18n";
+
 export interface StepDef {
   label: string;
   shortLabel: string;
@@ -26,6 +28,7 @@ interface Props {
 // freely between steps, but that let HR advance to a later step while an
 // earlier one's required fields were still blank, which isn't wanted.
 export default function StepIndicator({ steps, currentStep, highestSaved, onStepClick }: Props) {
+  const t = useT();
   // +1 so the very first step in progress (highestSaved starts at -1
   // before anything is saved) still shows some visible progress rather
   // than a flat 0% the moment the wizard opens.
@@ -37,9 +40,9 @@ export default function StepIndicator({ steps, currentStep, highestSaved, onStep
       <div style={{ marginBottom: "1.25rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, fontSize: 12.5 }}>
           <span style={{ fontWeight: 600, color: "var(--on-variant)" }}>
-            Step {currentStep + 1} of {steps.length}
+            {t("Step {current} of {total}", { current: currentStep + 1, total: steps.length })}
           </span>
-          <span style={{ fontWeight: 700, color: "var(--primary)" }}>{progressPct}% complete</span>
+          <span style={{ fontWeight: 700, color: "var(--primary)" }}>{t("{percent}% complete", { percent: progressPct })}</span>
         </div>
         <div style={{ height: 6, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden" }}>
           <div style={{
@@ -77,7 +80,7 @@ export default function StepIndicator({ steps, currentStep, highestSaved, onStep
                 </div>
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: isDone ? "var(--success)" : isActive ? "var(--primary)" : "var(--outline)", marginBottom: 3 }}>
-                    {isDone ? "Done" : `Step ${i + 1}`}
+                    {isDone ? t("Done") : t("Step {number}", { number: i + 1 })}
                   </div>
                   <div style={{
                     fontSize: 12, fontWeight: isActive ? 700 : 500,
@@ -90,7 +93,7 @@ export default function StepIndicator({ steps, currentStep, highestSaved, onStep
                     // "Documen") instead of wrapping it onto a second line.
                     maxWidth: 88, lineHeight: 1.3, whiteSpace: "normal", wordBreak: "break-word",
                   }}>
-                    {step.shortLabel}
+                    {t(step.shortLabel)}
                   </div>
                 </div>
               </button>

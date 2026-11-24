@@ -10,6 +10,7 @@
 // straight to the record, same as PATCH API.employees.me always accepted.
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useApiErrors } from "@/hooks/useApiErrors";
@@ -92,6 +93,7 @@ function buildInitialForm(profile: ProfileForEdit): FormState {
 }
 
 export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
+  const t = useT();
   const [form, setForm] = useState<FormState>(() => buildInitialForm(profile));
   const [saving, setSaving] = useState(false);
   const { fieldErrors, formError, handleError, clearAll, clearField } = useApiErrors();
@@ -132,7 +134,7 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
       });
       onSaved();
     } catch (err: unknown) {
-      handleError(err, "Failed to update profile.");
+      handleError(err, t("Failed to update profile."));
     } finally {
       setSaving(false);
     }
@@ -142,55 +144,55 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
     <div className="drawer-overlay open" onClick={onClose}>
       <div className="drawer open" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
         <div className="drawer-header">
-          <div className="drawer-title">Edit my details</div>
-          <button className="drawer-close" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
+          <div className="drawer-title">{t("Edit my details")}</div>
+          <button className="drawer-close" onClick={onClose} aria-label={t("Close")}><i className="ti ti-x" /></button>
         </div>
 
         <div className="drawer-body">
           {formError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {formError}</div>}
 
           <div style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", marginBottom: 10 }}>
-            Contact
+            {t("Contact")}
           </div>
           <div className="field-group">
-            <label className="field-label">Mobile number</label>
+            <label className="field-label">{t("Mobile number")}</label>
             <input className={`field-input${fieldErrors.phone ? " field-error" : ""}`} value={form.phone} onChange={e => field("phone", e.target.value)} placeholder="+91 98765 43210" />
             <FieldError message={fieldErrors.phone ?? phoneClientError} />
           </div>
 
           <div style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", margin: "18px 0 10px" }}>
-            Current Address
+            {t("Current Address")}
           </div>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Address Line 1</label>
+              <label className="field-label">{t("Address Line 1")}</label>
               <input className="field-input" value={form.current_address} onChange={e => field("current_address", e.target.value)} />
             </div>
             <div className="field-group">
-              <label className="field-label">Address Line 2</label>
+              <label className="field-label">{t("Address Line 2")}</label>
               <input className="field-input" value={form.current_address_line2} onChange={e => field("current_address_line2", e.target.value)} />
             </div>
           </div>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Village / Town / Area</label>
+              <label className="field-label">{t("Village / Town / Area")}</label>
               <input className="field-input" value={form.current_village} onChange={e => field("current_village", e.target.value)} />
             </div>
             <div className="field-group">
-              <label className="field-label">District</label>
+              <label className="field-label">{t("District")}</label>
               <input className="field-input" value={form.current_district} onChange={e => field("current_district", e.target.value)} />
             </div>
           </div>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">State</label>
+              <label className="field-label">{t("State")}</label>
               <select className="field-input field-select" value={form.current_state} onChange={e => field("current_state", e.target.value)}>
-                <option value="">Select…</option>
+                <option value="">{t("Select…")}</option>
                 {STATES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div className="field-group">
-              <label className="field-label">PIN Code</label>
+              <label className="field-label">{t("PIN Code")}</label>
               <input className="field-input" value={form.current_pin_code}
                 onChange={e => field("current_pin_code", e.target.value.replace(/\D/g, "").slice(0, 6))}
                 maxLength={6} inputMode="numeric" />
@@ -200,44 +202,44 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
           <label className="module-check" style={{ margin: "4px 0 12px" }}>
             <input type="checkbox" checked={form.permanent_same_as_current}
               onChange={e => field("permanent_same_as_current", e.target.checked)} />
-            <span>Permanent address is the same as current address</span>
+            <span>{t("Permanent address is the same as current address")}</span>
           </label>
 
           {!form.permanent_same_as_current && (
             <>
               <div style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", margin: "8px 0 10px" }}>
-                Permanent Address
+                {t("Permanent Address")}
               </div>
               <div className="form-row cols-2">
                 <div className="field-group">
-                  <label className="field-label">Address Line 1</label>
+                  <label className="field-label">{t("Address Line 1")}</label>
                   <input className="field-input" value={form.permanent_address} onChange={e => field("permanent_address", e.target.value)} />
                 </div>
                 <div className="field-group">
-                  <label className="field-label">Address Line 2</label>
+                  <label className="field-label">{t("Address Line 2")}</label>
                   <input className="field-input" value={form.permanent_address_line2} onChange={e => field("permanent_address_line2", e.target.value)} />
                 </div>
               </div>
               <div className="form-row cols-2">
                 <div className="field-group">
-                  <label className="field-label">Village / Town / Area</label>
+                  <label className="field-label">{t("Village / Town / Area")}</label>
                   <input className="field-input" value={form.permanent_village} onChange={e => field("permanent_village", e.target.value)} />
                 </div>
                 <div className="field-group">
-                  <label className="field-label">District</label>
+                  <label className="field-label">{t("District")}</label>
                   <input className="field-input" value={form.permanent_district} onChange={e => field("permanent_district", e.target.value)} />
                 </div>
               </div>
               <div className="form-row cols-2">
                 <div className="field-group">
-                  <label className="field-label">State</label>
+                  <label className="field-label">{t("State")}</label>
                   <select className="field-input field-select" value={form.permanent_state} onChange={e => field("permanent_state", e.target.value)}>
-                    <option value="">Select…</option>
+                    <option value="">{t("Select…")}</option>
                     {STATES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div className="field-group">
-                  <label className="field-label">PIN Code</label>
+                  <label className="field-label">{t("PIN Code")}</label>
                   <input className="field-input" value={form.permanent_pin_code}
                     onChange={e => field("permanent_pin_code", e.target.value.replace(/\D/g, "").slice(0, 6))}
                     maxLength={6} inputMode="numeric" />
@@ -247,26 +249,26 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
           )}
 
           <div style={{ fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", margin: "18px 0 10px" }}>
-            Emergency Contact
+            {t("Emergency Contact")}
           </div>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Name</label>
+              <label className="field-label">{t("Name")}</label>
               <input className="field-input" value={form.emergency_name} onChange={e => field("emergency_name", e.target.value)} />
             </div>
             <div className="field-group">
-              <label className="field-label">Relationship</label>
+              <label className="field-label">{t("Relationship")}</label>
               <input className="field-input" value={form.emergency_relationship} onChange={e => field("emergency_relationship", e.target.value)} />
             </div>
           </div>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Phone</label>
+              <label className="field-label">{t("Phone")}</label>
               <input className={`field-input${fieldErrors.emergency_phone ? " field-error" : ""}`} value={form.emergency_phone} onChange={e => field("emergency_phone", e.target.value)} />
               <FieldError message={fieldErrors.emergency_phone} />
             </div>
             <div className="field-group">
-              <label className="field-label">Email</label>
+              <label className="field-label">{t("Email")}</label>
               <input className={`field-input${fieldErrors.emergency_email ? " field-error" : ""}`} value={form.emergency_email} onChange={e => field("emergency_email", e.target.value)} />
               <FieldError message={fieldErrors.emergency_email} />
             </div>
@@ -274,9 +276,9 @@ export default function ProfileEditModal({ profile, onClose, onSaved }: Props) {
         </div>
 
         <div className="drawer-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
-            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save changes"}
+            {saving ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : t("Save changes")}
           </button>
         </div>
       </div>

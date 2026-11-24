@@ -17,6 +17,7 @@
 // and carries the employee's own words in `reason_note`, exactly like the
 // 'other' path already supported by the full separation form.
 
+import { tr } from "@/lib/i18n/tr";
 import { useState } from "react";
 import RequestModal from "@/components/RequestModal";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -47,9 +48,9 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
 
   function validate(): boolean {
     setError(null);
-    if (!lastDay) { setError("Please select your proposed last day."); return false; }
-    if (lastDay < todayIso()) { setError("Your proposed last day cannot be in the past."); return false; }
-    if (reason.trim().length < 10) { setError("Please describe your reason in at least 10 characters."); return false; }
+    if (!lastDay) { setError(tr("Please select your proposed last day.")); return false; }
+    if (lastDay < todayIso()) { setError(tr("Your proposed last day cannot be in the past.")); return false; }
+    if (reason.trim().length < 10) { setError(tr("Please describe your reason in at least 10 characters.")); return false; }
     return true;
   }
 
@@ -73,7 +74,7 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
       onSubmitted();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg ?? "Failed to submit request. Please try again.");
+      setError(msg ?? tr("Failed to submit request. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -82,7 +83,7 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
   return (
     <>
     <RequestModal
-      title={<><i className="ti ti-logout" /> Resignation request</>}
+      title={<><i className="ti ti-logout" /> {tr("Resignation request")}</>}
       onClose={onClose}
       onSubmit={handleSubmit}
       submitting={submitting}
@@ -90,49 +91,49 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
     >
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
-          <label className="field-label">Proposed last day</label>
+          <label className="field-label">{tr("Proposed last day")}</label>
           <DateInput className="field-input" min={todayIso()} value={lastDay} onChange={isoDate => setLastDay(isoDate)} />
         </div>
         <div className="field-group">
-          <label className="field-label">Notice period</label>
+          <label className="field-label">{tr("Notice period")}</label>
           <select
             className="field-input field-select"
             value={noticePeriodDays}
             onChange={e => setNoticePeriodDays(Number(e.target.value))}
           >
             {NOTICE_PERIOD_OPTIONS.map(days => (
-              <option key={days} value={days}>{days} days</option>
+              <option key={days} value={days}>{tr("{days} days", { days })}</option>
             ))}
           </select>
         </div>
       </div>
       <div className="field-group mb-16">
-        <label className="field-label">Reason</label>
+        <label className="field-label">{tr("Reason")}</label>
         <textarea
           className="field-input"
           rows={3}
           value={reason}
           onChange={e => setReason(e.target.value)}
-          placeholder="Describe your reason"
+          placeholder={tr("Describe your reason")}
         />
       </div>
       <div className="field-group">
-        <label className="field-label">Handover notes</label>
+        <label className="field-label">{tr("Handover notes")}</label>
         <textarea
           className="field-input"
           rows={3}
           value={handoverNotes}
           onChange={e => setHandoverNotes(e.target.value)}
-          placeholder="Key responsibilities and handover plan"
+          placeholder={tr("Key responsibilities and handover plan")}
         />
       </div>
     </RequestModal>
 
     {showConfirm && (
       <ConfirmModal
-        title="Submit this resignation request?"
-        body={`This submits a formal resignation with a proposed last day of ${lastDay} (${noticePeriodDays}-day notice) for HR approval.`}
-        confirmLabel="Submit Resignation"
+        title={tr("Submit this resignation request?")}
+        body={tr("This submits a formal resignation with a proposed last day of {lastDay} ({noticePeriodDays}-day notice) for HR approval.", { lastDay, noticePeriodDays })}
+        confirmLabel={tr("Submit Resignation")}
         danger
         saving={submitting}
         onConfirm={confirmSubmit}

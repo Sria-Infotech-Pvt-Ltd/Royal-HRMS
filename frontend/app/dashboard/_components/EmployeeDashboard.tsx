@@ -11,6 +11,7 @@ import EmpActionItems      from "@/components/dashboard/employee/EmpActionItems"
 import EmpRecentRequests   from "@/components/dashboard/employee/EmpRecentRequests";
 import EmpUpdatesCard      from "@/components/dashboard/employee/EmpUpdatesCard";
 import type { SessionPayload } from "@/lib/session";
+import { useT } from "@/hooks/useI18n";
 
 interface Props { session: SessionPayload }
 
@@ -24,6 +25,7 @@ const QUICK_ACTIONS = [
 ];
 
 export default function EmployeeDashboard({ session }: Props) {
+  const t = useT();
   const firstName = session.name.split(" ")[0];
 
   return (
@@ -52,7 +54,7 @@ export default function EmployeeDashboard({ session }: Props) {
       {/* Quick Actions */}
       <div className="card mb-20">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-bolt" /> Quick Actions</div>
+          <div className="card-title"><i className="ti ti-bolt" /> {t("Quick Actions")}</div>
         </div>
         <div className="card-body">
           <div className="qa-grid">
@@ -61,7 +63,7 @@ export default function EmployeeDashboard({ session }: Props) {
                 <div className="qa-icon" style={{ background: action.bg, color: action.color }}>
                   <i className={`ti ${action.icon}`} />
                 </div>
-                <span className="qa-label">{action.label}</span>
+                <span className="qa-label">{t(action.label)}</span>
               </a>
             ))}
           </div>

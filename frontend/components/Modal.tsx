@@ -3,6 +3,7 @@
 import { useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
+import { useT } from "@/hooks/useI18n";
 
 interface ModalProps {
   title: ReactNode;
@@ -37,6 +38,7 @@ export default function Modal({
   bodyStyle,
   scrollBody = false,
 }: ModalProps) {
+  const t = useT();
   function handleClose() {
     if (!closeDisabled) onClose();
   }
@@ -87,7 +89,7 @@ export default function Modal({
           <div className="modal-title" id={titleId}>{title}</div>
           <button
             className="modal-close"
-            aria-label="Close"
+            aria-label={t("Close")}
             suppressHydrationWarning
             onClick={handleClose}
             disabled={closeDisabled}

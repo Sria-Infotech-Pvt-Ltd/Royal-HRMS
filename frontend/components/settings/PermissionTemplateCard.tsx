@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { hueOf, initialsOf } from "@/lib/accessListView";
 import { formatDate } from "@/lib/formatDate";
 import { modulesOfTemplate, sensitiveCount, totalPermissions } from "@/lib/permissionTemplatesView";
@@ -41,6 +42,7 @@ function ActionButton({ icon, label, onClick, tone }: { icon: string; label: str
 
 /** One template: what it grants (a meter, the biggest modules, a warning for sensitive access), where it is used, and its actions. */
 export default function PermissionTemplateCard({ template, catalogue, canEdit, onApply, onEdit, onDuplicate, onDelete }: Props) {
+  const t = useT();
   const [isOpen, setIsOpen] = useState(false);
   const count = template.permission_codenames.length;
   const total = totalPermissions(catalogue);
@@ -58,27 +60,27 @@ export default function PermissionTemplateCard({ template, catalogue, canEdit, o
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-bold text-[var(--on-bg)]">{template.name}</h3>
-          <p className="mt-0.5 line-clamp-2 text-xs text-[var(--on-variant)]">{template.description || "No description"}</p>
+          <p className="mt-0.5 line-clamp-2 text-xs text-[var(--on-variant)]">{template.description || t("No description")}</p>
         </div>
         <span className="shrink-0 whitespace-nowrap text-right text-xs text-[var(--on-variant)]">
-          <strong className="block text-base text-[var(--on-bg)]">{count}</strong>permission{count === 1 ? "" : "s"}
+          <strong className="block text-base text-[var(--on-bg)]">{count}</strong>{count === 1 ? t("permission") : t("permissions")}
         </span>
       </div>
 
       <div>
-        <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--outline-v)" }} role="img" aria-label={`${count} of ${total} permissions`}>
+        <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--outline-v)" }} role="img" aria-label={t("{count} of {total} permissions", { count, total })}>
           <div className="h-full rounded-full" style={{ width: `${percent}%`, background: count === 0 ? "var(--outline-v)" : "var(--primary)" }} />
         </div>
-        <div className="mt-1 text-[11px] text-[var(--on-variant)]">{percent}% of all {total} permissions</div>
+        <div className="mt-1 text-[11px] text-[var(--on-variant)]">{t("{percent}% of all {total} permissions", { percent, total })}</div>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {template.can_manage_team && <Pill icon="ti-users" tone="var(--primary)">Team manager</Pill>}
-        {template.can_manage_branch && <Pill icon="ti-building" tone="var(--primary)">Branch-wide access</Pill>}
-        {count === 0 && <Pill icon="ti-alert-circle" tone="var(--warn)">Empty: grants nothing</Pill>}
-        {sensitive > 0 && <Pill icon="ti-alert-triangle" tone="var(--warn)">{sensitive} sensitive</Pill>}
+        {template.can_manage_team && <Pill icon="ti-users" tone="var(--primary)">{t("Team manager")}</Pill>}
+        {template.can_manage_branch && <Pill icon="ti-building" tone="var(--primary)">{t("Branch-wide access")}</Pill>}
+        {count === 0 && <Pill icon="ti-alert-circle" tone="var(--warn)">{t("Empty: grants nothing")}</Pill>}
+        {sensitive > 0 && <Pill icon="ti-alert-triangle" tone="var(--warn)">{t("{count} sensitive", { count: sensitive })}</Pill>}
         <Pill icon="ti-briefcase" tone={template.position_count > 0 ? "var(--success)" : "var(--on-variant)"}>
-          {template.position_count === 0 ? "Not applied yet" : `Applied to ${template.position_count} position${template.position_count === 1 ? "" : "s"}`}
+          {template.position_count === 0 ? t("Not applied yet") : template.position_count === 1 ? t("Applied to {count} position", { count: template.position_count }) : t("Applied to {count} positions", { count: template.position_count })}
         </Pill>
       </div>
 
@@ -89,9 +91,9 @@ export default function PermissionTemplateCard({ template, catalogue, canEdit, o
               {labelOf(entry.module)} <strong className="text-[var(--on-bg)]">{entry.actions.length}</strong>
             </span>
           ))}
-          {modules.length > MODULES_SHOWN && <span className="text-[var(--on-variant)]">+{modules.length - MODULES_SHOWN} more</span>}
+          {modules.length > MODULES_SHOWN && <span className="text-[var(--on-variant)]">{t("+{count} more", { count: modules.length - MODULES_SHOWN })}</span>}
           <button type="button" className="ml-auto text-[11px] font-semibold hover:underline" style={{ color: "var(--primary)" }} aria-expanded={isOpen} onClick={() => setIsOpen(open => !open)}>
-            {isOpen ? "Hide details" : "Show details"}
+            {isOpen ? t("Hide details") : t("Show details")}
           </button>
         </div>
       )}
@@ -109,16 +111,16 @@ export default function PermissionTemplateCard({ template, catalogue, canEdit, o
 
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t pt-3" style={{ borderColor: "var(--outline-v)" }}>
         <button type="button" className="btn btn-filled btn-sm" onClick={onApply} disabled={!canEdit}>
-          <i className="ti ti-users" /> Apply to positions
+          <i className="ti ti-users" /> {t("Apply to positions")}
         </button>
         {canEdit && (
           <>
-            <ActionButton icon="ti-edit" label="Edit" onClick={onEdit} />
-            <ActionButton icon="ti-copy" label="Duplicate" onClick={onDuplicate} />
-            <ActionButton icon="ti-trash" label="Delete" onClick={onDelete} tone="var(--error)" />
+            <ActionButton icon="ti-edit" label={t("Edit")} onClick={onEdit} />
+            <ActionButton icon="ti-copy" label={t("Duplicate")} onClick={onDuplicate} />
+            <ActionButton icon="ti-trash" label={t("Delete")} onClick={onDelete} tone="var(--error)" />
           </>
         )}
-        <span className="ml-auto text-[11px] text-[var(--on-variant)]">Updated {formatDate(template.updated_at) || "—"}</span>
+        <span className="ml-auto text-[11px] text-[var(--on-variant)]">{t("Updated {date}", { date: formatDate(template.updated_at) || "—" })}</span>
       </div>
     </article>
   );

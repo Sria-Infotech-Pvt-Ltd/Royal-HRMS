@@ -1,5 +1,6 @@
 // Pure helpers for the Assessment Management page: no component state, safe to import anywhere.
 
+import { tr } from "@/lib/i18n/tr"
 import type { Assessment } from "@/app/dashboard/assessments/_types"
 
 export type StateFilter = "" | "active" | "inactive"
@@ -58,14 +59,16 @@ export function progressParts(assessment: Counted): { completed: number; inProgr
 }
 
 export function attemptsLabel(assessment: Pick<Assessment, "effective_max_attempts" | "max_attempts">): string {
-  const attempts = assessment.effective_max_attempts === 0 ? "Unlimited attempts" : `${assessment.effective_max_attempts} attempt${assessment.effective_max_attempts !== 1 ? "s" : ""}`
-  return assessment.max_attempts == null ? `${attempts} (global)` : attempts
+  const attempts = assessment.effective_max_attempts === 0
+    ? tr("Unlimited attempts")
+    : assessment.effective_max_attempts !== 1 ? tr("{count} attempts", { count: assessment.effective_max_attempts }) : tr("{count} attempt", { count: assessment.effective_max_attempts })
+  return assessment.max_attempts == null ? tr("{value} (global)", { value: attempts }) : attempts
 }
 
 export function timeLimitLabel(assessment: Pick<Assessment, "effective_time_limit_mins" | "time_limit_mins">): string {
-  if (!assessment.effective_time_limit_mins) return "No time limit"
-  const minutes = `${assessment.effective_time_limit_mins} min`
-  return assessment.time_limit_mins == null ? `${minutes} (global)` : minutes
+  if (!assessment.effective_time_limit_mins) return tr("No time limit")
+  const minutes = tr("{minutes} min", { minutes: assessment.effective_time_limit_mins })
+  return assessment.time_limit_mins == null ? tr("{value} (global)", { value: minutes }) : minutes
 }
 
 /** Assessments narrowed by search (title or description) and active/inactive, then sorted. The input list is not changed. */

@@ -9,6 +9,7 @@
 import { useEffect, useRef } from "react";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import DateInput from "@/components/shared/DateInput";
+import { useT } from "@/hooks/useI18n";
 
 export type { HireDocument };
 
@@ -66,6 +67,7 @@ interface Props {
 const PER_ENTRY_TYPES = new Set(["degree_certificate", "tenth_certificate", "twelfth_certificate", "experience_letter"]);
 
 export default function DocumentsChecklistStep({ documents, uploading, error, onUpload, onDelete, verification, onVerificationChange, hasExperienceEntries, missing = {} }: Props) {
+  const t = useT();
   // The Experience Letter is only asked for once an employer is listed — but a letter that is already on file must
   // always be shown (Edit full record opens employees whose experience was never entered as separate rows).
   const hasExperienceLetter = documents.some(d => d.document_type === "experience_letter");
@@ -95,31 +97,31 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
       )}
       {categories.map(cat => (
         <div key={cat} className="mb-5">
-          <div className="hw-section">{cat}</div>
+          <div className="hw-section">{t(cat)}</div>
           <div className="space-y-2">
             {items.filter(d => d.category === cat).map(d => (
               <div key={d.key} className="hw-field flex items-center justify-between px-3.5 py-3 rounded-lg border border-[var(--outline-v)]"
                 data-hw-field={`doc_${d.key}`} data-hw-invalid={missing[`doc_${d.key}`] ? "true" : undefined}>
                 <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-semibold">{d.label}</span>
+                  <span className="text-[13px] font-semibold">{t(d.label)}</span>
                   {/* A required document is marked with the app's standard red asterisk, as on every form field. An optional one
                       carries no label: nothing marked means nothing is demanded. */}
-                  {d.required && <span className="req text-[13px] font-bold" title="Required" aria-label="required">*</span>}
-                  {missing[`doc_${d.key}`] && <span className="field-error-msg" role="alert" style={{ margin: 0 }}>Upload this to continue</span>}
+                  {d.required && <span className="req text-[13px] font-bold" title={t("Required")} aria-label={t("required")}>*</span>}
+                  {missing[`doc_${d.key}`] && <span className="field-error-msg" role="alert" style={{ margin: 0 }}>{t("Upload this to continue")}</span>}
                 </div>
                 <div className="flex items-center gap-2">
                   {PER_ENTRY_TYPES.has(d.key) && !docFor(d.key) && perEntryCount(d.key) > 0 ? (
                     // Already attached on the Education & experience step: shown as uploaded here, and not asked for again.
                     <div className="flex items-center gap-2" style={{ fontSize: 12, minWidth: 0 }}>
-                      <span className="badge badge-success" style={{ whiteSpace: "nowrap" }}><i className="ti ti-circle-check" /> Uploaded</span>
+                      <span className="badge badge-success" style={{ whiteSpace: "nowrap" }}><i className="ti ti-circle-check" /> {t("Uploaded")}</span>
                       <span style={{ color: "var(--on-variant)" }}>
-                        {perEntryCount(d.key) === 1 ? entryDocsFor(d.key)[0].file_name : `${perEntryCount(d.key)} files`} · attached in Education &amp; experience
+                        {perEntryCount(d.key) === 1 ? entryDocsFor(d.key)[0].file_name : t("{count} files", { count: perEntryCount(d.key) })} · {t("attached in Education & experience")}
                       </span>
                     </div>
                   ) : (
                     <DocUploadButton
                       documentType={d.key}
-                      label={d.label}
+                      label={t(d.label)}
                       existing={docFor(d.key)}
                       uploading={uploading === d.key}
                       onUpload={onUpload}
@@ -128,7 +130,7 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
                   )}
                   {PER_ENTRY_TYPES.has(d.key) && docFor(d.key) && perEntryCount(d.key) > 0 && (
                     <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                      + {perEntryCount(d.key)} more attached in Education &amp; experience
+                      {t("+ {count} more attached in Education & experience", { count: perEntryCount(d.key) })}
                     </span>
                   )}
                 </div>
@@ -140,7 +142,7 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
 
       {otherDocuments.length > 0 && (
         <div className="mb-5">
-          <div className="hw-section">Other documents</div>
+          <div className="hw-section">{t("Other documents")}</div>
           <div className="space-y-2">
             {otherDocuments.map(doc => (
               <div key={doc.id} className="flex items-center justify-between px-3.5 py-3 rounded-lg border border-[var(--outline-v)]">
@@ -159,29 +161,29 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
         </div>
       )}
 
-      <div className="hw-section">Background verification</div>
+      <div className="hw-section">{t("Background verification")}</div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Verification status</label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Verification status")}</label>
           <select value={verification.verification_status}
             onChange={e => onVerificationChange({ ...verification, verification_status: e.target.value })}
             className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--outline-v)] text-[13px] bg-[var(--surface)] cursor-pointer">
-            <option value="not_initiated">Not initiated</option>
-            <option value="in_progress">In progress</option>
-            <option value="completed">Completed</option>
+            <option value="not_initiated">{t("Not initiated")}</option>
+            <option value="in_progress">{t("In progress")}</option>
+            <option value="completed">{t("Completed")}</option>
           </select>
         </div>
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Completed on</label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Completed on")}</label>
           <DateInput value={verification.verification_completed_on}
             onChange={iso => onVerificationChange({ ...verification, verification_completed_on: iso })}
             className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--outline-v)] text-[13px] bg-[var(--surface)]" />
         </div>
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Provider / case reference</label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Provider / case reference")}</label>
           <input value={verification.verification_provider}
             onChange={e => onVerificationChange({ ...verification, verification_provider: e.target.value })}
-            placeholder="Agency and reference" className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--outline-v)] text-[13px] bg-[var(--surface)]" />
+            placeholder={t("Agency and reference")} className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--outline-v)] text-[13px] bg-[var(--surface)]" />
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { MultiCheckRow, type PolicyRuleFields } from "./LeavePoliciesTab";
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export default function EligibilitySection({ rules, setField }: Props) {
+  const t = useT();
   const { data: branchData } = useFetch<BranchOption[] | { results: BranchOption[] }>(`${API.branches.list}?page_size=100`);
   const { data: unitData }   = useFetch<OrgUnit[] | { results: OrgUnit[] }>(`${API.orgStructure.units.list}?page_size=200`);
   const { data: jobData }    = useFetch<JobTemplate[] | { results: JobTemplate[] }>(API.orgStructure.jobTemplates.list);
@@ -69,7 +71,7 @@ export default function EligibilitySection({ rules, setField }: Props) {
   return (
     <div className="card mb-20">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-users-group" /> Eligibility Rules</div>
+        <div className="card-title"><i className="ti ti-users-group" /> {t("Eligibility Rules")}</div>
         <label className="module-check text-xs">
           <input
             type="checkbox"
@@ -78,56 +80,55 @@ export default function EligibilitySection({ rules, setField }: Props) {
             ref={el => { if (el) el.indeterminate = isPartial; }}
             onChange={e => toggleAllGroups(e.target.checked)}
           />
-          <span>Select All</span>
+          <span>{t("Select All")}</span>
         </label>
       </div>
       <div style={{ padding: "20px 24px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
           <MultiCheckRow
-            label="Applicable Company Codes"
+            label={t("Applicable Company Codes")}
             options={branches.map(b => b.branch_name)}
             selected={rules.applicable_branches}
             onChange={v => setField("applicable_branches", v)}
           />
           <MultiCheckRow
-            label="Org Units"
+            label={t("Org Units")}
             options={departments.map(d => d.name)}
             selected={rules.applicable_departments}
             onChange={v => setField("applicable_departments", v)}
           />
           <MultiCheckRow
-            label="Designations"
+            label={t("Designations")}
             options={designations.map(d => d.name)}
             selected={rules.applicable_designations}
             onChange={v => setField("applicable_designations", v)}
           />
           <MultiCheckRow
-            label="Employment Types"
+            label={t("Employment Types")}
             options={EMPLOYMENT_TYPE_OPTIONS}
             selected={rules.applicable_employment_types}
             onChange={v => setField("applicable_employment_types", v)}
           />
           <div className="field-group mb-16">
-            <label className="field-label">Gender</label>
+            <label className="field-label">{t("Gender")}</label>
             <select className="field-input field-select" value={rules.applicable_gender} onChange={e => setField("applicable_gender", e.target.value)}>
-              {GENDER_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+              {GENDER_OPTIONS.map(g => <option key={g.value} value={g.value}>{t(g.label)}</option>)}
             </select>
           </div>
           <div className="field-group mb-16">
-            <label className="field-label">How is this leave given?</label>
+            <label className="field-label">{t("How is this leave given?")}</label>
             <select className="field-input field-select" value={rules.grant_mode} onChange={e => setField("grant_mode", e.target.value === "on_request" ? "on_request" : "annual")} suppressHydrationWarning>
-              <option value="annual">Credited to every eligible employee each year</option>
-              <option value="on_request">Granted per case when an eligible employee applies (maternity, paternity)</option>
+              <option value="annual">{t("Credited to every eligible employee each year")}</option>
+              <option value="on_request">{t("Granted per case when an eligible employee applies (maternity, paternity)")}</option>
             </select>
             {rules.grant_mode === "on_request" && (
               <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "4px 0 0" }}>
-                Nobody is credited in advance. The days entered above become the entitlement for one case, created when an employee who meets
-                the gender and service rules applies; what was taken in the last 12 months is deducted.
+                {t("Nobody is credited in advance. The days entered above become the entitlement for one case, created when an employee who meets the gender and service rules applies; what was taken in the last 12 months is deducted.")}
               </p>
             )}
           </div>
           <div className="field-group mb-16">
-            <label className="field-label">Minimum Service Period (months)</label>
+            <label className="field-label">{t("Minimum Service Period (months)")}</label>
             <input className="field-input" type="number" min={0} value={rules.minimum_service_period} onChange={e => setField("minimum_service_period", Number(e.target.value))} />
           </div>
         </div>

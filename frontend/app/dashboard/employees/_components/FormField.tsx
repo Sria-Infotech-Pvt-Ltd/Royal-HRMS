@@ -1,6 +1,7 @@
 "use client";
 
 import type { FieldDef } from "../_data";
+import { useT } from "@/hooks/useI18n";
 import DateInput from "@/components/shared/DateInput";
 
 // These reuse the app's shared tokens (globals.css) rather than one-off hex
@@ -27,6 +28,7 @@ export default function FormField({
   onChange: (key: string, val: string) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   const set     = (v: string) => { if (!disabled) onChange(field.key, v); };
   const invalid = !disabled && field.required && field.type !== "readonly" && !value.trim();
   const borderColor = invalid ? BORDER_ERR : BORDER;
@@ -46,7 +48,7 @@ export default function FormField({
           color: field.required ? "var(--primary)" : "var(--on-variant)",
         }}
       >
-        {field.label}
+        {t(field.label)}
         {field.required && (
           <span className="ml-0.5 font-bold" style={{ color: "var(--error)" }}>
             {" "}*
@@ -59,7 +61,7 @@ export default function FormField({
         {renderControl()}
         {invalid && (
           <p className="text-[11px] mt-0.5" style={{ color: BORDER_ERR }}>
-            {field.label} is required
+            {t("{label} is required", { label: t(field.label) })}
           </p>
         )}
       </div>
@@ -85,10 +87,11 @@ export default function FormField({
         // regardless of whether the options array has loaded yet.
         if (disabled) {
           const displayLabel = field.options?.find(o => o.value === value)?.label ?? value;
+          const shownLabel = displayLabel ? t(displayLabel) : displayLabel;
           return (
             <input
               id={`fld-${field.key}`}
-              value={displayLabel || "—"}
+              value={shownLabel || "—"}
               disabled
               suppressHydrationWarning
               className={INPUT + " cursor-not-allowed"}
@@ -112,7 +115,7 @@ export default function FormField({
             }}
           >
             {field.options?.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>{t(o.label)}</option>
             ))}
           </select>
         );
@@ -137,7 +140,7 @@ export default function FormField({
                   className={"w-4 h-4" + (disabled ? " cursor-not-allowed" : " cursor-pointer")}
                   style={{ accentColor: "var(--primary)" }}
                 />
-                {o.label}
+                {t(o.label)}
               </label>
             ))}
           </div>
@@ -149,7 +152,7 @@ export default function FormField({
             id={`fld-${field.key}`}
             value={value}
             rows={3}
-            placeholder={field.placeholder}
+            placeholder={field.placeholder ? t(field.placeholder) : undefined}
             onChange={(e) => set(e.target.value)}
             disabled={disabled}
             suppressHydrationWarning
@@ -181,7 +184,7 @@ export default function FormField({
               : "text"
             }
             value={value}
-            placeholder={field.placeholder}
+            placeholder={field.placeholder ? t(field.placeholder) : undefined}
             onChange={(e) => set(e.target.value)}
             disabled={disabled}
             suppressHydrationWarning

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { getLeaveYear } from "@/lib/fiscalYear";
@@ -12,6 +13,7 @@ function Spin() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CreditTab() {
+  const t = useT();
   const [creditYear,  setCreditYear]  = useState<number>(getLeaveYear());
   const [crediting,    setCrediting]    = useState(false);
   const [creditResult, setCreditResult] = useState<{ credited: number } | null>(null);
@@ -28,7 +30,7 @@ export default function CreditTab() {
       );
       setCreditResult(res.data.data);
     } catch (err: unknown) {
-      setCreditError((err as { message?: string })?.message ?? "Failed to credit balances.");
+      setCreditError((err as { message?: string })?.message ?? t("Failed to credit balances."));
     } finally {
       setCrediting(false);
     }
@@ -37,16 +39,16 @@ export default function CreditTab() {
   return (
     <div className="card mb-20" style={{ border: "1.5px solid color-mix(in srgb, var(--brand) 25%, transparent)", background: "color-mix(in srgb, var(--brand) 3%, transparent)" }}>
       <div className="card-header" style={{ borderBottom: "1px solid var(--outline-v)" }}>
-        <div className="card-title"><i className="ti ti-coin" /> Credit Leave Balances</div>
+        <div className="card-title"><i className="ti ti-coin" /> {t("Credit Leave Balances")}</div>
       </div>
       <div style={{ padding: "20px 24px" }}>
         <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 16, lineHeight: 1.6 }}>
-          Credit annual leave balances for all active employees based on the configured Leave Policy.
-          Employees who already have a balance record for the selected year are skipped automatically.
+          {t("Credit annual leave balances for all active employees based on the configured Leave Policy.")}{" "}
+          {t("Employees who already have a balance record for the selected year are skipped automatically.")}
         </p>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
           <div className="field-group" style={{ marginBottom: 0 }}>
-            <label className="field-label">Year</label>
+            <label className="field-label">{t("Year")}</label>
             <input
               className="field-input"
               type="number" min={2020} max={2099}
@@ -56,7 +58,7 @@ export default function CreditTab() {
             />
           </div>
           <button className="btn btn-filled" onClick={creditAll} disabled={crediting}>
-            {crediting ? <><Spin />&nbsp;Crediting…</> : <><i className="ti ti-send" /> Credit All Employees</>}
+            {crediting ? <><Spin />&nbsp;{t("Crediting…")}</> : <><i className="ti ti-send" /> {t("Credit All Employees")}</>}
           </button>
         </div>
         {creditResult && (
@@ -64,8 +66,10 @@ export default function CreditTab() {
             <i className="ti ti-circle-check" style={{ fontSize: 16 }} />
             <span>
               {creditResult.credited === 0
-                ? `All employees already have balances for ${creditYear}. No new records created.`
-                : `Credited ${creditResult.credited} leave balance record${creditResult.credited !== 1 ? "s" : ""} for ${creditYear}.`}
+                ? t("All employees already have balances for {year}. No new records created.", { year: creditYear })
+                : creditResult.credited === 1
+                  ? t("Credited {count} leave balance record for {year}.", { count: creditResult.credited, year: creditYear })
+                  : t("Credited {count} leave balance records for {year}.", { count: creditResult.credited, year: creditYear })}
             </span>
           </div>
         )}

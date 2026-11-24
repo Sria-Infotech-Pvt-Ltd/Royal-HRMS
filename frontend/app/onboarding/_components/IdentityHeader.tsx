@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useT } from "@/hooks/useI18n";
 import OnboardingPhotoUpload from "./OnboardingPhotoUpload";
 import type { ProfileForm } from "../_types";
 
@@ -26,6 +27,7 @@ interface MeData {
 }
 
 export default function IdentityHeader({ form, onChange }: Props) {
+  const t = useT();
   const [me, setMe] = useState<MeData | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
@@ -63,43 +65,43 @@ export default function IdentityHeader({ form, onChange }: Props) {
     <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm p-5 mb-4">
       <OnboardingPhotoUpload photoUrl={photoUrl} onPhotoChange={setPhotoUrl} />
 
-      <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Identity</div>
+      <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>{t("Identity")}</div>
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Salutation <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Salutation")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("OPTIONAL")}</span></label>
           <select value={form.salutation} onChange={e => onChange("salutation", e.target.value)} className="field-input field-select">
-            <option value="">Select</option>
-            {["Mr.", "Ms.", "Mrs.", "Dr."].map(s => <option key={s} value={s}>{s}</option>)}
+            <option value="">{t("Select")}</option>
+            {["Mr.", "Ms.", "Mrs.", "Dr."].map(s => <option key={s} value={s}>{t(s)}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">First name</label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("First name")}</label>
           <div className="field-input" style={{ background: "var(--bg-mid)", color: "var(--on-variant)" }}>{firstName || "—"}</div>
         </div>
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Last name</label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Last name")}</label>
           <div className="field-input" style={{ background: "var(--bg-mid)", color: "var(--on-variant)" }}>{lastName || "—"}</div>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Display name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Display name")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("auto")}</span></label>
           <div className="flex gap-2">
             <input
               value={form.display_name}
               onChange={e => { displayNameTouchedRef.current = true; onChange("display_name", e.target.value); }}
-              placeholder="Generated from name" className="field-input"
+              placeholder={t("Generated from name")} className="field-input"
             />
             <button
               type="button"
               onClick={() => { displayNameTouchedRef.current = false; onChange("display_name", [form.salutation, me?.full_name].filter(Boolean).join(" ")); }}
               className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "var(--brand)", color: "#ffffff", border: "none" }}
-            >+ Suggest</button>
+            >{t("+ Suggest")}</button>
           </div>
-          <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>
+          <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{t("Shown across the app and in approvals.")}</p>
         </div>
         <div>
-          <label className="block text-[12.5px] font-semibold mb-1.5">Employee number <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
+          <label className="block text-[12.5px] font-semibold mb-1.5">{t("Employee number")} <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("auto")}</span></label>
           <div className="field-input" style={{ background: "var(--bg-mid)", color: "var(--on-variant)" }}>{me?.employee_id || "—"}</div>
         </div>
       </div>

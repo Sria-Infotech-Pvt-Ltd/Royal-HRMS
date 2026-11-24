@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 import type { CompanySectionProps } from "@/types/company";
 import { PORTAL_URL_HELP } from "@/lib/portalUrl";
 import ProfileCard from "./ProfileCard";
+import { useT } from "@/hooks/useI18n";
 
 interface Props extends CompanySectionProps {
   displayLogo: string | null;
@@ -15,13 +16,14 @@ interface Props extends CompanySectionProps {
 export default function ContactBrandingCard({
   form, errors, canEdit, onFieldChange, displayLogo, fileRef, onLogoChange, onLogoRemove, collapsed, onToggleCollapse,
 }: Props) {
+  const t = useT();
   const initial = form.company_name.trim().charAt(0).toUpperCase() || "?";
 
   return (
-    <ProfileCard icon="ti-mail" title="Contact & branding" subtitle="Public-facing details shown in the app and on documents." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
+    <ProfileCard icon="ti-mail" title={t("Contact & branding")} subtitle={t("Public-facing details shown in the app and on documents.")} collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
-          <label className="field-label">Primary Email <span style={{ color: "var(--error)" }}>*</span></label>
+          <label className="field-label">{t("Primary Email")} <span style={{ color: "var(--error)" }}>*</span></label>
           <input
             className={`field-input${errors.primary_email ? " field-error" : ""}`}
             value={form.primary_email}
@@ -33,7 +35,7 @@ export default function ContactBrandingCard({
           {errors.primary_email && <div className="field-error-msg">{errors.primary_email}</div>}
         </div>
         <div className="field-group">
-          <label className="field-label">Phone <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+          <label className="field-label">{t("Phone")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
           <input
             className={`field-input${errors.official_phone ? " field-error" : ""}`}
             value={form.official_phone}
@@ -47,7 +49,7 @@ export default function ContactBrandingCard({
       </div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Website <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+        <label className="field-label">{t("Website")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
         <input
           className={`field-input${errors.website ? " field-error" : ""}`}
           value={form.website}
@@ -60,7 +62,7 @@ export default function ContactBrandingCard({
       </div>
 
       <div className="field-group mb-16" data-testid="portal-url-field">
-        <label className="field-label" htmlFor="company-portal-url">Employee Portal URL</label>
+        <label className="field-label" htmlFor="company-portal-url">{t("Employee Portal URL")}</label>
         <input
           id="company-portal-url"
           className={`field-input${errors.portal_url ? " field-error" : ""}`}
@@ -72,11 +74,11 @@ export default function ContactBrandingCard({
         />
         {errors.portal_url
           ? <div className="field-error-msg">{errors.portal_url}</div>
-          : <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 6 }}>{PORTAL_URL_HELP}</div>}
+          : <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 6 }}>{t(PORTAL_URL_HELP)}</div>}
       </div>
 
       <div className="field-group">
-        <label className="field-label">Company Logo</label>
+        <label className="field-label">{t("Company Logo")}</label>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{
             width: 44, height: 44, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
@@ -86,7 +88,7 @@ export default function ContactBrandingCard({
             {displayLogo
               ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={displayLogo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <img src={displayLogo} alt={t("Logo")} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               )
               : <span style={{ fontWeight: 700, fontSize: 18, color: "var(--primary)" }}>{initial}</span>
             }
@@ -94,10 +96,10 @@ export default function ContactBrandingCard({
           {canEdit && (
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn btn-ghost btn-sm" type="button" onClick={() => fileRef.current?.click()}>
-                {displayLogo ? "Change logo" : "Upload logo"}
+                {displayLogo ? t("Change logo") : t("Upload logo")}
               </button>
               {displayLogo && (
-                <button className="btn btn-ghost btn-sm" type="button" onClick={onLogoRemove} aria-label="Delete">
+                <button className="btn btn-ghost btn-sm" type="button" onClick={onLogoRemove} aria-label={t("Delete")}>
                   <i className="ti ti-trash" />
                 </button>
               )}
@@ -108,7 +110,7 @@ export default function ContactBrandingCard({
           )}
         </div>
         <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 6 }}>
-          JPEG, PNG, WebP or SVG · Max 5 MB
+          {t("JPEG, PNG, WebP or SVG · Max 5 MB")}
         </div>
       </div>
     </ProfileCard>

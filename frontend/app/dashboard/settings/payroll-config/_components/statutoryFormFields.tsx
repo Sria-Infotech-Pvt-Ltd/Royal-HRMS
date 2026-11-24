@@ -1,3 +1,5 @@
+import { useT } from "@/hooks/useI18n";
+
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="px-5 py-4">
@@ -8,6 +10,7 @@ export function Section({ title, children }: { title: string; children: React.Re
 }
 
 export function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  const t = useT();
   return (
     <div className="flex items-center justify-between">
       <span className="text-[13px] font-medium text-[var(--on-bg)]">{label}</span>
@@ -23,7 +26,7 @@ export function ToggleRow({ label, value, onChange }: { label: string; value: bo
             : "bg-[var(--bg-mid)] text-[var(--on-variant)] border border-[var(--outline-v)]"
         }`}
       >
-        <span>{value ? "Applicable" : "Not applicable"}</span>
+        <span>{value ? t("Applicable") : t("Not applicable")}</span>
         <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
           value ? "bg-[var(--success)]" : "bg-[var(--outline)]"
         }`}>
@@ -49,6 +52,7 @@ export function MonthSelect({
   onChange: (month: number | undefined) => void;
   disabledMonth?: number;
 }) {
+  const t = useT();
   return (
     <div>
       <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">{label}</label>
@@ -57,9 +61,9 @@ export function MonthSelect({
         onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
         className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
       >
-        <option value="">Select month</option>
+        <option value="">{t("Select month")}</option>
         {MONTH_NAMES.map((name, i) => (
-          <option key={name} value={i + 1} disabled={disabledMonth === i + 1}>{name}</option>
+          <option key={name} value={i + 1} disabled={disabledMonth === i + 1}>{t(name)}</option>
         ))}
       </select>
     </div>

@@ -6,6 +6,8 @@ import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
 import { BulkImportResult } from "./_data";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = [".csv", ".xlsx"];
@@ -21,12 +23,13 @@ function validateFile(file: File): string | null {
   const hasAcceptedExtension = ACCEPTED_EXTENSIONS.some(ext =>
     file.name.toLowerCase().endsWith(ext)
   );
-  if (!hasAcceptedExtension) return "Unsupported file type. Please upload a .csv or .xlsx file.";
-  if (file.size > MAX_FILE_SIZE_BYTES) return "File is too large. Maximum allowed size is 5 MB.";
+  if (!hasAcceptedExtension) return tr("Unsupported file type. Please upload a .csv or .xlsx file.");
+  if (file.size > MAX_FILE_SIZE_BYTES) return tr("File is too large. Maximum allowed size is 5 MB.");
   return null;
 }
 
 export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
+  const t = useT();
   const inputRef                    = useRef<HTMLInputElement>(null);
   const [file,          setFile]          = useState<File | null>(null);
   const [fileError,     setFileError]     = useState<string | null>(null);
@@ -48,7 +51,7 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
       { format },
       `candidate_import_sample.${format}`,
     );
-    if (!res.success) setSampleError(res.message ?? "Failed to download sample file.");
+    if (!res.success) setSampleError(res.message ?? t("Failed to download sample file."));
     setSampleDownloading(null);
   }
 
@@ -85,11 +88,11 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
         setResultMessage(res.data.message);
         if (res.data.data.imported > 0) onSuccess();
       } else {
-        setSubmitError(res.data.message || "No valid rows found.");
+        setSubmitError(res.data.message || t("No valid rows found."));
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Import failed. Please check your file and try again.";
+        ?.response?.data?.message ?? t("Import failed. Please check your file and try again.");
       setSubmitError(msg);
     } finally {
       setUploading(false);
@@ -107,13 +110,13 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
 
   return (
     <Modal
-      title={<><i className="ti ti-file-upload" style={{ marginRight: 8 }} />Bulk Import Candidates</>}
+      title={<><i className="ti ti-file-upload" style={{ marginRight: 8 }} />{t("Bulk Import Candidates")}</>}
       onClose={handleClose}
       maxWidth={520}
       footer={
         <>
           <button className="btn btn-ghost" onClick={handleClose}>
-            {result ? "Close" : "Cancel"}
+            {result ? t("Close") : t("Cancel")}
           </button>
           {!result && (
             <button
@@ -123,8 +126,8 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
               suppressHydrationWarning
             >
               {uploading
-                ? <><i className="ti ti-loader-2 spin" /> Uploading…</>
-                : <><i className="ti ti-file-upload" /> Upload & Import</>
+                ? <><i className="ti ti-loader-2 spin" /> {t("Uploading…")}</>
+                : <><i className="ti ti-file-upload" /> {t("Upload & Import")}</>
               }
             </button>
           )}
@@ -134,19 +137,19 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
           {/* Instructions */}
           <div style={{ padding: "12px 14px", borderRadius: 8, background: "color-mix(in srgb, var(--brand) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 15%, transparent)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, color: "var(--primary)", marginBottom: 4, fontSize: 12 }}>
-              <i className="ti ti-info-circle" style={{ marginRight: 5 }} />File Requirements
+              <i className="ti ti-info-circle" style={{ marginRight: 5 }} />{t("File Requirements")}
             </div>
             <ul style={{ margin: 0, paddingLeft: 16 }}>
-              <li>Accepted formats: <strong>.csv</strong>, <strong>.xlsx</strong> (max 5 MB)</li>
-              <li>Required columns: <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Name</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Email</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Position</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Company Code</code></li>
-              <li>Optional columns: Phone, Interview Date, Interview Mode, Notes</li>
+              <li>{t("Accepted formats:")} <strong>.csv</strong>, <strong>.xlsx</strong> {t("(max 5 MB)")}</li>
+              <li>{t("Required columns:")} <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Name</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Email</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Position</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Company Code</code></li>
+              <li>{t("Optional columns: Phone, Interview Date, Interview Mode, Notes")}</li>
             </ul>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("csv")} disabled={!!sampleDownloading} suppressHydrationWarning>
-                <i className="ti ti-download" /> {sampleDownloading === "csv" ? "Downloading…" : "Sample CSV"}
+                <i className="ti ti-download" /> {sampleDownloading === "csv" ? t("Downloading…") : t("Sample CSV")}
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("xlsx")} disabled={!!sampleDownloading} suppressHydrationWarning>
-                <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? "Downloading…" : "Sample XLSX"}
+                <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? t("Downloading…") : t("Sample XLSX")}
               </button>
             </div>
             {sampleError && (
@@ -176,12 +179,12 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
               <>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--primary)" }}>{file.name}</div>
                 <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>
-                  {(file.size / 1024).toFixed(1)} KB · Click to change
+                  {(file.size / 1024).toFixed(1)} {t("KB · Click to change")}
                 </div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>Click to select file</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{t("Click to select file")}</div>
                 <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>.csv · .xlsx</div>
               </>
             )}
@@ -210,8 +213,8 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", textAlign: "center" }}>
                 {[
-                  { label: "Imported", value: result.imported, color: "var(--success)" },
-                  { label: "Failed",   value: result.failed,   color: result.failed > 0 ? "var(--error)" : "var(--on-variant)" },
+                  { label: t("Imported"), value: result.imported, color: "var(--success)" },
+                  { label: t("Failed"),   value: result.failed,   color: result.failed > 0 ? "var(--error)" : "var(--on-variant)" },
                 ].map(({ label, value, color }) => (
                   <div key={label} style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)" }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
@@ -225,9 +228,9 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
                   <table style={{ width: "100%", fontSize: 12 }}>
                     <thead>
                       <tr style={{ background: "var(--bg-low)" }}>
-                        <th style={{ textAlign: "left", padding: "6px 14px" }}>Row</th>
-                        <th style={{ textAlign: "left", padding: "6px 14px" }}>Field</th>
-                        <th style={{ textAlign: "left", padding: "6px 14px" }}>Error</th>
+                        <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Row")}</th>
+                        <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Field")}</th>
+                        <th style={{ textAlign: "left", padding: "6px 14px" }}>{t("Error")}</th>
                       </tr>
                     </thead>
                     <tbody>

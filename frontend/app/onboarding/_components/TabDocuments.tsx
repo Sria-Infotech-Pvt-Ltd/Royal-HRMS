@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import DocPreviewModal from "@/components/DocPreviewModal";
+import { useT } from "@/hooks/useI18n";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 
 export interface UploadedDoc { id: string; document_type: string; document_type_display: string; file?: string; file_name: string; uploaded_at: string; }
@@ -46,6 +47,7 @@ export default function TabDocuments({
   panErr: string | null;
   panSaving: boolean;
 }) {
+  const t = useT();
   const [preview, setPreview] = useState<UploadedDoc | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   // Per-row drag/drop validation errors — kept separate from panErr (only
@@ -57,11 +59,11 @@ export default function TabDocuments({
     const isPan = dt.type_key === "pan_card";
     setDropErrors(prev => ({ ...prev, [dt.type_key]: "" }));
     if (!isAcceptedFile(file)) {
-      setDropErrors(prev => ({ ...prev, [dt.type_key]: "Only PDF, JPG, and PNG files are accepted." }));
+      setDropErrors(prev => ({ ...prev, [dt.type_key]: t("Only PDF, JPG, and PNG files are accepted.") }));
       return;
     }
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setDropErrors(prev => ({ ...prev, [dt.type_key]: `File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB) — the limit is 5 MB.` }));
+      setDropErrors(prev => ({ ...prev, [dt.type_key]: t("File is too large ({size} MB) — the limit is 5 MB.", { size: (file.size / (1024 * 1024)).toFixed(1) }) }));
       return;
     }
     if (isPan) onPanCardUpload(file);
@@ -80,7 +82,7 @@ export default function TabDocuments({
       )}
       <div>
         <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
-          Drag and drop a file onto any row below, or click Upload. Accepted: PDF, JPG, PNG · Max 5 MB each.
+          {t("Drag and drop a file onto any row below, or click Upload. Accepted: PDF, JPG, PNG · Max 5 MB each.")}
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: ".875rem" }}>
           {docTypes.map(dt => {
@@ -104,8 +106,8 @@ export default function TabDocuments({
                     setDropErrors(prev => ({
                       ...prev,
                       [dt.type_key]: panNumber.trim()
-                        ? "Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter."
-                        : "Enter your PAN number before uploading the PAN card.",
+                        ? t("Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter.")
+                        : t("Enter your PAN number before uploading the PAN card."),
                     }));
                     return;
                   }
@@ -125,7 +127,7 @@ export default function TabDocuments({
                       // eslint-disable-next-line @next/next/no-img-element -- a thumbnail of the uploaded document itself, not a static/remote asset
                       <img
                         src={uploaded_doc.file}
-                        alt={`${dt.label} preview`}
+                        alt={t("{name} preview", { name: dt.label })}
                         style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover", flexShrink: 0, border: "1px solid var(--outline-v)" }}
                       />
                     ) : (
@@ -174,7 +176,7 @@ export default function TabDocuments({
                         onClick={() => setPreview(uploaded_doc)}
                         type="button"
                       >
-                        <i className="ti ti-eye" style={{ fontSize: 13 }} /> View
+                        <i className="ti ti-eye" style={{ fontSize: 13 }} /> {t("View")}
                       </button>
                     )}
                     {uploaded && onRemove && (
@@ -184,8 +186,8 @@ export default function TabDocuments({
                         onClick={() => onRemove(dt.type_key)}
                         disabled={isUploading}
                         type="button"
-                        title="Remove this document"
-                       aria-label="Remove this document">
+                        title={t("Remove this document")}
+                       aria-label={t("Remove this document")}>
                         <i className="ti ti-trash" style={{ fontSize: 13 }} />
                       </button>
                     )}
@@ -203,8 +205,8 @@ export default function TabDocuments({
                         if (panBlocked) {
                           onPanValidationError(
                             panNumber.trim()
-                              ? "Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter."
-                              : "Enter your PAN number before uploading the PAN card.",
+                              ? t("Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter.")
+                              : t("Enter your PAN number before uploading the PAN card."),
                           );
                           return;
                         }
@@ -215,7 +217,7 @@ export default function TabDocuments({
                     >
                       {isUploading
                         ? <>{uploadProgress ? `${uploadProgress}%` : <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} />}</>
-                        : uploaded ? "Replace" : "Upload"
+                        : uploaded ? t("Replace") : t("Upload")
                       }
                     </button>
                   </div>
@@ -227,20 +229,20 @@ export default function TabDocuments({
                 )}
                 {isPan && (
                   <div style={{ marginTop: ".75rem", paddingTop: ".75rem", borderTop: "1px solid var(--outline-v)" }}>
-                    <label className="field-label">PAN Number<Req /></label>
+                    <label className="field-label">{t("PAN Number")}<Req /></label>
                     <input
                       className={INP}
                       style={{ maxWidth: 220 }}
                       maxLength={10}
                       value={panNumber}
                       onChange={e => onPanNumberChange(e.target.value.toUpperCase())}
-                      placeholder="e.g. ABCDE1234F"
+                      placeholder={t("e.g. ABCDE1234F")}
                     />
                     {panErr ? (
                       <div style={{ fontSize: ".78rem", color: "var(--error, #dc2626)", marginTop: 4 }}>{panErr}</div>
                     ) : (
                       <div style={{ fontSize: ".72rem", color: "var(--on-variant)", marginTop: 4 }}>
-                        Checked against every other employee before the upload goes through — enter it first.
+                        {t("Checked against every other employee before the upload goes through — enter it first.")}
                       </div>
                     )}
                   </div>

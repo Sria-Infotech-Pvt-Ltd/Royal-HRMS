@@ -8,6 +8,7 @@ import {
 } from "../_data";
 import Modal from "@/components/Modal";
 import { formatDateTime } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   entry:   ApiSmtpEntry | null;  // null = add mode
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
+  const t = useT();
   const isAddMode = entry === null;
 
   const [form, setForm] = useState<SmtpForm>(
@@ -55,17 +57,17 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div>
-              {isAddMode ? "Add SMTP Configuration" : `Edit — ${entry.name}`}
+              {isAddMode ? t("Add SMTP Configuration") : t("Edit — {name}", { name: entry.name })}
             </div>
             {!isAddMode && entry.is_active && (
               <span className="badge badge-success" style={{ fontSize: 10 }}>
-                <i className="ti ti-star-filled" style={{ fontSize: 9, marginRight: 3 }} />Active
+                <i className="ti ti-star-filled" style={{ fontSize: 9, marginRight: 3 }} />{t("Active")}
               </span>
             )}
           </div>
           {!isAddMode && (
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>
-              Last updated: {formatDateTime(entry.updated_at)}
+              {t("Last updated: {date}", { date: formatDateTime(entry.updated_at) })}
             </div>
           )}
         </>
@@ -74,17 +76,17 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
       size="lg"
       footer={
         step === "provider" ? (
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>{t("Cancel")}</button>
         ) : (
           <>
             <button className="btn btn-ghost" onClick={() => setStep("provider")} disabled={saving} suppressHydrationWarning>
-              <i className="ti ti-arrow-left" /> Back
+              <i className="ti ti-arrow-left" /> {t("Back")}
             </button>
-            <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>Cancel</button>
+            <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>{t("Cancel")}</button>
             <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
               {saving
-                ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-                : <><i className="ti ti-device-floppy" /> {isAddMode ? "Add Configuration" : "Save Changes"}</>
+                ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</>
+                : <><i className="ti ti-device-floppy" /> {isAddMode ? t("Add Configuration") : t("Save Changes")}</>
               }
             </button>
           </>
@@ -96,7 +98,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
         /* ── Step 1: pick a mail provider ─────────────────────────────── */
         <div>
           <p style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 0, marginBottom: 16 }}>
-            Choose a mail provider — the fields you need will be filled in for you where possible.
+            {t("Choose a mail provider — the fields you need will be filled in for you where possible.")}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {PROVIDER_LIST.map(p => {
@@ -124,8 +126,8 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                   <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-2.5" style={{ background: p.bg }}>
                     <i className={`ti ${p.icon} text-sm`} style={{ color: p.color }} />
                   </div>
-                  <div className="text-xs font-bold text-[var(--on-bg)] mb-0.5">{p.label}</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)", lineHeight: 1.4 }}>{p.note}</div>
+                  <div className="text-xs font-bold text-[var(--on-bg)] mb-0.5">{t(p.label)}</div>
+                  <div style={{ fontSize: 11, color: "var(--on-variant)", lineHeight: 1.4 }}>{t(p.note)}</div>
                 </button>
               );
             })}
@@ -139,10 +141,10 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
               <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: provider.bg }}>
                 <i className={`ti ${provider.icon}`} style={{ color: provider.color, fontSize: 14 }} />
               </div>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{provider.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{t(provider.label)}</span>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => setStep("provider")} suppressHydrationWarning>
-              <i className="ti ti-arrow-left" /> Change provider
+              <i className="ti ti-arrow-left" /> {t("Change provider")}
             </button>
           </div>
 
@@ -150,9 +152,9 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
 
             {/* Configuration Name — full width */}
             <div className="field-group" style={{ gridColumn: "1 / -1" }}>
-              <label className="field-label">Configuration Name <span style={{ color: "var(--error)" }}>*</span></label>
+              <label className="field-label">{t("Configuration Name")} <span style={{ color: "var(--error)" }}>*</span></label>
               <input className="field-input"
-                placeholder={isLocal ? "e.g. Gmail SMTP, Zoho Mail" : "e.g. Corporate Mail Server"}
+                placeholder={isLocal ? t("e.g. Gmail SMTP, Zoho Mail") : t("e.g. Corporate Mail Server")}
                 value={form.name}
                 onChange={e => { patch({ name: e.target.value }); clearErr("name"); }}
                 suppressHydrationWarning />
@@ -164,24 +166,24 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
               <>
                 {/* Host */}
                 <div className="field-group">
-                  <label className="field-label">SMTP Host <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="field-label">{t("SMTP Host")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <input className="field-input" placeholder="smtp.gmail.com"
                     value={form.host}
                     disabled={provider.locked}
                     onChange={e => { patch({ host: e.target.value }); clearErr("host"); }}
                     suppressHydrationWarning />
                   {provider.locked && (
-                    <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Fixed for {provider.label} — not editable</span>
+                    <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Fixed for {provider} — not editable", { provider: t(provider.label) })}</span>
                   )}
                   {errors.host && <span className="field-error-msg">{errors.host}</span>}
                   {provider.helpText && (
-                    <span style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginTop: 4 }}>{provider.helpText}</span>
+                    <span style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginTop: 4 }}>{t(provider.helpText)}</span>
                   )}
                 </div>
 
                 {/* Port + TLS */}
                 <div className="field-group">
-                  <label className="field-label">Port</label>
+                  <label className="field-label">{t("Port")}</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <input className="field-input" type="number" value={form.port}
                       disabled={provider.locked}
@@ -194,15 +196,15 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                         onChange={e => patch({ useTls: e.target.checked })}
                         style={{ accentColor: "var(--primary)" }}
                         suppressHydrationWarning />
-                      Use TLS
+                      {t("Use TLS")}
                     </label>
                   </div>
                 </div>
 
                 {/* Username */}
                 <div className="field-group">
-                  <label className="field-label">Username <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input className="field-input" placeholder="login username / email"
+                  <label className="field-label">{t("Username")} <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input className="field-input" placeholder={t("login username / email")}
                     value={form.username}
                     onChange={e => { patch({ username: e.target.value }); clearErr("username"); }}
                     suppressHydrationWarning />
@@ -212,14 +214,14 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                 {/* Password */}
                 <div className="field-group">
                   <label className="field-label">
-                    Password
+                    {t("Password")}
                     {isAddMode
                       ? <span style={{ color: "var(--error)", marginLeft: 4 }}>*</span>
-                      : <span style={{ fontSize: 11, color: "var(--outline)", marginLeft: 6 }}>leave blank to keep current</span>
+                      : <span style={{ fontSize: 11, color: "var(--outline)", marginLeft: 6 }}>{t("leave blank to keep current")}</span>
                     }
                   </label>
                   <input className="field-input" type="password"
-                    placeholder={isAddMode ? "SMTP password / App password" : "New password (optional)"}
+                    placeholder={isAddMode ? t("SMTP password / App password") : t("New password (optional)")}
                     value={form.password}
                     onChange={e => { patch({ password: e.target.value }); clearErr("password"); }}
                     suppressHydrationWarning />
@@ -230,7 +232,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
 
             {/* Sender Name */}
             <div className="field-group">
-              <label className="field-label">Sender Name</label>
+              <label className="field-label">{t("Sender Name")}</label>
               <input className="field-input" placeholder="Aira HRMS"
                 value={form.senderName}
                 onChange={e => patch({ senderName: e.target.value })}
@@ -239,7 +241,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
 
             {/* From Email */}
             <div className="field-group">
-              <label className="field-label">From Email <span style={{ color: "var(--error)" }}>*</span></label>
+              <label className="field-label">{t("From Email")} <span style={{ color: "var(--error)" }}>*</span></label>
               <input className="field-input" type="email" placeholder="you@gmail.com"
                 value={form.fromEmail}
                 onChange={e => { patch({ fromEmail: e.target.value }); clearErr("fromEmail"); }}
@@ -249,7 +251,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
 
             {/* BCC */}
             <div className="field-group">
-              <label className="field-label">BCC Email</label>
+              <label className="field-label">{t("BCC Email")}</label>
               <input className="field-input" type="email" placeholder="bcc@company.com"
                 value={form.bccEmail}
                 onChange={e => patch({ bccEmail: e.target.value })}
@@ -258,21 +260,21 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
 
             {/* Priority */}
             <div className="field-group">
-              <label className="field-label">Priority</label>
+              <label className="field-label">{t("Priority")}</label>
               <select className="field-input field-select" value={form.priority}
                 onChange={e => patch({ priority: e.target.value as typeof form.priority })}
                 style={{ cursor: "pointer" }}
                 suppressHydrationWarning>
-                <option value="">Select</option>
-                <option value="high">High</option>
-                <option value="normal">Normal</option>
-                <option value="low">Low</option>
+                <option value="">{t("Select")}</option>
+                <option value="high">{t("High")}</option>
+                <option value="normal">{t("Normal")}</option>
+                <option value="low">{t("Low")}</option>
               </select>
             </div>
 
             {/* Receiver Email Type */}
             <div className="field-group" style={{ gridColumn: "1 / -1" }}>
-              <label className="field-label">Receivers Email</label>
+              <label className="field-label">{t("Receivers Email")}</label>
               <div style={{ display: "flex", gap: 24, marginTop: 6 }}>
                 {(["email_id", "personal_email_id"] as const).map(val => (
                   <label key={val} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
@@ -281,7 +283,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                       onChange={() => patch({ receiverEmailType: val })}
                       style={{ accentColor: "var(--primary)" }}
                       suppressHydrationWarning />
-                    {val === "email_id" ? "Email ID" : "Personal Email ID"}
+                    {val === "email_id" ? t("Email ID") : t("Personal Email ID")}
                   </label>
                 ))}
               </div>

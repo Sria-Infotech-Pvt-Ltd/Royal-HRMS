@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isUnrestrictedUser } from "@/lib/auth";
@@ -23,6 +24,7 @@ function fmtScore(score: number | null): string {
 }
 
 export default function FaceRegistrationApprovalsTab() {
+  const t = useT();
   const canReview = usePermission("facial_recognition.approve");
   // A full-access user (superuser or settings.edit) always sees every request in every branch, so the "only mine" narrowing is hidden for them.
   const isFullAccess = isUnrestrictedUser(useCurrentUser());
@@ -40,7 +42,7 @@ export default function FaceRegistrationApprovalsTab() {
 
   function reviewErrorMessage(err: unknown): string {
     return (err as { response?: { data?: { message?: string } }; message?: string })
-      ?.response?.data?.message ?? (err as { message?: string })?.message ?? "Failed to review request.";
+      ?.response?.data?.message ?? (err as { message?: string })?.message ?? t("Failed to review request.");
   }
 
   async function handleReview(id: string, decision: FaceRegistrationDecisionPayload["status"], notes?: string) {
@@ -65,7 +67,7 @@ export default function FaceRegistrationApprovalsTab() {
   if (status === 403) {
     return (
       <div className="alert alert-error">
-        <i className="ti ti-lock" /> You don&apos;t have permission to review face registration requests.
+        <i className="ti ti-lock" /> {t("You don't have permission to review face registration requests.")}
       </div>
     );
   }
@@ -77,7 +79,7 @@ export default function FaceRegistrationApprovalsTab() {
       <ApprovalTabStyles />
       <div className="card" style={{ overflow: "hidden" }}>
         <TabHeader
-          icon="ti-face-id" accent="#0d9488" title="Face registration" subtitle="Check each employee's face scan before they can use Face ID for attendance."
+          icon="ti-face-id" accent="#0d9488" title={t("Face registration")} subtitle={t("Check each employee's face scan before they can use Face ID for attendance.")}
           stats={[
             { label: "Waiting", value: rows.length, icon: "ti-hourglass", accent: "#d97706", isUrgent: rows.length > 0 },
             { label: "Liveness failed", value: failedCount, icon: "ti-alert-triangle", accent: "#dc2626" },
@@ -85,7 +87,7 @@ export default function FaceRegistrationApprovalsTab() {
           actions={isFullAccess ? undefined : (
             <label className={`tb-switch${isAssignedOnly ? " is-on" : ""}`}>
               <input type="checkbox" checked={isAssignedOnly} onChange={event => { setIsAssignedOnly(event.target.checked); setPage(1); }} />
-              Only employees assigned to me
+              {t("Only employees assigned to me")}
             </label>
           )}
         />
@@ -93,19 +95,19 @@ export default function FaceRegistrationApprovalsTab() {
           <table className="tb-table">
             <thead>
               <tr>
-                <th>Employee</th>
-                <th>Liveness</th>
-                <th>Score</th>
-                <th>Submitted</th>
-                <th>Actions</th>
+                <th>{t("Employee")}</th>
+                <th>{t("Liveness")}</th>
+                <th>{t("Score")}</th>
+                <th>{t("Submitted")}</th>
+                <th>{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>Loading…</td></tr>
+                <tr><td colSpan={5} style={{ textAlign: "center", padding: 24, color: "var(--on-variant)" }}>{t("Loading…")}</td></tr>
               )}
               {!loading && rows.length === 0 && (
-                <tr><td colSpan={5}><TabEmpty icon="ti-checks" title="No pending face registration requests." hint="New face scans from employees appear here for your review." /></td></tr>
+                <tr><td colSpan={5}><TabEmpty icon="ti-checks" title={t("No pending face registration requests.")} hint={t("New face scans from employees appear here for your review.")} /></td></tr>
               )}
               {rows.map(r => (
                 <tr key={r.id}>
@@ -115,7 +117,7 @@ export default function FaceRegistrationApprovalsTab() {
                       <div>
                         <div style={{ fontWeight: 600 }}>{r.employee_name}</div>
                         <div className="tb-sub">
-                          {r.employee_code || "No employee ID"}{r.branch_name ? ` · ${r.branch_name}` : ""}
+                          {r.employee_code || t("No employee ID")}{r.branch_name ? ` · ${r.branch_name}` : ""}
                         </div>
                         <div className="tb-sub">{r.employee_email}</div>
                       </div>
@@ -123,7 +125,7 @@ export default function FaceRegistrationApprovalsTab() {
                   </td>
                   <td>
                     <span className={`badge ${r.liveness_passed ? "badge-success" : "badge-error"}`}>
-                      {r.liveness_passed ? "Passed" : "Failed"}
+                      {r.liveness_passed ? t("Passed") : t("Failed")}
                     </span>
                   </td>
                   <td>
@@ -143,7 +145,7 @@ export default function FaceRegistrationApprovalsTab() {
                             disabled={reviewingId === r.id}
                             onClick={() => handleReview(r.id, "approved")}
                           >
-                            <i className="ti ti-check" /> Approve
+                            <i className="ti ti-check" /> {t("Approve")}
                           </button>
                           <button
                             className="btn btn-outline btn-sm"
@@ -151,7 +153,7 @@ export default function FaceRegistrationApprovalsTab() {
                             disabled={reviewingId === r.id}
                             onClick={() => { setRejectError(""); setRejecting(r); }}
                           >
-                            <i className="ti ti-x" /> Reject
+                            <i className="ti ti-x" /> {t("Reject")}
                           </button>
                         </div>
                         {rowError?.id === r.id && (
@@ -159,7 +161,7 @@ export default function FaceRegistrationApprovalsTab() {
                         )}
                       </div>
                     ) : (
-                      <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Awaiting an approver</span>
+                      <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Awaiting an approver")}</span>
                     )}
                   </td>
                 </tr>
@@ -170,13 +172,13 @@ export default function FaceRegistrationApprovalsTab() {
 
         {data && data.total_pages > 1 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
-            <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {data.page} of {data.total_pages}</span>
+            <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("Page {page} of {total}", { page: data.page, total: data.total_pages })}</span>
             <div style={{ display: "flex", gap: 6 }}>
               <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(p - 1, 1))}>
-                <i className="ti ti-chevron-left" /> Prev
+                <i className="ti ti-chevron-left" /> {t("Prev")}
               </button>
               <button className="btn btn-ghost btn-sm" disabled={page >= data.total_pages} onClick={() => setPage(p => Math.min(p + 1, data.total_pages))}>
-                Next <i className="ti ti-chevron-right" />
+                {t("Next")} <i className="ti ti-chevron-right" />
               </button>
             </div>
           </div>

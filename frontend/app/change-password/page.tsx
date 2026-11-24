@@ -2,9 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { clearAuth } from "@/lib/auth";
+import { useT } from "@/hooks/useI18n";
 import ChangePasswordForm from "@/app/dashboard/profile/ChangePasswordForm";
 
 export default function ChangePasswordPage() {
+  const t = useT();
   const router = useRouter();
 
   function handleSuccess() {
@@ -29,9 +31,9 @@ export default function ChangePasswordPage() {
             >
               <i className="ti ti-lock" style={{ fontSize: 22, color: "var(--primary)" }} />
             </div>
-            <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Set a new password</h1>
+            <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{t("Set a new password")}</h1>
             <p style={{ fontSize: 13, color: "var(--on-variant)" }}>
-              You&apos;re signed in with a temporary password. Choose a new one to continue.
+              {t("You're signed in with a temporary password. Choose a new one to continue.")}
             </p>
           </div>
           <ChangePasswordForm onSuccess={handleSuccess} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 
 interface VoiceInputControlsProps {
   isListening: boolean;
@@ -19,6 +20,7 @@ export default function VoiceInputControls({
   isListening, isProcessing, interimTranscript,
   onStartListening, onStopListening, onSubmitText,
 }: VoiceInputControlsProps) {
+  const t = useT();
   const [typedValue, setTypedValue] = useState("");
 
   function handleTextSubmit(e: React.FormEvent) {
@@ -30,10 +32,10 @@ export default function VoiceInputControls({
   }
 
   const micLabel = isListening
-    ? (interimTranscript || "Listening…")
+    ? (interimTranscript || t("Listening…"))
     : isProcessing
-    ? "Processing…"
-    : "Tap to speak";
+    ? t("Processing…")
+    : t("Tap to speak");
 
   return (
     <>
@@ -70,7 +72,7 @@ export default function VoiceInputControls({
           type="text"
           value={typedValue}
           onChange={(e) => setTypedValue(e.target.value)}
-          placeholder="Or type your answer…"
+          placeholder={t("Or type your answer…")}
           disabled={isListening || isProcessing}
           data-testid="voice-panel-input"
           style={{
@@ -82,7 +84,7 @@ export default function VoiceInputControls({
         <button
           type="submit"
           disabled={!typedValue.trim() || isListening || isProcessing}
-          aria-label="Send"
+          aria-label={t("Send")}
           data-testid="voice-panel-send"
           style={{
             width: 34, height: 34, borderRadius: 8, border: "none",

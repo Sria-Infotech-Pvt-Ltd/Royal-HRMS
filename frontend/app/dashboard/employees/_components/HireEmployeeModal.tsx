@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
@@ -33,6 +34,7 @@ const MIN_JOINING_DATE = "1990-01-01"; // earliest date a hire can be back-dated
 export default function HireEmployeeModal({ onClose, onHired, initialHireActionId }: {
   onClose: () => void; onHired?: () => void; initialHireActionId?: string;
 }) {
+  const t = useT();
   const { units, positionsForUnit, resolveDepartmentName, loading: positionsLoading } = useOrgUnitsAndPositions();
   const canCreatePosition = usePermission("org_structure.create");
 
@@ -76,7 +78,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
   }
 
   async function createPosition() {
-    if (!newPosTitle.trim()) { setCreatePosErr("Position title is required."); return; }
+    if (!newPosTitle.trim()) { setCreatePosErr(t("Position title is required.")); return; }
     setCreatingPosition(true);
     setCreatePosErr("");
     try {
@@ -88,7 +90,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
       setPositionId(data.data.id);
       setShowCreatePosition(false);
     } catch (e) {
-      setCreatePosErr((e as { message?: string })?.message || "Could not create the position. Please try again.");
+      setCreatePosErr((e as { message?: string })?.message || t("Could not create the position. Please try again."));
     } finally {
       setCreatingPosition(false);
     }
@@ -106,11 +108,11 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
 
   async function submit() {
     const found: typeof fieldErrors = {};
-    if (!reason) found.reason = "Select a reason.";
-    if (!effectiveFrom) found.effectiveFrom = "Effective from is required.";
-    else if (effectiveFrom < MIN_JOINING_DATE) found.effectiveFrom = "Effective from cannot be before 01-01-1990."; // past dates are allowed for back-dated hires
-    if (!orgUnitId) found.orgUnit = "Select an org unit.";
-    if (!positionId) found.position = "Select a position.";
+    if (!reason) found.reason = t("Select a reason.");
+    if (!effectiveFrom) found.effectiveFrom = t("Effective from is required.");
+    else if (effectiveFrom < MIN_JOINING_DATE) found.effectiveFrom = t("Effective from cannot be before 01-01-1990."); // past dates are allowed for back-dated hires
+    if (!orgUnitId) found.orgUnit = t("Select an org unit.");
+    if (!positionId) found.position = t("Select a position.");
     setFieldErrors(found);
     const firstInvalid = (["reason", "effectiveFrom", "orgUnit", "position"] as const).find(field => found[field]);
     if (firstInvalid) {
@@ -126,14 +128,14 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
       });
       setHireActionId(data.data.id);
     } catch (e) {
-      setErr((e as { message?: string })?.message || "Something went wrong. Please try again.");
+      setErr((e as { message?: string })?.message || t("Something went wrong. Please try again."));
       setSaving(false);
     }
   }
 
   return (
     <Modal
-      title={<h2 className="modal-title">Hire an <em style={{ color: "var(--brand-ink)" }}>employee</em></h2>}
+      title={<h2 className="modal-title">{t("Hire an")} <em style={{ color: "var(--brand-ink)" }}>{t("employee")}</em></h2>}
       onClose={onClose}
       // Without this, the whole modal (body + footer) scrolled as one
       // block — on a short viewport (QA report #28: 643px) the
@@ -142,9 +144,9 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
       scrollBody
       footer={
         <>
-          <button onClick={onClose} disabled={saving} className="btn btn-ghost">Cancel</button>
+          <button onClick={onClose} disabled={saving} className="btn btn-ghost">{t("Cancel")}</button>
           <button onClick={submit} disabled={saving} className="btn btn-filled">
-            {saving ? "Continuing…" : "Continue to hiring form →"}
+            {saving ? t("Continuing…") : t("Continue to hiring form →")}
           </button>
         </>
       }
@@ -158,56 +160,56 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
         )}
 
         <p className="hint">
-          Start a Hire action. HR completes the hiring form here, so this employee will go directly to their dashboard after their first password change rather than receiving the self-service onboarding wizard.
+          {t("Start a Hire action. HR completes the hiring form here, so this employee will go directly to their dashboard after their first password change rather than receiving the self-service onboarding wizard.")}
         </p>
 
-        <div className="section-label">Action</div>
+        <div className="section-label">{t("Action")}</div>
         <div className="g3">
           <div className="f">
-            <label>Action type</label>
+            <label>{t("Action type")}</label>
             {/* .finput's height/padding assume a real <input>/<select>,
                 which the browser vertically centers natively — a plain
                 <div> doesn't get that for free, so "Hire" sat at the top
                 of the box instead of centered like every sibling field. */}
-            <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>Hire</div>
+            <div className="finput" style={{ cursor: "not-allowed", display: "flex", alignItems: "center" }}>{t("Hire")}</div>
           </div>
           <div className="f">
-            <label id="hire-field-reason">Reason <span className="req">*</span></label>
-            <SearchableSelect value={reason} onChange={value => { setReason(value); clearFieldError("reason"); }} placeholder="Select a reason" options={REASONS} />
+            <label id="hire-field-reason">{t("Reason")} <span className="req">*</span></label>
+            <SearchableSelect value={reason} onChange={value => { setReason(value); clearFieldError("reason"); }} placeholder={t("Select a reason")} options={REASONS.map(reasonOption => ({ value: reasonOption.value, label: t(reasonOption.label) }))} />
             <FieldError message={fieldErrors.reason} />
           </div>
           <div className="f">
-            <label id="hire-field-effectiveFrom">Effective from <span className="req">*</span></label>
+            <label id="hire-field-effectiveFrom">{t("Effective from")} <span className="req">*</span></label>
             <DateInput min={MIN_JOINING_DATE} value={effectiveFrom} onChange={value => { setEffectiveFrom(value); clearFieldError("effectiveFrom"); }} className="finput" separator="-" />
             <FieldError message={fieldErrors.effectiveFrom} />
-            <p className="hint">This becomes the date of joining.</p>
+            <p className="hint">{t("This becomes the date of joining.")}</p>
           </div>
         </div>
 
-        <div className="section-label">Fields this hire may change</div>
+        <div className="section-label">{t("Fields this hire may change")}</div>
         <div className="g2">
           <div className="f">
             {/* Position (required) can't be picked until an org unit is
                 selected — QA report #30 found only Position marked
                 required, leaving no visual cue for why it stayed
                 unselectable. */}
-            <label id="hire-field-orgUnit">Org unit <span className="req">*</span></label>
+            <label id="hire-field-orgUnit">{t("Org unit")} <span className="req">*</span></label>
             <SearchableSelect
               value={orgUnitId}
               onChange={v => { setOrgUnitId(v); setPositionId(""); clearFieldError("orgUnit"); }}
               disabled={positionsLoading}
-              placeholder="Select an org unit"
+              placeholder={t("Select an org unit")}
               options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
             />
             <FieldError message={fieldErrors.orgUnit} />
           </div>
           <div className="f">
-            <label id="hire-field-position">Position <span className="req">*</span></label>
+            <label id="hire-field-position">{t("Position")} <span className="req">*</span></label>
             <SearchableSelect
               value={positionId}
               onChange={value => { setPositionId(value); clearFieldError("position"); }}
               disabled={!orgUnitId || positionsLoading}
-              placeholder={!orgUnitId ? "Select an org unit first" : "Select a position"}
+              placeholder={!orgUnitId ? t("Select an org unit first") : t("Select a position")}
               options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
             />
             <FieldError message={fieldErrors.position} />
@@ -219,22 +221,22 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
                 style={{ background: "none", border: "none", padding: 0, marginTop: 4, cursor: "pointer", color: "var(--brand-ink)", textAlign: "left" }}
               >
                 <i className="ti ti-plus" style={{ fontSize: 11, marginRight: 3 }} />
-                {positionOptions.length === 0 ? "No vacant position here — create one" : "Create a new position"}
+                {positionOptions.length === 0 ? t("No vacant position here — create one") : t("Create a new position")}
               </button>
             )}
           </div>
         </div>
         {selectedPosition && (
           <p className="hint">
-            Org unit → {selectedPosition.title} · {departmentName ?? units.find(u => u.id === orgUnitId)?.name}
-            {selectedPosition.grade ? ` · Band ${selectedPosition.grade}` : ""}
+            {t("Org unit →")} {selectedPosition.title} · {departmentName ?? units.find(u => u.id === orgUnitId)?.name}
+            {selectedPosition.grade ? ` · ${t("Band {grade}", { grade: selectedPosition.grade })}` : ""}
           </p>
         )}
 
         {showCreatePosition && (
           <div className="rounded-lg p-3.5 space-y-3" style={{ background: "var(--sunken)" }}>
             <div className="section-label" style={{ margin: 0 }}>
-              New position in {units.find(u => u.id === orgUnitId)?.name}
+              {t("New position in {unit}", { unit: units.find(u => u.id === orgUnitId)?.name ?? "" })}
             </div>
             {createPosErr && (
               <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg" style={{ background: "var(--crit-bg)", color: "var(--crit)" }}>
@@ -244,44 +246,44 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
             )}
             <div className="g2">
               <div className="f">
-                <label>Position title <span className="req">*</span></label>
+                <label>{t("Position title")} <span className="req">*</span></label>
                 <input type="text" value={newPosTitle} onChange={e => setNewPosTitle(e.target.value)}
-                  placeholder="e.g. Senior Executive" className="finput" />
+                  placeholder={t("e.g. Senior Executive")} className="finput" />
               </div>
               <div className="f">
-                <label>Grade / band</label>
+                <label>{t("Grade / band")}</label>
                 <input type="text" value={newPosGrade} onChange={e => setNewPosGrade(e.target.value)}
-                  placeholder="Optional" className="finput" />
+                  placeholder={t("Optional")} className="finput" />
               </div>
             </div>
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setShowCreatePosition(false)} disabled={creatingPosition} className="btn btn-ghost">
-                Cancel
+                {t("Cancel")}
               </button>
               <button type="button" onClick={createPosition} disabled={creatingPosition} className="btn btn-filled">
-                {creatingPosition ? "Creating…" : "Create position"}
+                {creatingPosition ? t("Creating…") : t("Create position")}
               </button>
             </div>
           </div>
         )}
 
-        <div className="section-label">Employee details — not changed by this action</div>
+        <div className="section-label">{t("Employee details — not changed by this action")}</div>
         <div className="rounded-lg p-3.5 space-y-1.5" style={{ background: "var(--sunken)" }}>
           <div className="flex justify-between text-[12.5px]">
-            <span style={{ color: "var(--muted)" }}>Employee</span>
-            <span className="font-semibold">Not yet created — captured in the hiring form</span>
+            <span style={{ color: "var(--muted)" }}>{t("Employee")}</span>
+            <span className="font-semibold">{t("Not yet created — captured in the hiring form")}</span>
           </div>
           <div className="flex justify-between text-[12.5px]">
-            <span style={{ color: "var(--muted)" }}>First record</span>
-            <span className="font-semibold">{effectiveFrom ? formatDate(effectiveFrom) : "—"} → 31-12-9999</span>
+            <span style={{ color: "var(--muted)" }}>{t("First record")}</span>
+            <span className="font-semibold">{t("{date} → 31-12-9999", { date: effectiveFrom ? formatDate(effectiveFrom) : "—" })}</span>
           </div>
           <div className="flex justify-between text-[12.5px]">
-            <span style={{ color: "var(--muted)" }}>Employee number</span>
-            <span className="font-semibold">Reserved from the series for the employment type</span>
+            <span style={{ color: "var(--muted)" }}>{t("Employee number")}</span>
+            <span className="font-semibold">{t("Reserved from the series for the employment type")}</span>
           </div>
         </div>
         <p className="hint">
-          Creates the first record, valid {effectiveFrom ? formatDate(effectiveFrom) : "—"} → 31-12-9999.
+          {t("Creates the first record, valid {date} → 31-12-9999.", { date: effectiveFrom ? formatDate(effectiveFrom) : "—" })}
         </p>
       </div>
     </Modal>

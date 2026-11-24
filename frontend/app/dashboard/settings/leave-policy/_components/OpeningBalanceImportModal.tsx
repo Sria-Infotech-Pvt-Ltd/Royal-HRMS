@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
@@ -25,8 +27,8 @@ interface Props {
 
 function validateFile(file: File): string | null {
   const ok = ACCEPTED_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext));
-  if (!ok) return "Unsupported file type. Please upload a .csv or .xlsx file.";
-  if (file.size > MAX_FILE_SIZE_BYTES) return "File is too large. Maximum allowed size is 5 MB.";
+  if (!ok) return tr("Unsupported file type. Please upload a .csv or .xlsx file.");
+  if (file.size > MAX_FILE_SIZE_BYTES) return tr("File is too large. Maximum allowed size is 5 MB.");
   return null;
 }
 
@@ -46,6 +48,7 @@ function fmtDate(d: string | null) {
 }
 
 export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [phase,         setPhase]         = useState<Phase>("upload");
@@ -67,7 +70,7 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
       { format },
       `leave_opening_balance_sample.${format}`,
     );
-    if (!res.success) setSampleError(res.message ?? "Failed to download sample.");
+    if (!res.success) setSampleError(res.message ?? t("Failed to download sample."));
     setSampleDl(null);
   }
 
@@ -98,7 +101,7 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
       setPhase("preview");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Validation failed. Please check your file.";
+        ?.response?.data?.message ?? t("Validation failed. Please check your file.");
       setApiError(msg);
     } finally {
       setValidating(false);
@@ -121,7 +124,7 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
       if (res.data.data.successful > 0) onSuccess();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Import failed. Please try again.";
+        ?.response?.data?.message ?? t("Import failed. Please try again.");
       setApiError(msg);
     } finally {
       setImporting(false);
@@ -138,27 +141,27 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
 
   return (
     <Modal
-      title={<><i className="ti ti-file-upload mr-2" />Import Leave Balances &amp; History</>}
+      title={<><i className="ti ti-file-upload mr-2" />{t("Import Leave Balances & History")}</>}
       onClose={handleClose}
       size="lg"
       footer={
         <>
           <button className="btn btn-ghost" onClick={handleClose}>
-            {phase === "result" ? "Close" : "Cancel"}
+            {phase === "result" ? t("Close") : t("Cancel")}
           </button>
 
           {phase === "upload" && (
             <button className="btn btn-filled" onClick={handleValidate} disabled={!file || validating} suppressHydrationWarning>
               {validating
-                ? <><i className="ti ti-loader-2 spin" /> Validating…</>
-                : <><i className="ti ti-search" /> Validate File</>}
+                ? <><i className="ti ti-loader-2 spin" /> {t("Validating…")}</>
+                : <><i className="ti ti-search" /> {t("Validate File")}</>}
             </button>
           )}
 
           {phase === "preview" && (
             <>
               <button className="btn btn-ghost" onClick={() => { setPhase("upload"); setPreview(null); setApiError(null); }}>
-                <i className="ti ti-arrow-left" /> Change File
+                <i className="ti ti-arrow-left" /> {t("Change File")}
               </button>
               <button
                 className="btn btn-filled"
@@ -167,8 +170,8 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
                 suppressHydrationWarning
               >
                 {importing
-                  ? <><i className="ti ti-loader-2 spin" /> Importing…</>
-                  : <><i className="ti ti-file-upload" /> Import {validCount} valid row{validCount !== 1 ? "s" : ""}</>}
+                  ? <><i className="ti ti-loader-2 spin" /> {t("Importing…")}</>
+                  : <><i className="ti ti-file-upload" /> {validCount === 1 ? t("Import {count} valid row", { count: validCount }) : t("Import {count} valid rows", { count: validCount })}</>}
               </button>
             </>
           )}
@@ -182,27 +185,24 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
               <div className="alert alert-info mb-5">
                 <i className="ti ti-info-circle" />
                 <div>
-                  <div className="font-semibold mb-1">One-Time Historical Migration</div>
+                  <div className="font-semibold mb-1">{t("One-Time Historical Migration")}</div>
                   <p className="mb-2 text-sm">
-                    Use this to onboard existing employees or migrate from another HRMS.
-                    Each row is either a <strong>Balance row</strong> (annual totals) or a
-                    <strong> History row</strong> (individual leave dates). Leave the unused
-                    columns blank for each row type.
+                    {t("Use this to onboard existing employees or migrate from another HRMS. Each row is either a")} <strong>{t("Balance row")}</strong> {t("(annual totals) or a")} <strong>{t("History row")}</strong> {t("(individual leave dates). Leave the unused columns blank for each row type.")}
                   </p>
                   <ul className="list-disc pl-4 text-sm mb-0">
-                    <li>Accepted: <strong>.csv</strong>, <strong>.xlsx</strong> (max 5 MB)</li>
-                    <li><strong>Balance columns:</strong> Opening Balance, Leave Allocated, Leave Availed, Carry Forward Days</li>
-                    <li><strong>History columns:</strong> From Date, To Date, Total Days (DD-Mon-YYYY or DD/MM/YYYY)</li>
-                    <li>Required on all rows: Employee ID, Leave Type, Financial Year</li>
-                    <li>All leave dates before today are auto-approved</li>
-                    <li>Duplicate employee/year balances and overlapping dates are skipped</li>
+                    <li>{t("Accepted:")} <strong>.csv</strong>, <strong>.xlsx</strong> {t("(max 5 MB)")}</li>
+                    <li><strong>{t("Balance columns:")}</strong> {t("Opening Balance, Leave Allocated, Leave Availed, Carry Forward Days")}</li>
+                    <li><strong>{t("History columns:")}</strong> {t("From Date, To Date, Total Days (DD-Mon-YYYY or DD/MM/YYYY)")}</li>
+                    <li>{t("Required on all rows: Employee ID, Leave Type, Financial Year")}</li>
+                    <li>{t("All leave dates before today are auto-approved")}</li>
+                    <li>{t("Duplicate employee/year balances and overlapping dates are skipped")}</li>
                   </ul>
                   <div className="flex gap-2 mt-2.5">
                     <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("csv")} disabled={!!sampleDl} suppressHydrationWarning>
-                      <i className="ti ti-download" /> {sampleDl === "csv" ? "Downloading…" : "Sample CSV"}
+                      <i className="ti ti-download" /> {sampleDl === "csv" ? t("Downloading…") : t("Sample CSV")}
                     </button>
                     <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("xlsx")} disabled={!!sampleDl} suppressHydrationWarning>
-                      <i className="ti ti-download" /> {sampleDl === "xlsx" ? "Downloading…" : "Sample XLSX"}
+                      <i className="ti ti-download" /> {sampleDl === "xlsx" ? t("Downloading…") : t("Sample XLSX")}
                     </button>
                   </div>
                   {sampleError && <div className="text-error text-xs mt-2">{sampleError}</div>}
@@ -215,8 +215,8 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
               >
                 <input ref={inputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={handleFileChange} />
                 <i className={`ti ${file ? "ti-file-check" : "ti-upload"}`} />
-                <p className="font-semibold">{file ? file.name : "Click to select file"}</p>
-                <small>{file ? `${(file.size / 1024).toFixed(1)} KB · Click to change` : ".csv · .xlsx"}</small>
+                <p className="font-semibold">{file ? file.name : t("Click to select file")}</p>
+                <small>{file ? t("{size} KB · Click to change", { size: (file.size / 1024).toFixed(1) }) : ".csv · .xlsx"}</small>
               </div>
 
               {fileError  && <div className="alert alert-error mb-3"><i className="ti ti-alert-circle" /><span>{fileError}</span></div>}
@@ -230,11 +230,11 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
               <div className={`alert mb-4 ${preview.error_rows > 0 ? "alert-warn" : "alert-success"}`}>
                 <i className={`ti ${preview.error_rows > 0 ? "ti-alert-triangle" : "ti-circle-check"}`} />
                 <div>
-                  <strong>{validCount} of {preview.total_rows} rows ready to import</strong>
-                  {preview.error_rows > 0 && <span className="ml-2 text-sm">({preview.error_rows} rows have errors and will be skipped)</span>}
+                  <strong>{t("{valid} of {total} rows ready to import", { valid: validCount, total: preview.total_rows })}</strong>
+                  {preview.error_rows > 0 && <span className="ml-2 text-sm">({t("{count} rows have errors and will be skipped", { count: preview.error_rows })})</span>}
                   <div className="text-sm mt-0.5">
-                    {preview.balance_rows} balance row{preview.balance_rows !== 1 ? "s" : ""} &nbsp;·&nbsp;
-                    {preview.history_rows} history row{preview.history_rows !== 1 ? "s" : ""}
+                    {preview.balance_rows === 1 ? t("{count} balance row", { count: preview.balance_rows }) : t("{count} balance rows", { count: preview.balance_rows })} &nbsp;·&nbsp;
+                    {preview.history_rows === 1 ? t("{count} history row", { count: preview.history_rows }) : t("{count} history rows", { count: preview.history_rows })}
                   </div>
                 </div>
               </div>
@@ -245,14 +245,14 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
                 <table>
                   <thead>
                     <tr>
-                      <th style={{ width: 48 }}>Row</th>
-                      <th style={{ width: 80 }}>Type</th>
-                      <th>Employee ID</th>
-                      <th>Leave Type</th>
-                      <th>FY / From Date</th>
-                      <th>To Date</th>
-                      <th style={{ width: 48 }}>Days</th>
-                      <th>Status</th>
+                      <th style={{ width: 48 }}>{t("Row")}</th>
+                      <th style={{ width: 80 }}>{t("Type")}</th>
+                      <th>{t("Employee ID")}</th>
+                      <th>{t("Leave Type")}</th>
+                      <th>{t("FY / From Date")}</th>
+                      <th>{t("To Date")}</th>
+                      <th style={{ width: 48 }}>{t("Days")}</th>
+                      <th>{t("Status")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -271,7 +271,7 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
                         <td>{row.days ?? "—"}</td>
                         <td>
                           {row.valid
-                            ? <span className="badge badge-success" style={{ fontSize: 10 }}>Ready</span>
+                            ? <span className="badge badge-success" style={{ fontSize: 10 }}>{t("Ready")}</span>
                             : <span className="text-error text-xs">{row.error}</span>
                           }
                         </td>
@@ -288,23 +288,23 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
             <>
               <div className="stats-grid mb-4">
                 <div className="stat-card">
-                  <div className="stat-label">Total Rows</div>
+                  <div className="stat-label">{t("Total Rows")}</div>
                   <div className="stat-value">{result.total_records}</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-label">Balances</div>
+                  <div className="stat-label">{t("Balances")}</div>
                   <div className="stat-value text-success">{result.balances_created}</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-label">History</div>
+                  <div className="stat-label">{t("History")}</div>
                   <div className="stat-value text-success">{result.history_imported}</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-label">Skipped</div>
+                  <div className="stat-label">{t("Skipped")}</div>
                   <div className={`stat-value${result.skipped > 0 ? " text-warn" : " text-muted"}`}>{result.skipped}</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-label">Failed</div>
+                  <div className="stat-label">{t("Failed")}</div>
                   <div className={`stat-value${result.failed > 0 ? " text-error" : " text-muted"}`}>{result.failed}</div>
                 </div>
               </div>
@@ -313,11 +313,11 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="text-xs font-semibold">
-                      Errors {result.errors.length >= 100 && <span className="font-normal text-muted">(showing first 100 — download for full report)</span>}
+                      {t("Errors")} {result.errors.length >= 100 && <span className="font-normal text-muted">{t("(showing first 100 — download for full report)")}</span>}
                     </div>
                     {result.error_report_csv && (
                       <button className="btn btn-ghost btn-sm" onClick={() => downloadErrorReportCsv(result.error_report_csv as string)} suppressHydrationWarning>
-                        <i className="ti ti-download" /> Download Error Report
+                        <i className="ti ti-download" /> {t("Download Error Report")}
                       </button>
                     )}
                   </div>
@@ -325,7 +325,7 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
                     <table>
                       <thead>
                         <tr>
-                          <th>Row</th><th>Employee ID</th><th>Leave Type</th><th>FY / From Date</th><th>Reason</th>
+                          <th>{t("Row")}</th><th>{t("Employee ID")}</th><th>{t("Leave Type")}</th><th>{t("FY / From Date")}</th><th>{t("Reason")}</th>
                         </tr>
                       </thead>
                       <tbody>

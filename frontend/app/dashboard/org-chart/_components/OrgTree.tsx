@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import type { OrgUnit, Position } from "@/types/orgStructure";
 import type { Selected } from "./OrgStructureClient";
 import type { UnitRollup } from "@/lib/orgStructureStats";
+import { useT } from "@/hooks/useI18n";
 
 export type SeatFilter = "all" | "vacant" | "filled";
 /** "Expand all" / "Collapse all": a new id is a new command, so pressing the same button twice still works. */
@@ -33,6 +34,7 @@ function highlight(text: string, query: string): ReactNode {
 }
 
 export default function OrgTree({ units, positions, search, branchFilter, selected, onSelect, rollups, seatFilter, command }: Props) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // Apply a new Expand all / Collapse all while rendering (React's pattern for state that follows a prop), not in an effect.
   const [seenCommandId, setSeenCommandId] = useState<number | null>(null);
@@ -114,7 +116,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
           <span className="orgnode-glyph" style={{ background: "var(--primary-container, color-mix(in srgb, var(--brand) 12%, transparent))", color: "var(--primary)" }}>O</span>
           <span className="orgnode-name">{highlight(u.name, q)}</span>
           {rollup && rollup.total > 0 && (
-            <span className="orgnode-count" title={`${rollup.filled} of ${rollup.total} seats filled, including sub-units`}>
+            <span className="orgnode-count" title={t("{filled} of {total} seats filled, including sub-units", { filled: rollup.filled, total: rollup.total })}>
               {rollup.filled}/{rollup.total}
             </span>
           )}
@@ -155,9 +157,9 @@ export default function OrgTree({ units, positions, search, branchFilter, select
           ) : <span className="orgnode-caret" />}
           <span className="orgnode-glyph" style={{ background: "var(--info-c)", color: "var(--info)" }}>S</span>
           <span className="orgnode-name">{highlight(p.title, q)}</span>
-          {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 13, flexShrink: 0 }} title="Chief position" />}
-          {!p.is_active && <span className="badge" style={{ marginLeft: "auto", fontSize: 9.5, background: "var(--bg-low)", color: "var(--on-variant)", flexShrink: 0 }}>Inactive</span>}
-          {p.is_active && !hasHolder && <span className="badge badge-warn" style={{ marginLeft: "auto", fontSize: 9.5 }}>Vacant</span>}
+          {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 13, flexShrink: 0 }} title={t("Chief position")} />}
+          {!p.is_active && <span className="badge" style={{ marginLeft: "auto", fontSize: 9.5, background: "var(--bg-low)", color: "var(--on-variant)", flexShrink: 0 }}>{t("Inactive")}</span>}
+          {p.is_active && !hasHolder && <span className="badge badge-warn" style={{ marginLeft: "auto", fontSize: 9.5 }}>{t("Vacant")}</span>}
         </div>
         {hasHolder && !isCollapsed && (
           <div
@@ -193,7 +195,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
       {rendered.length > 0
         ? rendered
         : <div style={{ padding: 24, textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-            {q || branchFilter !== null || seatFilter !== "all" ? "Nothing matches." : "No org units yet — add one to get started."}
+            {q || branchFilter !== null || seatFilter !== "all" ? t("Nothing matches.") : t("No org units yet — add one to get started.")}
           </div>
       }
     </>

@@ -8,12 +8,14 @@ import { useFetch } from "@/hooks/useFetch";
 import { useSubmitFeedback } from "@/hooks/useInterviewFeedback";
 import { API } from "@/lib/api/endpoints";
 import type { FeedbackInput, MyInterview } from "@/types/interviewFeedback";
+import { useT } from "@/hooks/useI18n";
 
 interface InterviewPage {
   results: MyInterview[];
 }
 
 export default function MyInterviewsPage() {
+  const t = useT();
   const { data, loading, error, refetch } = useFetch<InterviewPage>(API.recruitment.myInterviews);
   const { submit, isSaving, error: saveError } = useSubmitFeedback();
   const [active, setActive] = useState<MyInterview | null>(null);
@@ -30,10 +32,10 @@ export default function MyInterviewsPage() {
   const interviews = data?.results ?? [];
   return (
     <div className="page-content">
-      <h1 style={{ fontSize: 22, marginBottom: 12 }}>My Interviews</h1>
-      {loading && <p>Loading…</p>}
+      <h1 style={{ fontSize: 22, marginBottom: 12 }}>{t("My Interviews")}</h1>
+      {loading && <p>{t("Loading…")}</p>}
       {error && <p role="alert" style={{ color: "var(--error)" }}>{error}</p>}
-      {!loading && !error && interviews.length === 0 && <p>No interviews are assigned to you.</p>}
+      {!loading && !error && interviews.length === 0 && <p>{t("No interviews are assigned to you.")}</p>}
       <div style={{ display: "grid", gap: 12 }}>
         {interviews.map(interview => (
           <article key={interview.id} style={{ border: "1px solid var(--outline-variant, #ddd)", borderRadius: 10, padding: 14 }}>
@@ -41,25 +43,25 @@ export default function MyInterviewsPage() {
             <div style={{ color: "var(--on-variant)", fontSize: ".85rem", margin: "4px 0 8px" }}>
               {interview.interview_date} {interview.interview_time ?? ""} · {interview.interview_mode_label}
               {interview.branch ? ` · ${interview.branch}` : ""} · {interview.status_label}
-              {interview.meeting_link && <> · <a href={interview.meeting_link} target="_blank" rel="noreferrer">Join link</a></>}
+              {interview.meeting_link && <> · <a href={interview.meeting_link} target="_blank" rel="noreferrer">{t("Join link")}</a></>}
             </div>
             {interview.my_feedback && (
               <p style={{ margin: "0 0 8px" }}>
-                Your feedback: {interview.my_feedback.rating}/5, {interview.my_feedback.recommendation_label}
+                {t("Your feedback: {rating}/5, {recommendation}", { rating: interview.my_feedback.rating, recommendation: interview.my_feedback.recommendation_label })}
               </p>
             )}
             {interview.can_submit ? (
               <button className="btn btn-filled btn-sm" onClick={() => setActive(interview)}>
-                {interview.my_feedback ? "Update feedback" : "Submit feedback"}
+                {interview.my_feedback ? t("Update feedback") : t("Submit feedback")}
               </button>
             ) : (
-              <span className="badge badge-neutral">Feedback closed</span>
+              <span className="badge badge-neutral">{t("Feedback closed")}</span>
             )}
           </article>
         ))}
       </div>
       {active && (
-        <Modal title={`Feedback — ${active.candidate_name}`} onClose={() => setActive(null)} closeDisabled={isSaving}>
+        <Modal title={t("Feedback — {name}", { name: active.candidate_name })} onClose={() => setActive(null)} closeDisabled={isSaving}>
           <FeedbackForm initial={active.my_feedback} isSaving={isSaving} serverError={saveError}
             onSubmit={handleSubmit} onCancel={() => setActive(null)} />
         </Modal>

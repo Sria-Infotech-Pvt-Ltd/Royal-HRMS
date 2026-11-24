@@ -31,7 +31,7 @@ export default function LeaveSupportingDocument({ file, isRequired, error, onCha
 
   return (
     <div>
-      <Lbl text="Supporting document" required={isRequired} hint={isRequired ? undefined : "Optional"} />
+      <Lbl text={tr("Supporting document")} required={isRequired} hint={isRequired ? undefined : tr("Optional")} />
       {file ? (
         <div className="flex items-center gap-3 rounded-lg border border-[var(--outline-v)] bg-[var(--bg-low)] px-3.5 py-2.5">
           <i className="ti ti-file text-base text-[var(--primary)]" />

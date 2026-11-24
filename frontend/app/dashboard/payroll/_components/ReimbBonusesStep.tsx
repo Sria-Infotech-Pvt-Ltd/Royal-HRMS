@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import type {
   EmployeeExpenseSummary,
@@ -27,6 +28,7 @@ const fmt = (n: number | string) =>
 export default function ReimbBonusesStep({
   cycleId, enableReimbursements, enableBonuses, onNext, onBack,
 }: Props) {
+  const t = useT();
   const { data: payslipPage, loading, refetch } =
     useFetch<PagedResponse<EmployeePayslip>>(API.payroll.cyclePayslips(cycleId));
 
@@ -66,13 +68,13 @@ export default function ReimbBonusesStep({
         <div className="card">
           <div className="card-header">
             <div>
-              <div className="card-title"><i className="ti ti-receipt" /> Reimbursements</div>
+              <div className="card-title"><i className="ti ti-receipt" /> {t("Reimbursements")}</div>
               <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>
-                Approved expenses are auto-fetched. Click Edit to choose which to include.
+                {t("Approved expenses are auto-fetched. Click Edit to choose which to include.")}
               </div>
             </div>
             <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              Total: <strong style={{ color: "var(--info)" }}>{fmt(totalReimb)}</strong>
+              {t("Total:")} <strong style={{ color: "var(--info)" }}>{fmt(totalReimb)}</strong>
             </span>
           </div>
           {loading ? (
@@ -84,9 +86,9 @@ export default function ReimbBonusesStep({
               <table>
                 <thead>
                   <tr>
-                    <th>Employee</th>
-                    <th style={{ textAlign: "right" }}>Pending Expenses</th>
-                    <th style={{ textAlign: "right" }}>Included in Payroll</th>
+                    <th>{t("Employee")}</th>
+                    <th style={{ textAlign: "right" }}>{t("Pending Expenses")}</th>
+                    <th style={{ textAlign: "right" }}>{t("Included in Payroll")}</th>
                     <th />
                   </tr>
                 </thead>
@@ -109,21 +111,21 @@ export default function ReimbBonusesStep({
                           </div>
                         </td>
                         <td style={{ textAlign: "right", fontSize: 12, color: "var(--on-variant)" }}>
-                          {pendingCount > 0 ? `${pendingCount} claim${pendingCount > 1 ? "s" : ""}` : "—"}
+                          {pendingCount > 0 ? (pendingCount > 1 ? t("{count} claims", { count: pendingCount }) : t("{count} claim", { count: pendingCount })) : "—"}
                         </td>
                         <td style={{ textAlign: "right", fontWeight: 600, color: Number(p.reimbursements) > 0 ? "var(--info)" : "var(--outline)" }}>
                           {Number(p.reimbursements) > 0 ? `${fmt(p.reimbursements)} (${includedCount})` : "—"}
                         </td>
                         <td>
                           <button className="btn btn-ghost btn-sm" onClick={() => setReimbTarget(p)}>
-                            <i className="ti ti-edit" /> Edit
+                            <i className="ti ti-edit" /> {t("Edit")}
                           </button>
                         </td>
                       </tr>
                     );
                   })}
                   <tr style={{ background: "var(--bg-low)" }}>
-                    <td style={{ fontWeight: 700 }} colSpan={2}>Total</td>
+                    <td style={{ fontWeight: 700 }} colSpan={2}>{t("Total")}</td>
                     <td style={{ textAlign: "right", fontWeight: 700, color: "var(--info)" }}>{fmt(totalReimb)}</td>
                     <td />
                   </tr>
@@ -138,13 +140,13 @@ export default function ReimbBonusesStep({
         <div className="card">
           <div className="card-header">
             <div>
-              <div className="card-title"><i className="ti ti-gift" /> Bonuses</div>
+              <div className="card-title"><i className="ti ti-gift" /> {t("Bonuses")}</div>
               <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>
-                Add Annual, Performance, Referral, or ad-hoc bonuses per employee.
+                {t("Add Annual, Performance, Referral, or ad-hoc bonuses per employee.")}
               </div>
             </div>
             <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              Total: <strong style={{ color: "var(--warn)" }}>{fmt(totalBonus)}</strong>
+              {t("Total:")} <strong style={{ color: "var(--warn)" }}>{fmt(totalBonus)}</strong>
             </span>
           </div>
           {loading ? (
@@ -156,9 +158,9 @@ export default function ReimbBonusesStep({
               <table>
                 <thead>
                   <tr>
-                    <th>Employee</th>
-                    <th style={{ textAlign: "right" }}>Pending Referrals</th>
-                    <th style={{ textAlign: "right" }}>Bonus Amount</th>
+                    <th>{t("Employee")}</th>
+                    <th style={{ textAlign: "right" }}>{t("Pending Referrals")}</th>
+                    <th style={{ textAlign: "right" }}>{t("Bonus Amount")}</th>
                     <th />
                   </tr>
                 </thead>
@@ -180,26 +182,26 @@ export default function ReimbBonusesStep({
                           </div>
                         </td>
                         <td style={{ textAlign: "right", fontSize: 12, color: referralCount > 0 ? "var(--warn)" : "var(--on-variant)" }}>
-                          {referralCount > 0 ? `${referralCount} pending` : "—"}
+                          {referralCount > 0 ? t("{count} pending", { count: referralCount }) : "—"}
                         </td>
                         <td style={{ textAlign: "right", fontWeight: 600, color: Number(p.bonus) > 0 ? "var(--warn)" : "var(--outline)" }}>
                           {Number(p.bonus) > 0 ? fmt(p.bonus) : "—"}
                           {p.bonus_breakdown?.length > 0 && (
                             <span style={{ marginLeft: 6, fontSize: 10, color: "var(--on-variant)", fontWeight: 400 }}>
-                              ({p.bonus_breakdown.length} {p.bonus_breakdown.length === 1 ? "entry" : "entries"})
+                              ({p.bonus_breakdown.length === 1 ? t("{count} entry", { count: p.bonus_breakdown.length }) : t("{count} entries", { count: p.bonus_breakdown.length })})
                             </span>
                           )}
                         </td>
                         <td>
                           <button className="btn btn-ghost btn-sm" onClick={() => setBonusTarget(p)}>
-                            <i className="ti ti-edit" /> Edit
+                            <i className="ti ti-edit" /> {t("Edit")}
                           </button>
                         </td>
                       </tr>
                     );
                   })}
                   <tr style={{ background: "var(--bg-low)" }}>
-                    <td style={{ fontWeight: 700 }} colSpan={2}>Total</td>
+                    <td style={{ fontWeight: 700 }} colSpan={2}>{t("Total")}</td>
                     <td style={{ textAlign: "right", fontWeight: 700, color: "var(--warn)" }}>{fmt(totalBonus)}</td>
                     <td />
                   </tr>
@@ -211,8 +213,8 @@ export default function ReimbBonusesStep({
       )}
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-        <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
-        <button className="btn btn-filled" onClick={onNext}>Continue <i className="ti ti-arrow-right" /></button>
+        <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> {t("Back")}</button>
+        <button className="btn btn-filled" onClick={onNext}>{t("Continue")} <i className="ti ti-arrow-right" /></button>
       </div>
 
       {reimbTarget && (

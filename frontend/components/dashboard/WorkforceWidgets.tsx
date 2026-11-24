@@ -7,6 +7,7 @@
 
 import type { ReactNode } from "react";
 import { toCurrentWeek } from "@/lib/weeklyAttendance";
+import { useT } from "@/hooks/useI18n";
 
 type Tone = "brand" | "ok" | "warn" | "crit" | "info";
 
@@ -89,6 +90,7 @@ export function OverviewItem({ icon, tone, label, sub, chip, chipTone, progress,
   loading: boolean;
   onOpen: () => void;
 }) {
+  const t = useT();
   return (
     <div className="wf-ov wf-ov-click" onClick={onOpen}>
       <span className={`wf-ico ${tone}`}>{icon}</span>
@@ -104,8 +106,8 @@ export function OverviewItem({ icon, tone, label, sub, chip, chipTone, progress,
         )}
       </div>
       {loading ? <Skel w={92} h={22} /> : <span className={`wf-chip ${chipTone}`}>{chip}</span>}
-      <button type="button" className="wf-open" aria-label={`Open ${label}`}>
-        Open {WfIcon.chevron}
+      <button type="button" className="wf-open" aria-label={t("Open {label}", { label })}>
+        {t("Open")} {WfIcon.chevron}
       </button>
     </div>
   );
@@ -131,11 +133,12 @@ export function QuickTile({ icon, tone, title, sub, onClick }: {
 export function AttendanceTrend({ data, total, loading }: {
   data: { label: string; count: number }[]; total: number; loading: boolean;
 }) {
+  const t = useT();
   if (loading) {
     return <div className="wf-trend-chart wf-trend-empty"><Skel w="100%" h={120} /></div>;
   }
   if (!data.length) {
-    return <div className="wf-trend-chart wf-trend-empty">No attendance recorded in the last 7 days.</div>;
+    return <div className="wf-trend-chart wf-trend-empty">{t("No attendance recorded in the last 7 days.")}</div>;
   }
   const scale = total > 0 ? total : Math.max(1, ...data.map((d) => d.count));
   return (
@@ -147,7 +150,7 @@ export function AttendanceTrend({ data, total, loading }: {
         {toCurrentWeek(data, new Date()).map((d, i) => {
           if (d.count === null) {
             return (
-              <div className="wf-col upcoming" key={i} title="Later this week">
+              <div className="wf-col upcoming" key={i} title={t("Later this week")}>
                 <span className="wf-col-val" />
                 <div className="wf-bar-wrap" />
                 <span className="wf-col-lbl">{d.label}</span>
@@ -156,7 +159,7 @@ export function AttendanceTrend({ data, total, loading }: {
           }
           const pct = Math.min(100, (d.count / scale) * 100);
           return (
-            <div className={`wf-col${d.isToday ? " today" : ""}`} key={i} tabIndex={0} title={`${d.count} present · ${Math.round(pct)}% of headcount`}>
+            <div className={`wf-col${d.isToday ? " today" : ""}`} key={i} tabIndex={0} title={t("{count} present · {pct}% of headcount", { count: d.count, pct: Math.round(pct) })}>
               <span className="wf-col-val">{d.count}</span>
               <div className="wf-bar-wrap"><i className={d.isToday ? "today" : ""} style={{ height: `${Math.max(3, pct)}%` }} /></div>
               <span className={`wf-col-lbl${d.isToday ? " today" : ""}`}>{d.label}</span>
@@ -172,14 +175,15 @@ export function AttendanceTrend({ data, total, loading }: {
 export function AttendanceInsights({ data, total, loading }: {
   data: { label: string; count: number }[]; total: number; loading: boolean;
 }) {
+  const t = useT();
   const counts = data.map((d) => d.count);
   const today = counts.length ? counts[counts.length - 1] : 0;
   const avg = counts.length ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : 0;
   const high = counts.length ? Math.max(...counts) : 0;
-  const share = (n: number) => (total > 0 ? `${Math.round((n / total) * 100)}% of headcount` : "present");
+  const share = (n: number) => (total > 0 ? t("{pct}% of headcount", { pct: Math.round((n / total) * 100) }) : t("present"));
   const rows: { label: string; value: number; note: string; tone: Tone }[] = [
     { label: "Today", value: today, note: share(today), tone: "brand" },
-    { label: "7-day average", value: avg, note: `${share(avg)} per day`, tone: "info" },
+    { label: "7-day average", value: avg, note: t("{share} per day", { share: share(avg) }), tone: "info" },
     { label: "Highest day", value: high, note: share(high), tone: "ok" },
   ];
   return (
@@ -188,9 +192,9 @@ export function AttendanceInsights({ data, total, loading }: {
         <div className="wf-insight" key={r.label}>
           <span className={`wf-dot ${r.tone}`} aria-hidden="true" />
           <div>
-            <small>{r.label}</small>
+            <small>{t(r.label)}</small>
             <b>{loading ? <Skel w={40} h={20} /> : data.length ? r.value : "–"}</b>
-            <em>{loading ? <Skel w={90} h={10} /> : data.length ? r.note : "No data yet"}</em>
+            <em>{loading ? <Skel w={90} h={10} /> : data.length ? r.note : t("No data yet")}</em>
           </div>
         </div>
       ))}

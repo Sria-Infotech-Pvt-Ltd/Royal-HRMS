@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { DashboardKPIs } from "@/types/dashboard";
@@ -7,13 +8,14 @@ import type { DashboardKPIs } from "@/types/dashboard";
 interface Props { firstName: string }
 
 export default function KpiConsole({ firstName }: Props) {
+  const t = useT();
   const { data: kpis, loading } = useFetch<DashboardKPIs>(API.dashboard.kpis);
 
   const stats = [
-    { icon: "ti-users",     val: loading ? "—" : String(kpis?.total_employees      ?? 0), lbl: "Total Employees",   sub: "Active headcount"     },
-    { icon: "ti-checks",    val: loading ? "—" : String(kpis?.pending_approvals     ?? 0), lbl: "Pending Approvals", sub: "Across all modules"   },
-    { icon: "ti-user-plus", val: loading ? "—" : String(kpis?.employees_onboarding ?? 0), lbl: "In Onboarding",     sub: "Step 2–4 in progress" },
-    { icon: "ti-building",  val: loading ? "—" : String(kpis?.active_branches       ?? 0), lbl: "Active Branches",   sub: "All operational"      },
+    { icon: "ti-users",     val: loading ? "—" : String(kpis?.total_employees      ?? 0), lbl: t("Total Employees"), sub: t("Active headcount") },
+    { icon: "ti-checks",    val: loading ? "—" : String(kpis?.pending_approvals     ?? 0), lbl: t("Pending Approvals"), sub: t("Across all modules") },
+    { icon: "ti-user-plus", val: loading ? "—" : String(kpis?.employees_onboarding ?? 0), lbl: t("In Onboarding"), sub: t("Step 2–4 in progress") },
+    { icon: "ti-building",  val: loading ? "—" : String(kpis?.active_branches       ?? 0), lbl: t("Active Branches"), sub: t("All operational") },
   ];
 
   return (
@@ -36,8 +38,8 @@ export default function KpiConsole({ firstName }: Props) {
             <i className="ti ti-terminal-2" />
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>System Console</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>Welcome back, {firstName}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>{t("System Console")}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>{t("Welcome back, {firstName}", { firstName })}</div>
           </div>
         </div>
       </div>

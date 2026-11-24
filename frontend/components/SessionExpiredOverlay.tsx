@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 
 export default function SessionExpiredOverlay() {
+  const t            = useT();
   const router       = useRouter();
   const [visible, setVisible] = useState(false);
   const triggeredRef = useRef(false);   // deduplicates multiple session:expired events
@@ -66,10 +68,10 @@ export default function SessionExpiredOverlay() {
           margin:       "0 auto 20px",
         }} />
         <p style={{ fontSize: "16px", fontWeight: 600, color: "var(--on-bg)", marginBottom: "8px" }}>
-          Session Expired
+          {t("Session Expired")}
         </p>
         <p style={{ fontSize: "13px", color: "var(--on-variant)", lineHeight: 1.6 }}>
-          Your session has timed out. Signing you out…
+          {t("Your session has timed out. Signing you out…")}
         </p>
       </div>
     </div>

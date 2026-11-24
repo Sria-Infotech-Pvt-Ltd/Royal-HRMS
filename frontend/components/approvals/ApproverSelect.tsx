@@ -2,6 +2,7 @@
 
 import SearchableSelect from "@/components/SearchableSelect";
 import FieldError from "@/components/shared/FieldError";
+import { useT } from "@/hooks/useI18n";
 import type { ApproverOption, PersonRef } from "@/types/approvers";
 import { optionLabel, personLine } from "./approverLabels";
 
@@ -20,9 +21,10 @@ interface Props {
 
 /** One approver dropdown: each choice shows name, role, branch and department. */
 export default function ApproverSelect({ label, value, onChange, options, placeholder, hint, error, disabled, assigned }: Props) {
+  const t = useT();
   const choices = options.map(person => ({ value: person.id, label: optionLabel(person) }));
   if (value && assigned?.id === value && !options.some(person => person.id === value)) {
-    choices.unshift({ value, label: `${personLine(assigned)} (no longer eligible)` });
+    choices.unshift({ value, label: t("{person} (no longer eligible)", { person: personLine(assigned) }) });
   }
   return (
     <div className="f">

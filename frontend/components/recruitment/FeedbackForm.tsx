@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { feedbackProblem } from "@/hooks/useInterviewFeedback";
 import type { FeedbackEntry, FeedbackInput, FeedbackRecommendation } from "@/types/interviewFeedback";
 
@@ -20,6 +21,7 @@ interface FeedbackFormProps {
 
 /** Rating (1-5), recommendation and comments — what an interviewer submits for an assigned interview. */
 export default function FeedbackForm({ initial, isSaving, serverError, onSubmit, onCancel }: FeedbackFormProps) {
+  const t = useT();
   const [rating, setRating] = useState(initial?.rating ?? 0);
   const [recommendation, setRecommendation] = useState<FeedbackRecommendation | "">(initial?.recommendation ?? "");
   const [comments, setComments] = useState(initial?.comments ?? "");
@@ -37,7 +39,7 @@ export default function FeedbackForm({ initial, isSaving, serverError, onSubmit,
   return (
     <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
       <fieldset style={{ border: 0, padding: 0 }}>
-        <legend className="field-label">Rating</legend>
+        <legend className="field-label">{t("Rating")}</legend>
         <div style={{ display: "flex", gap: 8 }}>
           {[1, 2, 3, 4, 5].map(value => (
             <button key={value} type="button" aria-pressed={rating === value}
@@ -48,25 +50,25 @@ export default function FeedbackForm({ initial, isSaving, serverError, onSubmit,
         </div>
       </fieldset>
       <fieldset style={{ border: 0, padding: 0 }}>
-        <legend className="field-label">Recommendation</legend>
+        <legend className="field-label">{t("Recommendation")}</legend>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {RECOMMENDATIONS.map(option => (
             <button key={option.value} type="button" aria-pressed={recommendation === option.value}
               className={`btn btn-sm ${recommendation === option.value ? "btn-filled" : "btn-ghost"}`}
               onClick={() => setRecommendation(option.value)}>
-              {option.label}
+              {t(option.label)}
             </button>
           ))}
         </div>
       </fieldset>
-      <label className="field-label" htmlFor="feedback-comments">Comments</label>
+      <label className="field-label" htmlFor="feedback-comments">{t("Comments")}</label>
       <textarea id="feedback-comments" className="field-input" rows={5} value={comments}
         onChange={event => setComments(event.target.value)} maxLength={5000} />
       {message && <p role="alert" style={{ color: "var(--error)", margin: 0 }}>{message}</p>}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={isSaving}>Cancel</button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={isSaving}>{t("Cancel")}</button>
         <button type="submit" className="btn btn-filled" disabled={isSaving}>
-          {isSaving ? "Saving…" : initial ? "Update feedback" : "Submit feedback"}
+          {isSaving ? t("Saving…") : initial ? t("Update feedback") : t("Submit feedback")}
         </button>
       </div>
     </form>

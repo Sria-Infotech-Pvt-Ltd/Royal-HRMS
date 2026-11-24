@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useAnyPermission, usePermission } from "@/hooks/usePermission";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
 import OrgTree, { type SeatFilter, type TreeCommand } from "./OrgTree";
 import OrgDetail from "./OrgDetail";
@@ -45,6 +46,7 @@ const VIEW_OPTIONS: { mode: OrgView; label: string; icon: string }[] = [
 export type Selected = { type: "unit" | "position" | "person"; id: string } | null;
 
 export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { onBack?: () => void; initialSelectedUnitId?: string }) {
+  const t = useT();
   const canEdit = useAnyPermission("org_structure.create", "org_structure.edit", "org_structure.delete");
   const canDelete = usePermission("org_structure.delete");
   const canManagePermissions = usePermission("settings.edit");
@@ -105,7 +107,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
     saveStatusTimeout.current = setTimeout(() => setSaveStatus(null), 2000);
   }
   function fieldSaveFailed(err: unknown) {
-    setSaveStatus({ state: "error", message: (err as { message?: string })?.message ?? "Failed to save — try again." });
+    setSaveStatus({ state: "error", message: (err as { message?: string })?.message ?? t("Failed to save — try again.") });
   }
 
   async function load() {
@@ -121,7 +123,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
       setPositions(posRes.data?.data?.results ?? []);
       setJobs(jobsRes.data?.data ?? []);
     } catch (err: unknown) {
-      setLoadError((err as { message?: string })?.message ?? "Failed to load organisation structure.");
+      setLoadError((err as { message?: string })?.message ?? t("Failed to load organisation structure."));
     } finally {
       setLoading(false);
     }
@@ -195,7 +197,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, gap: 10, color: "var(--on-variant)" }}>
         <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "spin 1s linear infinite" }} />
-        Loading organisation structure…
+        {t("Loading organisation structure…")}
       </div>
     );
   }
@@ -204,24 +206,24 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
     <>
       <div className="page-header">
         <div>
-          <div className="page-title">Organization Management</div>
-          <div className="page-sub">Org units, the positions inside them, and who holds each seat. Modeled on positions, so structure exists before anyone is hired.</div>
+          <div className="page-title">{t("Organization Management")}</div>
+          <div className="page-sub">{t("Org units, the positions inside them, and who holds each seat. Modeled on positions, so structure exists before anyone is hired.")}</div>
         </div>
         {(canEdit || onBack) && (
           <div className="page-actions">
             {canEdit && (
               <button className="btn btn-ghost" onClick={() => setManageJobsOpen(true)}>
-                <i className="ti ti-briefcase" /> Manage job templates
+                <i className="ti ti-briefcase" /> {t("Manage job templates")}
               </button>
             )}
             {canEdit && (
               <button className="btn btn-filled" onClick={() => setAddUnitParent("new")}>
-                <i className="ti ti-plus" /> Add org unit
+                <i className="ti ti-plus" /> {t("Add org unit")}
               </button>
             )}
             {onBack && (
               <button className="btn btn-ghost" onClick={onBack}>
-                <i className="ti ti-arrow-left" /> Back
+                <i className="ti ti-arrow-left" /> {t("Back")}
               </button>
             )}
           </div>
@@ -237,12 +239,9 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
       <div className="alert alert-info mb-16" style={{ alignItems: "flex-start" }}>
         <i className="ti ti-info-circle" />
         <div>
-          A unit&apos;s head is a <strong>position</strong>, not a person. You mark one position in each unit as <strong>chief</strong>;
-          whoever holds it is the head. The seat can stay <strong>vacant</strong> until you hire, so you never have to invent an
-          employee just to create a unit.
+          {t("A unit's head is a")} <strong>{t("position")}</strong>{t(", not a person. You mark one position in each unit as")} <strong>{t("chief")}</strong>{t("; whoever holds it is the head. The seat can stay")} <strong>{t("vacant")}</strong> {t("until you hire, so you never have to invent an employee just to create a unit.")}
           <span style={{ display: "block", marginTop: 6 }}>
-            To set access, select a position and choose <strong>Permissions</strong>. Access belongs to that seat—not the reporting chain;
-            employees sharing a seat share its permissions. Use separate positions when employees need different access.
+            {t("To set access, select a position and choose")} <strong>{t("Permissions")}</strong>{t(". Access belongs to that seat—not the reporting chain; employees sharing a seat share its permissions. Use separate positions when employees need different access.")}
           </span>
         </div>
       </div>
@@ -250,36 +249,36 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
       <div className="stats-grid mb-16">
         <div className="stat-card">
           <div className="stat-icon si-primary"><i className="ti ti-sitemap" /></div>
-          <div className="stat-label">Org Units</div>
+          <div className="stat-label">{t("Org Units")}</div>
           <div className="stat-value">{stats.units}</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon si-primary"><i className="ti ti-id-badge-2" /></div>
-          <div className="stat-label">Positions</div>
+          <div className="stat-label">{t("Positions")}</div>
           <div className="stat-value">{stats.positions}</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon si-warn"><i className="ti ti-user-question" /></div>
-          <div className="stat-label">Vacant Positions</div>
+          <div className="stat-label">{t("Vacant Positions")}</div>
           <div className="stat-value">{stats.vacant}</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon si-primary"><i className="ti ti-users" /></div>
-          <div className="stat-label">People Placed</div>
+          <div className="stat-label">{t("People Placed")}</div>
           <div className="stat-value">{stats.placed}</div>
         </div>
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-        <button type="button" className="btn btn-ghost btn-sm" title="Download every position as a spreadsheet file"
+        <button type="button" className="btn btn-ghost btn-sm" title={t("Download every position as a spreadsheet file")}
           onClick={() => downloadTextFile(`organization-positions-${new Date().toISOString().slice(0, 10)}.csv`, buildPositionsCsv(units, positions))}>
-          <i className="ti ti-download" /> Export positions
+          <i className="ti ti-download" /> {t("Export positions")}
         </button>
-        <div role="group" aria-label="View" style={{ display: "inline-flex", border: "1px solid var(--outline-v)", borderRadius: 8, overflow: "hidden" }}>
+        <div role="group" aria-label={t("View")} style={{ display: "inline-flex", border: "1px solid var(--outline-v)", borderRadius: 8, overflow: "hidden" }}>
           {VIEW_OPTIONS.map(({ mode, label, icon }) => (
             <button key={mode} type="button" aria-pressed={view === mode} onClick={() => setView(mode)}
               style={{ padding: "6px 14px", border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600, background: view === mode ? "var(--primary)" : "transparent", color: view === mode ? "#fff" : "var(--on-variant)" }}>
-              <i className={`ti ${icon}`} /> {label}
+              <i className={`ti ${icon}`} /> {t(label)}
             </button>
           ))}
         </div>
@@ -289,9 +288,9 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
         {view !== "tree" ? (
           <div className="card" style={{ overflow: "hidden" }}>
             <div className="card-header"><div>
-              <div className="card-title">{view === "chart" ? "Unit chart" : "Reporting line"}</div>
+              <div className="card-title">{view === "chart" ? t("Unit chart") : t("Reporting line")}</div>
               <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>
-                {view === "chart" ? "One box per org unit · click a box for details" : "One box per position, joined by who it reports to · click a box for details"}
+                {view === "chart" ? t("One box per org unit · click a box for details") : t("One box per position, joined by who it reports to · click a box for details")}
               </div></div></div>
             <div style={{ padding: 12 }}>
               {view === "chart" ? (
@@ -307,8 +306,8 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
         <div className="card" style={{ overflow: "hidden" }}>
           <div className="card-header">
             <div>
-              <div className="card-title">Structure</div>
-              <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>Org units · positions · holders</div>
+              <div className="card-title">{t("Structure")}</div>
+              <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>{t("Org units · positions · holders")}</div>
             </div>
           </div>
           <div style={{ padding: 8 }}>
@@ -317,7 +316,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
               <input
                 className="field-input"
                 style={{ paddingLeft: 32 }}
-                placeholder="Find unit, position or person"
+                placeholder={t("Find unit, position or person")}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -327,7 +326,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
                 inputClassName="field-input"
                 value={branchFilter}
                 onChange={setBranchFilter}
-                placeholder="All Company Codes"
+                placeholder={t("All Company Codes")}
                 options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
               />
             </div>
@@ -335,13 +334,13 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
               {(["all", "vacant", "filled"] as const).map(option => (
                 <button key={option} type="button" aria-pressed={seatFilter === option} onClick={() => setSeatFilter(option)}
                   className={seatFilter === option ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"}>
-                  {option === "all" ? "All" : option === "vacant" ? "Vacant" : "Filled"}
+                  {option === "all" ? t("All") : option === "vacant" ? t("Vacant") : t("Filled")}
                 </button>
               ))}
               <span style={{ flex: 1 }} />
-              <button type="button" className="btn btn-ghost btn-sm" title="Expand all" aria-label="Expand all"
+              <button type="button" className="btn btn-ghost btn-sm" title={t("Expand all")} aria-label={t("Expand all")}
                 onClick={() => setTreeCommand(previous => ({ id: (previous?.id ?? 0) + 1, action: "expand" }))}><i className="ti ti-arrows-diagonal" /></button>
-              <button type="button" className="btn btn-ghost btn-sm" title="Collapse all" aria-label="Collapse all"
+              <button type="button" className="btn btn-ghost btn-sm" title={t("Collapse all")} aria-label={t("Collapse all")}
                 onClick={() => setTreeCommand(previous => ({ id: (previous?.id ?? 0) + 1, action: "collapse" }))}><i className="ti ti-arrows-diagonal-minimize-2" /></button>
             </div>
             <div className="org-tree-scroll" style={{ maxHeight: 640, overflow: "auto" }}>
@@ -354,12 +353,12 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
             </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "10px 16px", borderTop: "1px solid var(--outline-v)", background: "var(--bg-low)", fontSize: 11, color: "var(--on-variant)" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--primary-container, color-mix(in srgb, var(--brand) 12%, transparent))", color: "var(--primary)" }}>O</span> Org unit</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--info-c)", color: "var(--info)" }}>S</span> Position</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--success-c)", color: "var(--success)" }}>P</span> Employee</span>
-            <span><i className="ti ti-crown" style={{ color: "var(--warn)" }} /> Chief</span>
-            <span className="badge badge-warn">Vacant</span>
-            <span><span className="orgnode-count" style={{ fontSize: 10.5, fontWeight: 650, padding: "1px 7px", borderRadius: 10, border: "1px solid var(--outline-v)" }}>3/5</span> filled / seats</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--primary-container, color-mix(in srgb, var(--brand) 12%, transparent))", color: "var(--primary)" }}>O</span> {t("Org unit")}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--info-c)", color: "var(--info)" }}>S</span> {t("Position")}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--success-c)", color: "var(--success)" }}>P</span> {t("Employee")}</span>
+            <span><i className="ti ti-crown" style={{ color: "var(--warn)" }} /> {t("Chief")}</span>
+            <span className="badge badge-warn">{t("Vacant")}</span>
+            <span><span className="orgnode-count" style={{ fontSize: 10.5, fontWeight: 650, padding: "1px 7px", borderRadius: 10, border: "1px solid var(--outline-v)" }}>3/5</span> {t("filled / seats")}</span>
           </div>
         </div>
         )}
@@ -370,7 +369,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
           display: selected ? "block" : "none", boxShadow: "0 24px 64px rgba(15, 23, 42, 0.28)", borderRadius: 16,
         } : { position: "relative" }}>
           {isDrawer && (
-            <button type="button" onClick={() => setSelected(null)} aria-label="Close details" title="Close"
+            <button type="button" onClick={() => setSelected(null)} aria-label={t("Close details")} title={t("Close")}
               style={{ position: "absolute", top: 12, right: 12, zIndex: 6, width: 30, height: 30, borderRadius: 15, border: "1px solid var(--outline-v)", background: "var(--surface, #fff)", cursor: "pointer", color: "var(--on-variant)" }}>
               <i className="ti ti-x" />
             </button>
@@ -389,16 +388,16 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
                   : { background: "rgba(220,38,38,0.06)", color: "var(--error)", border: "1px solid rgba(220,38,38,0.3)" }),
               }}
             >
-              {saveStatus.state === "saving" && <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>}
-              {saveStatus.state === "saved" && <><i className="ti ti-check" /> Saved</>}
+              {saveStatus.state === "saving" && <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</>}
+              {saveStatus.state === "saved" && <><i className="ti ti-check" /> {t("Saved")}</>}
               {saveStatus.state === "error" && (
                 <>
                   <i className="ti ti-alert-circle" /> {saveStatus.message}
                   <button
                     onClick={() => setSaveStatus(null)}
                     style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, marginLeft: 4, display: "flex" }}
-                    title="Dismiss"
-                   aria-label="Dismiss">
+                    title={t("Dismiss")}
+                   aria-label={t("Dismiss")}>
                     <i className="ti ti-x" style={{ fontSize: 12 }} />
                   </button>
                 </>
@@ -408,7 +407,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
           <div style={{ padding: "18px 20px" }}>
             {history.length > 0 && selected && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
-                <i className="ti ti-arrow-left" /> Back
+                <i className="ti ti-arrow-left" /> {t("Back")}
               </button>
             )}
             {!selected ? (
@@ -477,7 +476,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
                   // resubmit with confirm_department_change so it's an
                   // informed choice, not a silent block.
                   if (field === "is_department_level" && e.status === 409 && e.message) {
-                    if (await confirmDialog({ title: "Proceed anyway?", body: e.message, confirmLabel: "Proceed" })) {
+                    if (await confirmDialog({ title: t("Proceed anyway?"), body: e.message, confirmLabel: t("Proceed") })) {
                       try {
                         await clientApi.put(API.orgStructure.units.detail(unitId), { [field]: value, confirm_department_change: true });
                         await load();

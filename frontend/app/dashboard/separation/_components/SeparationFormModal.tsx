@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import type { SeparationLookupOption, SeparationRequest, SeparationTypeOption } from "@/types/separation";
 import { daysBetween, todayIso } from "../_workflow";
 import EmployeePickerField, { type PickedEmployee } from "./EmployeePickerField";
@@ -47,6 +48,7 @@ function initialForm(existing?: SeparationRequest): FormState {
 }
 
 export default function SeparationFormModal({ mode, existing, canPickEmployee, onClose, onSaved }: Props) {
+  const t = useT();
   const { data: types }   = useFetch<SeparationTypeOption[]>(API.separation.types);
   const { data: reasons } = useFetch<SeparationLookupOption[]>(API.separation.reasons);
 
@@ -60,7 +62,7 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
   // is shown/required until a type is picked, matching how neither field
   // makes sense to ask about in the abstract (see backend
   // SEPARATION_REASON_APPLICABLE_TYPES's own comment).
-  const selectedType = (types ?? []).find(t => t.value === form.separationType);
+  const selectedType = (types ?? []).find(option => option.value === form.separationType);
   const reasonApplicable = selectedType?.reason_applicable ?? false;
   const noticeApplicable = selectedType?.notice_period_applicable ?? false;
 
@@ -70,7 +72,7 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
   }
 
   function handleTypeChange(value: string) {
-    const next = (types ?? []).find(t => t.value === value);
+    const next = (types ?? []).find(option => option.value === value);
     setForm(prev => ({
       ...prev,
       separationType: value,
@@ -91,11 +93,11 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
     e.target.value = "";
     if (!file) return;
     if (file.size > MAX_DOC_BYTES) {
-      setErrors(prev => ({ ...prev, document: `"${file.name}" exceeds 5 MB.` }));
+      setErrors(prev => ({ ...prev, document: t("\"{name}\" exceeds 5 MB.", { name: file.name }) }));
       return;
     }
     if (!ALLOWED_DOC_TYPES.includes(file.type)) {
-      setErrors(prev => ({ ...prev, document: `"${file.name}" must be PDF, JPG, or PNG.` }));
+      setErrors(prev => ({ ...prev, document: t("\"{name}\" must be PDF, JPG, or PNG.", { name: file.name }) }));
       return;
     }
     setDocumentFile(file);
@@ -104,17 +106,17 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
 
   function validate(): boolean {
     const errs: FormErrors = {};
-    if (!form.separationType)         errs.separationType = "Please select a separation type.";
-    if (reasonApplicable && !form.reason) errs.reason      = "Please select a reason.";
+    if (!form.separationType)         errs.separationType = t("Please select a separation type.");
+    if (reasonApplicable && !form.reason) errs.reason      = t("Please select a reason.");
     if (reasonApplicable && form.reason === "other" && !form.reasonNote.trim())
-      errs.reasonNote = "Specify the reason, or pick a different option from the list.";
-    if (!form.requestDate)            errs.requestDate    = "Request date is required.";
-    if (!form.proposedLastWorkingDay) errs.proposedLastWorkingDay = "Proposed last working day is required.";
+      errs.reasonNote = t("Specify the reason, or pick a different option from the list.");
+    if (!form.requestDate)            errs.requestDate    = t("Request date is required.");
+    if (!form.proposedLastWorkingDay) errs.proposedLastWorkingDay = t("Proposed last working day is required.");
     else if (form.requestDate && form.proposedLastWorkingDay < form.requestDate)
-      errs.proposedLastWorkingDay = "Cannot be earlier than the request date.";
+      errs.proposedLastWorkingDay = t("Cannot be earlier than the request date.");
     if (noticeApplicable) {
       const notice = Number(form.noticePeriodDays);
-      if (!form.noticePeriodDays || Number.isNaN(notice) || notice < 0) errs.noticePeriodDays = "Enter a valid number of days.";
+      if (!form.noticePeriodDays || Number.isNaN(notice) || notice < 0) errs.noticePeriodDays = t("Enter a valid number of days.");
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -152,7 +154,7 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
       onSaved(response.data?.data ?? response.data);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Failed to submit the separation request. Please try again.";
+        ?.response?.data?.message ?? t("Failed to submit the separation request. Please try again.");
       setErrors(prev => ({ ...prev, submit: msg }));
     } finally {
       setSubmitting(false);
@@ -178,9 +180,9 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
         <div className="modal-header">
           <div className="modal-title">
             <i className="ti ti-logout" style={{ marginRight: 8 }} />
-            {mode === "create" ? "Request Separation" : "Edit Separation Request"}
+            {mode === "create" ? t("Request Separation") : t("Edit Separation Request")}
           </div>
-          <button className="modal-close" onClick={onClose} suppressHydrationWarning aria-label="Close">
+          <button className="modal-close" onClick={onClose} suppressHydrationWarning aria-label={t("Close")}>
             <i className="ti ti-x" />
           </button>
         </div>
@@ -194,17 +196,17 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
 
           {mode === "create" && canPickEmployee && (
             <div className="field-group mb-16">
-              <label className="field-label">Employee</label>
+              <label className="field-label">{t("Employee")}</label>
               <EmployeePickerField value={employee} onChange={setEmployee} />
               <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-                Leave blank to file this request for yourself.
+                {t("Leave blank to file this request for yourself.")}
               </p>
             </div>
           )}
 
           {mode === "edit" && (
             <div className="field-group mb-16">
-              <label className="field-label">Employee</label>
+              <label className="field-label">{t("Employee")}</label>
               <input className="field-input" value={`${existing!.employee_name} · ${existing!.employee_code}`} disabled />
             </div>
           )}
@@ -212,14 +214,14 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
           <div className={`form-row ${reasonApplicable ? "cols-2" : ""}`}>
             <div className="field-group">
               <label className="field-label">
-                Separation Type <span style={{ color: "var(--error)" }}>*</span>
+                {t("Separation Type")} <span style={{ color: "var(--error)" }}>*</span>
               </label>
               <select
                 className={`field-input field-select${errors.separationType ? " field-error" : ""}`}
                 value={form.separationType}
                 onChange={e => handleTypeChange(e.target.value)}
               >
-                <option value="">Select type…</option>
+                <option value="">{t("Select type…")}</option>
                 {(types ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               {errors.separationType && <p className="field-error-msg">{errors.separationType}</p>}
@@ -227,14 +229,14 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
             {reasonApplicable && (
               <div className="field-group">
                 <label className="field-label">
-                  Reason <span style={{ color: "var(--error)" }}>*</span>
+                  {t("Reason")} <span style={{ color: "var(--error)" }}>*</span>
                 </label>
                 <select
                   className={`field-input field-select${errors.reason ? " field-error" : ""}`}
                   value={form.reason}
                   onChange={e => handleReasonChange(e.target.value)}
                 >
-                  <option value="">Select reason…</option>
+                  <option value="">{t("Select reason…")}</option>
                   {(reasons ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
                 {errors.reason && <p className="field-error-msg">{errors.reason}</p>}
@@ -246,11 +248,11 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
             <div className="form-row">
               <div className="field-group">
                 <label className="field-label">
-                  Specify Reason <span style={{ color: "var(--error)" }}>*</span>
+                  {t("Specify Reason")} <span style={{ color: "var(--error)" }}>*</span>
                 </label>
                 <input
                   className={`field-input${errors.reasonNote ? " field-error" : ""}`}
-                  placeholder="e.g. Family relocation to another country"
+                  placeholder={t("e.g. Family relocation to another country")}
                   value={form.reasonNote}
                   onChange={e => setField("reasonNote", e.target.value)}
                 />
@@ -262,24 +264,24 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
           <div className={`form-row ${noticeApplicable ? "cols-3" : "cols-2"}`}>
             <div className="field-group">
               <label className="field-label">
-                Request Date <span style={{ color: "var(--error)" }}>*</span>
+                {t("Request Date")} <span style={{ color: "var(--error)" }}>*</span>
               </label>
               <DateInput className={`field-input${errors.requestDate ? " field-error" : ""}`} value={form.requestDate} onChange={isoDate => setField("requestDate", isoDate)} />
               {errors.requestDate && <p className="field-error-msg">{errors.requestDate}</p>}
             </div>
             <div className="field-group">
               <label className="field-label">
-                Proposed Last Working Day <span style={{ color: "var(--error)" }}>*</span>
+                {t("Proposed Last Working Day")} <span style={{ color: "var(--error)" }}>*</span>
               </label>
               <DateInput className={`field-input${errors.proposedLastWorkingDay ? " field-error" : ""}`} value={form.proposedLastWorkingDay} onChange={isoDate => setField("proposedLastWorkingDay", isoDate)} />
               {errors.proposedLastWorkingDay
                 ? <p className="field-error-msg">{errors.proposedLastWorkingDay}</p>
-                : noticeDays !== null && <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>{noticeDays} day{noticeDays !== 1 ? "s" : ""} from request date</p>}
+                : noticeDays !== null && <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>{noticeDays === 1 ? t("{count} day from request date", { count: noticeDays }) : t("{count} days from request date", { count: noticeDays })}</p>}
             </div>
             {noticeApplicable && (
               <div className="field-group">
                 <label className="field-label">
-                  Notice Period (days) <span style={{ color: "var(--error)" }}>*</span>
+                  {t("Notice Period (days)")} <span style={{ color: "var(--error)" }}>*</span>
                 </label>
                 <input
                   type="number" min="0" className={`field-input${errors.noticePeriodDays ? " field-error" : ""}`}
@@ -291,38 +293,38 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
           </div>
 
           <div className="field-group mb-16">
-            <label className="field-label">Comments</label>
+            <label className="field-label">{t("Comments")}</label>
             <textarea
               className="field-input" rows={3} style={{ resize: "vertical" }}
               value={form.comments} onChange={e => setField("comments", e.target.value)}
-              placeholder="Optional notes for the record…"
+              placeholder={t("Optional notes for the record…")}
             />
           </div>
 
           <div className="field-group">
-            <label className="field-label">Supporting Document</label>
+            <label className="field-label">{t("Supporting Document")}</label>
             {existing?.document_url && !documentFile && (
               <p style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 6 }}>
-                A document is already attached. Choosing a new file replaces it.
+                {t("A document is already attached. Choosing a new file replaces it.")}
               </p>
             )}
             <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", width: "fit-content" }}>
-              <i className="ti ti-upload" /> {documentFile?.name ?? "Choose file…"}
+              <i className="ti ti-upload" /> {documentFile?.name ?? t("Choose file…")}
               <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFile} />
             </label>
-            <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>PDF, JPG, or PNG — up to 5 MB.</p>
+            <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>{t("PDF, JPG, or PNG — up to 5 MB.")}</p>
             {errors.document && <p className="field-error-msg">{errors.document}</p>}
           </div>
         </div>
 
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={submitting} suppressHydrationWarning>
-            Cancel
+            {t("Cancel")}
           </button>
           <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting} suppressHydrationWarning>
             {submitting
-              ? <><i className="ti ti-loader-2 spin" /> Submitting…</>
-              : <><i className="ti ti-send" /> {mode === "create" ? "Submit Request" : "Save Changes"}</>
+              ? <><i className="ti ti-loader-2 spin" /> {t("Submitting…")}</>
+              : <><i className="ti ti-send" /> {mode === "create" ? t("Submit Request") : t("Save Changes")}</>
             }
           </button>
         </div>

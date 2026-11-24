@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
+
 // Global footer, present on every dashboard page — matches the reference
 // mockup's footer exactly (verbatim markup from public/reference.html):
 // brand mini-logo + name/subtitle on the left,
@@ -9,6 +11,7 @@
 const IS_DEMO_BUILD = process.env.NEXT_PUBLIC_DEMO_BUILD === "true";
 
 export default function DashboardFooter() {
+  const t = useT();
   return (
     <footer className="site-footer">
       <div className="footer-inner">
@@ -20,12 +23,12 @@ export default function DashboardFooter() {
             </svg>
           </span>
           <span>
-            <b>AIRA HR Operations</b>
-            <small>Artificial Intelligence Resources Assistance</small>
+            <b>{t("AIRA HR Operations")}</b>
+            <small>{t("Artificial Intelligence Resources Assistance")}</small>
           </span>
         </div>
 
-        <div className="footer-meta">{IS_DEMO_BUILD ? "Interactive demo · " : ""}Role-aware access · © 2026 AIRA</div>
+        <div className="footer-meta">{IS_DEMO_BUILD ? `${t("Interactive demo")} · ` : ""}{t("Role-aware access")} · © 2026 AIRA</div>
       </div>
     </footer>
   );

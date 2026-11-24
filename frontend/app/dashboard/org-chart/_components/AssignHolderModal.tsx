@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import SearchableSelect from "@/components/SearchableSelect";
 import type { Position } from "@/types/orgStructure";
 import type { EmployeeOption } from "./OrgStructureClient";
@@ -25,6 +26,7 @@ function today(): string {
 }
 
 export default function AssignHolderModal({ position, employees, onClose, onAssigned }: Props) {
+  const t = useT();
   const [employeeId, setEmployeeId] = useState(position?.holder ?? "");
   const [effectiveFrom, setEffectiveFrom] = useState(today());
   const [effectiveTo, setEffectiveTo] = useState("");
@@ -35,9 +37,9 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
 
   async function submit() {
     if (!position) return;
-    if (!employeeId) { setFieldError("Pick an employee."); return; }
-    if (!effectiveFrom) { setDateError("Effective from is required."); return; }
-    if (effectiveTo && effectiveTo < effectiveFrom) { setDateError("Effective to can't be before effective from."); return; }
+    if (!employeeId) { setFieldError(t("Pick an employee.")); return; }
+    if (!effectiveFrom) { setDateError(t("Effective from is required.")); return; }
+    if (effectiveTo && effectiveTo < effectiveFrom) { setDateError(t("Effective to can't be before effective from.")); return; }
     setIsSubmitting(true);
     setSubmitError(null);
     try {
@@ -46,7 +48,7 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
       });
       onAssigned();
     } catch (err: unknown) {
-      setSubmitError((err as { message?: string })?.message ?? "Failed to assign holder.");
+      setSubmitError((err as { message?: string })?.message ?? t("Failed to assign holder."));
     } finally {
       setIsSubmitting(false);
     }
@@ -56,14 +58,14 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
 
   return (
     <Modal
-      title={<><i className="ti ti-user-question" style={{ marginRight: 8 }} />{position.holder ? "Reassign holder" : "Assign holder"}</>}
+      title={<><i className="ti ti-user-question" style={{ marginRight: 8 }} />{position.holder ? t("Reassign holder") : t("Assign holder")}</>}
       onClose={onClose}
       maxWidth={440}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={submit} disabled={isSubmitting}>
-            {isSubmitting ? <><Spin />&nbsp;Saving…</> : position.holder ? "Reassign" : "Assign"}
+            {isSubmitting ? <><Spin />&nbsp;{t("Saving…")}</> : position.holder ? t("Reassign") : t("Assign")}
           </button>
         </>
       }
@@ -76,12 +78,12 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
       <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 14 }}>{position.title} · {position.org_unit_name}</div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Employee <span style={{ color: "var(--error)" }}>*</span></label>
+        <label className="field-label">{t("Employee")} <span style={{ color: "var(--error)" }}>*</span></label>
         <SearchableSelect
           inputClassName={`field-input${fieldError ? " field-error" : ""}`}
           value={employeeId}
           onChange={v => { setEmployeeId(v); setFieldError(null); }}
-          placeholder="Select an employee…"
+          placeholder={t("Select an employee…")}
           options={employees.map(e => ({ value: e.id, label: `${e.full_name} (${e.employee_id})` }))}
         />
         {fieldError && <p className="field-error-msg">{fieldError}</p>}
@@ -89,11 +91,11 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
 
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
-          <label className="field-label">Effective from <span style={{ color: "var(--error)" }}>*</span></label>
+          <label className="field-label">{t("Effective from")} <span style={{ color: "var(--error)" }}>*</span></label>
           <DateInput className={`field-input${dateError ? " field-error" : ""}`} value={effectiveFrom} onChange={isoDate => { setEffectiveFrom(isoDate); setDateError(null); }} />
         </div>
         <div className="field-group">
-          <label className="field-label">Effective to <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+          <label className="field-label">{t("Effective to")} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>{t("(optional)")}</span></label>
           <DateInput className="field-input" min={effectiveFrom} value={effectiveTo} onChange={isoDate => { setEffectiveTo(isoDate); setDateError(null); }} />
         </div>
       </div>
@@ -102,13 +104,12 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
       {position.holder_name && (
         <div style={{ marginBottom: 14, padding: "10px 14px", background: "var(--bg-low)", border: "1px solid var(--outline-v)", borderRadius: 8, fontSize: 12, color: "var(--on-variant)" }}>
           <i className="ti ti-info-circle" style={{ marginRight: 6 }} />
-          {position.holder_name}&apos;s placement will be closed the day before the new start date and kept in history.
+          {t("{name}'s placement will be closed the day before the new start date and kept in history.", { name: position.holder_name })}
         </div>
       )}
 
       <div style={{ fontSize: 11.5, color: "var(--outline)" }}>
-        Placing a person on a chief position makes them the unit&apos;s head automatically, as of the effective date above.
-        A future-dated start schedules the change without affecting today&apos;s holder.
+        {t("Placing a person on a chief position makes them the unit's head automatically, as of the effective date above. A future-dated start schedules the change without affecting today's holder.")}
       </div>
     </Modal>
   );

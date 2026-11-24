@@ -4,6 +4,7 @@
 // file; this one loads the data, checks the form and sends it.
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermission } from "@/hooks/usePermission";
@@ -25,6 +26,7 @@ const emptyForm = (date: string): OvertimeCreatePayload => ({ employee_id: "", d
 
 export default function OtEntryTab() {
   const { showToast } = useToast();
+  const t = useT();
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
   const canCreate       = usePermission("attendance.create");
@@ -61,11 +63,11 @@ export default function OtEntryTab() {
     setFormError(null);
     try {
       await clientApi.post(API.attendance.overtimeCreate, form);
-      showToast("Overtime entry created.", "success");
+      showToast(t("Overtime entry created."), "success");
       setForm({ ...emptyForm(todayISO), date: form.date });   // ready for the next entry on the same day
       refetch();
     } catch (err: unknown) {
-      const message = (err as { message?: string })?.message ?? "Failed to create overtime entry.";
+      const message = (err as { message?: string })?.message ?? t("Failed to create overtime entry.");
       setFormError(message);
       showToast(message, "error");
     } finally {

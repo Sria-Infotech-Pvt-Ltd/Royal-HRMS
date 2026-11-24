@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { buildEmailPreview, CompanyInfo, normalizeExtraContext, renderTemplateVars } from "@/lib/emailPreview";
@@ -39,6 +40,7 @@ export function SendWishModal({
   department, designation, preferredKey,
   onClose, onSent,
 }: Props) {
+  const t = useT();
   const [templateGroups,   setTemplateGroups]   = useState<TemplateGroup[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<WishTemplate | null>(null);
@@ -56,21 +58,21 @@ export function SendWishModal({
         const groups: TemplateGroup[] = Object.entries(grouped)
           .map(([category, items]) => ({
             category,
-            templates: (items as WishTemplate[]).filter(t => t.is_active),
+            templates: (items as WishTemplate[]).filter(template => template.is_active),
           }))
           .filter(g => g.templates.length > 0);
         setTemplateGroups(groups);
 
         const all = groups.flatMap(g => g.templates);
         const preferred = preferredKey
-          ? (all.find(t => t.name.includes(preferredKey)) ?? all[0] ?? null)
+          ? (all.find(template => template.name.includes(preferredKey)) ?? all[0] ?? null)
           : (all[0] ?? null);
         setSelectedTemplate(preferred);
         setCompany(coRes.data?.data ?? null);
       })
-      .catch(() => setApiError("Could not load templates or company info."))
+      .catch(() => setApiError(t("Could not load templates or company info.")))
       .finally(() => setLoadingTemplates(false));
-  }, [preferredKey]);
+  }, [preferredKey, t]);
 
   function employeeVars(): Record<string, string> {
     const parts       = employeeName.trim().split(/\s+/);
@@ -127,7 +129,7 @@ export function SendWishModal({
       onClose();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setApiError(msg ?? "Failed to send wish email.");
+      setApiError(msg ?? t("Failed to send wish email."));
     } finally {
       setSaving(false);
     }
@@ -138,14 +140,14 @@ export function SendWishModal({
       title={
         <>
           <i className="ti ti-confetti" style={{ marginRight: 6 }} />
-          Send Wish — {employeeName}
+          {t("Send Wish — {name}", { name: employeeName })}
         </>
       }
       onClose={onClose}
       maxWidth={640}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button
             className="btn btn-filled"
             onClick={handleConfirm}
@@ -153,8 +155,8 @@ export function SendWishModal({
             suppressHydrationWarning
           >
             {saving
-              ? <><i className="ti ti-loader-2 spin" /> Sending…</>
-              : <><i className="ti ti-confetti" /> Confirm &amp; Send Wish</>
+              ? <><i className="ti ti-loader-2 spin" /> {t("Sending…")}</>
+              : <><i className="ti ti-confetti" /> {t("Confirm & Send Wish")}</>
             }
           </button>
         </>
@@ -170,36 +172,36 @@ export function SendWishModal({
           <div className="alert alert-info mb-16">
             <i className="ti ti-send" />
             <div>
-              Sending a wish email to <strong>{employeeName}</strong>
-              {employeeEmail && <> at <strong>{employeeEmail}</strong></>}
+              {t("Sending a wish email to")} <strong>{employeeName}</strong>
+              {employeeEmail && <> {t("at")} <strong>{employeeEmail}</strong></>}
               {department && <> · {designation ?? ""} · {department}</>}
             </div>
           </div>
 
           {/* Template selector */}
           <div className="field-group mb-16">
-            <label className="field-label">Wish Template *</label>
+            <label className="field-label">{t("Wish Template *")}</label>
             {loadingTemplates ? (
               <div style={{ fontSize: 13, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 6 }}>
-                <i className="ti ti-loader-2 spin" /> Loading templates…
+                <i className="ti ti-loader-2 spin" /> {t("Loading templates…")}
               </div>
             ) : (
               <select
                 className="field-input field-select"
                 value={selectedTemplate?.name ?? ""}
                 onChange={e => {
-                  const found = templateGroups.flatMap(g => g.templates).find(t => t.name === e.target.value) ?? null;
+                  const found = templateGroups.flatMap(g => g.templates).find(template => template.name === e.target.value) ?? null;
                   setSelectedTemplate(found);
                 }}
                 suppressHydrationWarning
               >
                 {templateGroups.length === 0 && (
-                  <option value="">No active templates — create one in Settings → Email Templates</option>
+                  <option value="">{t("No active templates — create one in Settings → Email Templates")}</option>
                 )}
                 {templateGroups.map(g => (
                   <optgroup key={g.category} label={g.category.charAt(0).toUpperCase() + g.category.slice(1)}>
-                    {g.templates.map(t => (
-                      <option key={t.name} value={t.name}>{t.display_name}</option>
+                    {g.templates.map(template => (
+                      <option key={template.name} value={template.name}>{template.display_name}</option>
                     ))}
                   </optgroup>
                 ))}
@@ -211,15 +213,15 @@ export function SendWishModal({
           {selectedTemplate && (
             <div className="settings-card">
               <div className="settings-card-title flex items-center gap-2 mb-8">
-                <i className="ti ti-mail" /> Email Preview
+                <i className="ti ti-mail" /> {t("Email Preview")}
               </div>
               {employeeEmail && (
                 <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 2 }}>
-                  <strong>To:</strong> {employeeEmail}
+                  <strong>{t("To:")}</strong> {employeeEmail}
                 </div>
               )}
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
-                <strong>Subject:</strong> {previewSubject()}
+                <strong>{t("Subject:")}</strong> {previewSubject()}
               </div>
               <iframe
                 srcDoc={previewHtml()}
@@ -229,7 +231,7 @@ export function SendWishModal({
                   border: "1px solid var(--outline-v)",
                   borderRadius: 6, display: "block",
                 }}
-                title="Email body preview"
+                title={t("Email body preview")}
               />
             </div>
           )}

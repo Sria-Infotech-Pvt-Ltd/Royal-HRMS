@@ -3,6 +3,7 @@
 // Salary Setup data: one server-paginated, searchable list of employees WITH their salary record, plus the KPI summary.
 // Both are re-read after every save, so a row never keeps showing "Not set" for a salary that was just saved.
 
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
@@ -44,7 +45,7 @@ export function useSalarySetup() {
     const response = await clientApi.post<{ message?: string; data?: { unchanged?: boolean } }>(API.payroll.employeeSalary, payload);
     refetchList();
     refetchSummary();
-    return { message: response.data.message ?? "Salary saved.", isUnchanged: !!response.data.data?.unchanged };
+    return { message: response.data.message ?? tr("Salary saved."), isUnchanged: !!response.data.data?.unchanged };
   }, [refetchList, refetchSummary]);
 
   return { list, summary, search, setSearch, status, changeStatus, page, setPage, save };

@@ -5,6 +5,7 @@
 // always starts from what is saved. The server remains the judge of every rule; this only blocks hours that are not
 // quarter-hour numbers, so a typo never reaches it.
 
+import { useT } from "@/hooks/useI18n";
 import { useMemo, useState } from "react";
 import TimesheetProjects from "@/components/timesheet/TimesheetProjects";
 import TimesheetHistory from "@/components/timesheet/TimesheetHistory";
@@ -32,15 +33,17 @@ function Banner({ tone, children }: { tone: "crit" | "warn" | "ok"; children: Re
 }
 
 function StatusBanner({ view }: { view: TimesheetWeekView }) {
+  const t = useT();
   if (view.status === "returned" && view.return_reason) {
-    return <Banner tone="crit"><b>Sent back for changes:</b> {view.return_reason}. Fix the hours and resubmit.</Banner>;
+    return <Banner tone="crit"><b>{t("Sent back for changes:")}</b> {view.return_reason}. {t("Fix the hours and resubmit.")}</Banner>;
   }
-  if (view.status === "submitted") return <Banner tone="warn">Waiting for approval{view.approver ? ` from ${view.approver.name}` : ""}. You cannot edit it meanwhile.</Banner>;
-  if (view.status === "approved") return <Banner tone="ok">Approved{view.decided_by ? ` by ${view.decided_by.name}` : ""}. This timesheet is locked.</Banner>;
+  if (view.status === "submitted") return <Banner tone="warn">{view.approver ? t("Waiting for approval from {name}.", { name: view.approver.name }) : t("Waiting for approval.")} {t("You cannot edit it meanwhile.")}</Banner>;
+  if (view.status === "approved") return <Banner tone="ok">{view.decided_by ? t("Approved by {name}.", { name: view.decided_by.name }) : t("Approved.")} {t("This timesheet is locked.")}</Banner>;
   return null;
 }
 
 export default function TimesheetEditor({ view, isReadOnly: isViewOnly = false, isSaving, isSubmitting, problems, onSave, onSubmit }: Props) {
+  const t = useT();
   const savedLines = useMemo(() => toGridLines(view.lines), [view.lines]);
   const [lines, setLines] = useState<GridLine[]>(savedLines);
   const dates = view.days.map(day => day.date);
@@ -70,22 +73,22 @@ export default function TimesheetEditor({ view, isReadOnly: isViewOnly = false, 
         onBillableChange={(key, isBillable) => update(key, line => ({ ...line, is_billable: isBillable }))}
       />
       <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "10px 2px" }}>
-        Week total <b style={{ color: "var(--ink)" }}>{formatHours(total)}</b> of {formatHours(Number(view.limits.weekly_target_hours))} target hours (a guide, not a limit)
-        {" · "}Billable <b style={{ color: "var(--ink)" }}>{formatHours(billable)}</b> · Non-billable <b style={{ color: "var(--ink)" }}>{formatHours(total - billable)}</b>
+        {t("Week total")} <b style={{ color: "var(--ink)" }}>{formatHours(total)}</b> {t("of {hours} target hours (a guide, not a limit)", { hours: formatHours(Number(view.limits.weekly_target_hours)) })}
+        {" · "}{t("Billable")} <b style={{ color: "var(--ink)" }}>{formatHours(billable)}</b> · {t("Non-billable")} <b style={{ color: "var(--ink)" }}>{formatHours(total - billable)}</b>
       </p>
-      {hasTypo && <p role="alert" style={{ color: "var(--crit)", fontSize: 12.5, margin: "0 2px 8px" }}>Some hours are not valid. Use whole or quarter hours from 0 to 24 (for example 7.5).</p>}
+      {hasTypo && <p role="alert" style={{ color: "var(--crit)", fontSize: 12.5, margin: "0 2px 8px" }}>{t("Some hours are not valid. Use whole or quarter hours from 0 to 24 (for example 7.5).")}</p>}
       <TimesheetIssuesPanel errors={problems.length > 0 ? problems : view.issues?.errors ?? []} warnings={view.issues?.warnings ?? []} />
       {!isReadOnly && (
         <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
           <button type="button" className="rvbtn" disabled={isBusy || hasTypo || !isChanged} onClick={() => onSave(toSavePayload(lines))}>
-            {isSaving ? "Saving…" : "Save draft"}
+            {isSaving ? t("Saving…") : t("Save draft")}
           </button>
           <button type="button" className="rvbtn pri" disabled={isBusy || hasTypo} onClick={handleSubmit}>
-            {isSubmitting ? "Submitting…" : view.status === "returned" ? "Resubmit" : "Submit for approval"}
+            {isSubmitting ? t("Submitting…") : view.status === "returned" ? t("Resubmit") : t("Submit for approval")}
           </button>
         </div>
       )}
-      <h3 style={{ fontSize: 13, margin: "22px 0 8px" }}>History</h3>
+      <h3 style={{ fontSize: 13, margin: "22px 0 8px" }}>{t("History")}</h3>
       <TimesheetHistory events={view.events} />
     </div>
   );

@@ -7,6 +7,7 @@ import type { GSTRegistration } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import { GST_REGISTRATION_TYPE_OPTIONS, STATES, gstinLiveStatus } from "../_data";
 import { confirmDialog } from "@/components/DialogProvider";
+import { useT } from "@/hooks/useI18n";
 
 interface Row {
   key: string; // real id once saved, a local temp key before that
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed, onToggleCollapse }: Props) {
+  const t = useT();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
       const results: GSTRegistration[] = res.data?.data?.results ?? [];
       setRows(results.map(toRow));
     } catch (err: unknown) {
-      setLoadError((err as { message?: string })?.message ?? "Failed to load GST registrations.");
+      setLoadError((err as { message?: string })?.message ?? t("Failed to load GST registrations."));
     } finally {
       setLoading(false);
     }
@@ -71,11 +73,11 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
 
   async function removeRow(row: Row) {
     if (row.id) {
-      if (!(await confirmDialog(`Remove the GST registration for ${row.state} (${row.gstin})?`))) return;
+      if (!(await confirmDialog(t("Remove the GST registration for {state} ({gstin})?", { state: row.state, gstin: row.gstin })))) return;
       try {
         await clientApi.delete(API.settings.gstRegistrations.detail(row.id));
       } catch (err: unknown) {
-        updateRow(row.key, { error: (err as { message?: string })?.message ?? "Failed to remove." });
+        updateRow(row.key, { error: (err as { message?: string })?.message ?? t("Failed to remove.") });
         return;
       }
     }
@@ -101,19 +103,19 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
     } catch (err: unknown) {
       const e = err as { message?: string; data?: Record<string, string[]> };
       const msg = e.data ? Object.values(e.data)[0]?.[0] ?? e.message : e.message;
-      updateRow(row.key, { saving: false, error: msg ?? "Failed to save." });
+      updateRow(row.key, { saving: false, error: msg ?? t("Failed to save.") });
     }
   }
 
   return (
     <ProfileCard
       icon="ti-file-invoice"
-      title="GST registrations"
-      subtitle="State-wise. One GSTIN per state. Each is checked against your PAN."
+      title={t("GST registrations")}
+      subtitle={t("State-wise. One GSTIN per state. Each is checked against your PAN.")}
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
     >
-      {loading && <div style={{ color: "var(--on-variant)", fontSize: 13, padding: "8px 0" }}>Loading…</div>}
+      {loading && <div style={{ color: "var(--on-variant)", fontSize: 13, padding: "8px 0" }}>{t("Loading…")}</div>}
       {loadError && <div style={{ color: "var(--error)", fontSize: 13, padding: "8px 0" }}>{loadError}</div>}
       {!loading && !loadError && (
         <div className="table-wrap">
@@ -121,9 +123,9 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
             <thead>
               <tr>
                 <th>GSTIN <span style={{ color: "var(--error)" }}>*</span></th>
-                <th>State <span style={{ color: "var(--error)" }}>*</span></th>
-                <th>Type</th>
-                <th>Place of business</th>
+                <th>{t("State")} <span style={{ color: "var(--error)" }}>*</span></th>
+                <th>{t("Type")}</th>
+                <th>{t("Place of business")}</th>
                 <th style={{ width: 36 }} />
               </tr>
             </thead>
@@ -163,11 +165,11 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
                         onChange={e => updateRow(row.key, { state: e.target.value })}
                         onBlur={() => saveRow(row)}
                       >
-                        <option value="">Select…</option>
+                        <option value="">{t("Select…")}</option>
                         {STATES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       {isDuplicateState && (
-                        <div className="field-error-msg">A GSTIN already exists for {row.state}.</div>
+                        <div className="field-error-msg">{t("A GSTIN already exists for {state}.", { state: row.state })}</div>
                       )}
                     </td>
                     <td style={{ minWidth: 130 }}>
@@ -178,7 +180,7 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
                         onChange={e => { updateRow(row.key, { registration_type: e.target.value }); }}
                         onBlur={() => saveRow(row)}
                       >
-                        {GST_REGISTRATION_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        {GST_REGISTRATION_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
                       </select>
                     </td>
                     <td style={{ minWidth: 160 }}>
@@ -188,7 +190,7 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
                         disabled={!canEdit}
                         onChange={e => updateRow(row.key, { place_of_business: e.target.value })}
                         onBlur={() => saveRow(row)}
-                        placeholder="Hyderabad HO"
+                        placeholder={t("Hyderabad HO")}
                       />
                     </td>
                     <td style={{ textAlign: "center" }}>
@@ -199,8 +201,8 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
                           style={{ width: 28, height: 28, padding: 0, justifyContent: "center", color: "var(--error)" }}
                           onClick={() => removeRow(row)}
                           disabled={row.saving}
-                          title="Remove"
-                          aria-label={`Remove GST registration for ${row.state || "this row"}`}
+                          title={t("Remove")}
+                          aria-label={t("Remove GST registration for {state}", { state: row.state || t("this row") })}
                         >
                           <i className="ti ti-trash" style={{ fontSize: 13 }} />
                         </button>
@@ -213,14 +215,14 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
           </table>
           {rows.length === 0 && (
             <div style={{ textAlign: "center", padding: "20px 0", color: "var(--on-variant)", fontSize: 13 }}>
-              No GST registrations added yet.
+              {t("No GST registrations added yet.")}
             </div>
           )}
         </div>
       )}
       {canEdit && (
         <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 12, color: "var(--primary)" }} onClick={addRow}>
-          <i className="ti ti-plus" /> Add GSTIN
+          <i className="ti ti-plus" /> {t("Add GSTIN")}
         </button>
       )}
     </ProfileCard>

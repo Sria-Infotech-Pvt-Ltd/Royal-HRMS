@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { canonicalName } from "@/lib/placeNames";
 import { useDistricts, useStates } from "@/hooks/useLocationOptions";
+import { useT } from "@/hooks/useI18n";
 
 interface BaseProps {
   value: string;
@@ -17,6 +18,7 @@ interface BaseProps {
  * these two read live server lists (hooks/useLocationOptions.ts), and
  * District additionally depends on whichever State is currently selected. */
 function SearchableSelect({ value, onChange, options, placeholder, inputClassName = "field-input", disabled }: BaseProps & { options: string[]; disabled?: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -57,13 +59,13 @@ function SearchableSelect({ value, onChange, options, placeholder, inputClassNam
         style={{ width: "100%", textAlign: "left", cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, opacity: disabled ? 0.6 : 1 }}
       >
         <span style={{ color: value ? "inherit" : "var(--on-variant, #7c8aa3)" }}>
-          {listedValue ?? (value || placeholder || "Select")}
+          {listedValue ?? (value || placeholder || t("Select"))}
         </span>
         <i className="ti ti-chevron-down" style={{ fontSize: 14, color: "var(--on-variant)", flexShrink: 0 }} />
       </button>
       {!isKnownValue && (
         <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>
-          Not in the current list — pick one below to update it, or leave as-is.
+          {t("Not in the current list — pick one below to update it, or leave as-is.")}
         </div>
       )}
 
@@ -80,13 +82,13 @@ function SearchableSelect({ value, onChange, options, placeholder, inputClassNam
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search…"
+            placeholder={t("Search…")}
             className={inputClassName}
             style={{ margin: 6, width: "calc(100% - 12px)" }}
           />
           <div style={{ overflowY: "auto" }}>
             {filtered.length === 0 && (
-              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>No matches.</div>
+              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>{t("No matches.")}</div>
             )}
             {filtered.map(o => (
               <div
@@ -110,12 +112,13 @@ function SearchableSelect({ value, onChange, options, placeholder, inputClassNam
 /** Single-select searchable dropdown for Indian states/UTs, backed by
  * the live server list instead of a free-text box. */
 export function StateSelect({ value, onChange, placeholder, inputClassName }: BaseProps) {
+  const t = useT();
   const { options, isLoading } = useStates();
   return (
     <SearchableSelect
       value={value} onChange={onChange}
       options={options}
-      placeholder={isLoading ? "Loading states…" : (placeholder ?? "Select state")}
+      placeholder={isLoading ? t("Loading states…") : (placeholder ?? t("Select state"))}
       inputClassName={inputClassName}
     />
   );
@@ -133,13 +136,14 @@ interface DistrictSelectProps extends BaseProps {
  * clearing the District value when the State changes to a different one
  * (a stale district for the previous state is worse than an empty field). */
 export function DistrictSelect({ value, onChange, state, placeholder, inputClassName }: DistrictSelectProps) {
+  const t = useT();
   const { options, isLoading } = useDistricts(state);
   const disabled = !state;
   return (
     <SearchableSelect
       value={value} onChange={onChange}
       options={options}
-      placeholder={disabled ? "Select state first" : isLoading ? "Loading districts…" : (placeholder ?? "Select district")}
+      placeholder={disabled ? t("Select state first") : isLoading ? t("Loading districts…") : (placeholder ?? t("Select district"))}
       inputClassName={inputClassName}
       disabled={disabled}
     />

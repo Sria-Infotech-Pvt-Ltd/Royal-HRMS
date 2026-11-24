@@ -14,6 +14,8 @@ import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCel
 import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCelebrationModal";
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import AnnouncementCard from "./AnnouncementCard";
 import AnnouncementMedia from "./AnnouncementMedia";
 import AnnouncementsHeader from "./AnnouncementsHeader";
@@ -45,6 +47,7 @@ export default function AnnouncementsPage() {
 }
 
 function AnnouncementsPageInner() {
+  const t = useT();
 
   // Read localStorage only on the client to avoid SSR/hydration mismatch.
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getStoredUser>>(null);
@@ -104,8 +107,8 @@ function AnnouncementsPageInner() {
   const linked = useLinkedAnnouncement();
   useEffect(() => {
     if (linked.announcement) setViewTarget(linked.announcement);
-    else if (linked.unavailable) setPageErr("That announcement is no longer available, or it was not meant for you.");
-  }, [linked]);
+    else if (linked.unavailable) setPageErr(t("That announcement is no longer available, or it was not meant for you."));
+  }, [linked, t]);
 
   // ── Birthday celebration (Celebration tab) ─────────────────────────────────
   const { data: birthdayData } = useBirthdaysToday();
@@ -123,7 +126,7 @@ function AnnouncementsPageInner() {
       const res = await clientApi.get(API.announcements.list, { params: buildListParams(current, pg) });
       setMeta(res.data?.data ?? null);
     } catch (e: unknown) {
-      setPageErr((e as { message?: string }).message ?? "Failed to load announcements.");
+      setPageErr((e as { message?: string }).message ?? tr("Failed to load announcements."));
     } finally {
       setLoading(false);
     }
@@ -224,11 +227,11 @@ function AnnouncementsPageInner() {
 
   function validate(): boolean {
     const errs: FormErrors = {};
-    if (!form.title.trim())    errs.title    = "Title is required.";
-    if (!form.body.trim())     errs.body     = "Body is required.";
-    if (!form.category)        errs.category = "Category is required.";
+    if (!form.title.trim())    errs.title    = t("Title is required.");
+    if (!form.body.trim())     errs.body     = t("Body is required.");
+    if (!form.category)        errs.category = t("Category is required.");
     if (form.visibility === "department" && !form.target_org_unit)
-      errs.target_org_unit = "Select an org unit.";
+      errs.target_org_unit = t("Select an org unit.");
     setFormErrors(errs);
     const attachmentProblems = draftErrors(attachmentDraft);
     setShowLinkErrors(attachmentProblems.length > 0);
@@ -240,7 +243,7 @@ function AnnouncementsPageInner() {
   async function handleSave() {
     if (!validate()) return;
     if (!isOrgWide && myBranchId == null) {
-      setSaveErr("Your branch could not be resolved. Contact your administrator.");
+      setSaveErr(t("Your branch could not be resolved. Contact your administrator."));
       return;
     }
     setSaving(true);
@@ -301,8 +304,8 @@ function AnnouncementsPageInner() {
     } catch (e: unknown) {
       const err = e as { message?: string; code?: string };
       const message = err.code === "ECONNABORTED"
-        ? "The request timed out. The announcement may still have been saved — check the list before trying again."
-        : (err.message ?? "Failed to save announcement.");
+        ? t("The request timed out. The announcement may still have been saved — check the list before trying again.")
+        : (err.message ?? t("Failed to save announcement."));
       setSaveErr(message);
     } finally {
       setSaving(false);
@@ -325,7 +328,7 @@ function AnnouncementsPageInner() {
       setPage(newPage);
       fetchAnnouncements(newPage, filters);
     } catch (e: unknown) {
-      setDeleteErr((e as { message?: string }).message ?? "Delete failed.");
+      setDeleteErr((e as { message?: string }).message ?? t("Delete failed."));
     } finally {
       setDeleting(false);
     }
@@ -430,11 +433,11 @@ function AnnouncementsPageInner() {
       {meta && meta.total_pages > 1 && (
         <div className="ann-pagination">
           <span className="ann-pagination-info">
-            Page {meta.page} of {meta.total_pages}
+            {t("Page {page} of {total}", { page: meta.page, total: meta.total_pages })}
           </span>
           <div className="ann-page-btns">
             <button className="btn btn-ghost btn-sm" disabled={meta.page <= 1} onClick={() => setPage(p => p - 1)} suppressHydrationWarning>
-              <i className="ti ti-chevron-left" /> Prev
+              <i className="ti ti-chevron-left" /> {t("Prev")}
             </button>
             {Array.from({ length: meta.total_pages }, (_, i) => i + 1)
               .filter(n => Math.abs(n - meta.page) <= 2)
@@ -455,7 +458,7 @@ function AnnouncementsPageInner() {
                 </button>
               ))}
             <button className="btn btn-ghost btn-sm" disabled={meta.page >= meta.total_pages} onClick={() => setPage(p => p + 1)} suppressHydrationWarning>
-              Next <i className="ti ti-chevron-right" />
+              {t("Next")} <i className="ti ti-chevron-right" />
             </button>
           </div>
         </div>
@@ -469,7 +472,7 @@ function AnnouncementsPageInner() {
           title={
             <>
               <i className="ti ti-speakerphone" />
-              {editTarget ? " Edit Announcement" : " Post New Announcement"}
+              {editTarget ? ` ${t("Edit Announcement")}` : ` ${t("Post New Announcement")}`}
             </>
           }
           onClose={closeModal}
@@ -477,12 +480,12 @@ function AnnouncementsPageInner() {
           footer={
             <>
               <button className="btn btn-ghost" onClick={closeModal} disabled={saving} suppressHydrationWarning>
-                Cancel
+                {t("Cancel")}
               </button>
               <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
                 {saving
-                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-                  : <><i className="ti ti-send" /> {editTarget ? "Save Changes" : "Post Announcement"}</>
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</>
+                  : <><i className="ti ti-send" /> {editTarget ? t("Save Changes") : t("Post Announcement")}</>
                 }
               </button>
             </>
@@ -496,11 +499,11 @@ function AnnouncementsPageInner() {
 
               {/* Title */}
               <div className="field-group">
-                <label className="field-label">Title <span style={{ color: "var(--error)" }}>*</span></label>
+                <label className="field-label">{t("Title")} <span style={{ color: "var(--error)" }}>*</span></label>
                 <input
                   ref={titleRef}
                   className={`field-input${formErrors.title ? " field-error" : ""}`}
-                  placeholder="e.g. Diwali Bonus Announced"
+                  placeholder={t("e.g. Diwali Bonus Announced")}
                   value={form.title}
                   onChange={e => setField("title", e.target.value)}
                   suppressHydrationWarning
@@ -511,37 +514,37 @@ function AnnouncementsPageInner() {
               {/* Branch + Visibility */}
               <div className="form-row cols-2">
                 <div className="field-group">
-                  <label className="field-label">Company Code{isOrgWide && <span style={{ color: "var(--error)" }}> *</span>}</label>
+                  <label className="field-label">{t("Company Code")}{isOrgWide && <span style={{ color: "var(--error)" }}> *</span>}</label>
                   {isOrgWide ? (
                     <SearchableSelect
                       inputClassName="field-input"
                       value={form.target_branch}
                       onChange={v => setField("target_branch", v)}
                       disabled={form.visibility === "department"}
-                      placeholder="All Company Codes"
+                      placeholder={t("All Company Codes")}
                       options={branches.map(b => ({ value: String(b.id), label: `${b.branch_name} (${b.branch_code})` }))}
                     />
                   ) : (
                     <div className="field-input" style={{ background: "var(--bg-mid)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
                       <i className="ti ti-building" style={{ fontSize: 14, flexShrink: 0 }} />
-                      {branches.find(b => String(b.id) === form.target_branch)?.branch_name ?? "Not assigned"}
+                      {branches.find(b => String(b.id) === form.target_branch)?.branch_name ?? t("Not assigned")}
                     </div>
                   )}
                   {form.visibility === "department" && (
                     <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-                      Not used for &quot;By Department&quot; — that reaches the department across all branches.
+                      {t("Not used for \"By Department\" — that reaches the department across all branches.")}
                     </div>
                   )}
                 </div>
 
                 <div className="field-group">
-                  <label className="field-label">Visibility <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="field-label">{t("Visibility")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <select
                     className="field-input field-select"
                     value={form.visibility}
                     onChange={e => setField("visibility", e.target.value as FormVisibility)}
                   >
-                    {VISIBILITY_OPTIONS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                    {VISIBILITY_OPTIONS.map(v => <option key={v.value} value={v.value}>{t(v.label)}</option>)}
                   </select>
                 </div>
               </div>
@@ -549,12 +552,12 @@ function AnnouncementsPageInner() {
               {/* Conditional: Department (targets an Org Unit) */}
               {form.visibility === "department" && (
                 <div className="field-group">
-                  <label className="field-label">Org Unit <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="field-label">{t("Org Unit")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <SearchableSelect
                     inputClassName={`field-input${formErrors.target_org_unit ? " field-error" : ""}`}
                     value={form.target_org_unit}
                     onChange={v => setField("target_org_unit", v)}
-                    placeholder="Select org unit…"
+                    placeholder={t("Select org unit…")}
                     options={orgUnits.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
                   />
                   {formErrors.target_org_unit && <div className="field-error-msg">{formErrors.target_org_unit}</div>}
@@ -563,25 +566,25 @@ function AnnouncementsPageInner() {
 
               {/* Category */}
               <div className="field-group">
-                <label className="field-label">Category <span style={{ color: "var(--error)" }}>*</span></label>
+                <label className="field-label">{t("Category")} <span style={{ color: "var(--error)" }}>*</span></label>
                 <select
                   className={`field-input field-select${formErrors.category ? " field-error" : ""}`}
                   value={form.category}
                   onChange={e => setField("category", e.target.value as Category)}
                 >
-                  <option value="">Select category…</option>
-                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  <option value="">{t("Select category…")}</option>
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{t(c.label)}</option>)}
                 </select>
                 {formErrors.category && <div className="field-error-msg">{formErrors.category}</div>}
               </div>
 
               {/* Body */}
               <div className="field-group">
-                <label className="field-label">Body <span style={{ color: "var(--error)" }}>*</span></label>
+                <label className="field-label">{t("Body")} <span style={{ color: "var(--error)" }}>*</span></label>
                 <textarea
                   className={`field-input${formErrors.body ? " field-error" : ""}`}
                   rows={6}
-                  placeholder="Write your announcement…"
+                  placeholder={t("Write your announcement…")}
                   value={form.body}
                   onChange={e => setField("body", e.target.value)}
                   style={{ resize: "vertical" }}
@@ -609,7 +612,7 @@ function AnnouncementsPageInner() {
                     suppressHydrationWarning
                   />
                   <i className="ti ti-pin" style={{ color: "var(--warn)" }} />
-                  Pin this announcement
+                  {t("Pin this announcement")}
                 </label>
 
                 {canPost && (
@@ -622,7 +625,7 @@ function AnnouncementsPageInner() {
                       suppressHydrationWarning
                     />
                     <i className="ti ti-mail" style={{ color: "var(--info)" }} />
-                    Send email notification
+                    {t("Send email notification")}
                   </label>
                 )}
               </div>
@@ -636,7 +639,7 @@ function AnnouncementsPageInner() {
         <Modal
           title={
             <span style={{ color: "var(--error)" }}>
-              <i className="ti ti-trash" /> Delete Announcement
+              <i className="ti ti-trash" /> {t("Delete Announcement")}
             </span>
           }
           onClose={() => { setDeleteId(null); setDeleteErr(null); }}
@@ -645,7 +648,7 @@ function AnnouncementsPageInner() {
           footer={
             <>
               <button className="btn btn-ghost" onClick={() => { setDeleteId(null); setDeleteErr(null); }} disabled={deleting} suppressHydrationWarning>
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 className="btn btn-filled"
@@ -655,8 +658,8 @@ function AnnouncementsPageInner() {
                 suppressHydrationWarning
               >
                 {deleting
-                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Deleting…</>
-                  : <><i className="ti ti-trash" /> Delete</>
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Deleting…")}</>
+                  : <><i className="ti ti-trash" /> {t("Delete")}</>
                 }
               </button>
             </>
@@ -669,7 +672,7 @@ function AnnouncementsPageInner() {
             </div>
           )}
           <p style={{ fontSize: 14, color: "var(--on-variant)" }}>
-            This announcement will be permanently deleted and cannot be recovered.
+            {t("This announcement will be permanently deleted and cannot be recovered.")}
           </p>
         </Modal>
       )}
@@ -685,7 +688,7 @@ function AnnouncementsPageInner() {
           <Modal
             title={
               <>
-                <i className="ti ti-speakerphone" /> Announcement Details
+                <i className="ti ti-speakerphone" /> {t("Announcement Details")}
               </>
             }
             onClose={() => setViewTarget(null)}
@@ -700,19 +703,19 @@ function AnnouncementsPageInner() {
                       onClick={() => { setViewTarget(null); setDeleteErr(null); setDeleteId(live.id); }}
                       suppressHydrationWarning
                     >
-                      <i className="ti ti-trash" /> Delete
+                      <i className="ti ti-trash" /> {t("Delete")}
                     </button>
                     <button
                       className="btn btn-ghost"
                       onClick={() => { setViewTarget(null); openEdit(live); }}
                       suppressHydrationWarning
                     >
-                      <i className="ti ti-pencil" /> Edit
+                      <i className="ti ti-pencil" /> {t("Edit")}
                     </button>
                   </>
                 )}
                 <button className="btn btn-filled" onClick={() => setViewTarget(null)} suppressHydrationWarning>
-                  Close
+                  {t("Close")}
                 </button>
               </>
             }
@@ -732,22 +735,22 @@ function AnnouncementsPageInner() {
                       {live.posted_by_role && <span className="ann-view-role">{live.posted_by_role}</span>}
                     </div>
                     <div className="ann-view-timestamp">
-                      Posted {fullDateTime(live.created_at)}
-                      {live.updated_at !== live.created_at && ` · edited ${fullDateTime(live.updated_at)}`}
+                      {t("Posted {date}", { date: fullDateTime(live.created_at) })}
+                      {live.updated_at !== live.created_at && ` · ${t("edited {date}", { date: fullDateTime(live.updated_at) })}`}
                     </div>
                   </div>
                 </div>
 
                 <div className="ann-view-badges">
                   {live.is_pinned && (
-                    <span className="badge badge-warn"><i className="ti ti-pin" /> Pinned</span>
+                    <span className="badge badge-warn"><i className="ti ti-pin" /> {t("Pinned")}</span>
                   )}
                   <span className={`badge ${CAT_BADGE[live.category]}`} style={{ textTransform: "capitalize" }}>
-                    {CAT_LABEL[live.category]}
+                    {t(CAT_LABEL[live.category])}
                   </span>
                   <span className="badge badge-neutral">
                     <i className={`ti ${live.visibility === "all" ? "ti-users" : live.visibility === "department" ? "ti-sitemap" : "ti-building"}`} />
-                    {" "}{live.visibility === "all" ? "All Employees" : live.visibility === "department" ? live.target_org_unit_name : live.target_branch_name}
+                    {" "}{live.visibility === "all" ? t("All Employees") : live.visibility === "department" ? live.target_org_unit_name : live.target_branch_name}
                   </span>
                 </div>
 
@@ -762,11 +765,11 @@ function AnnouncementsPageInner() {
                     suppressHydrationWarning
                   >
                     <i className={`ti ${live.has_reacted ? "ti-heart-filled" : "ti-heart"}`} style={{ fontSize: 16 }} />
-                    {live.reactions_count > 0 ? live.reactions_count : "React"}
+                    {live.reactions_count > 0 ? live.reactions_count : t("React")}
                   </button>
                   <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: "var(--on-variant)" }}>
                     <i className="ti ti-eye" style={{ fontSize: 15 }} />
-                    {live.views_count > 0 ? live.views_count : "—"} views
+                    {t("{count} views", { count: live.views_count > 0 ? live.views_count : "—" })}
                   </span>
                 </div>
           </Modal>

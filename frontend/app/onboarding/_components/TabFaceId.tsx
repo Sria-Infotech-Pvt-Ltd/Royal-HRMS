@@ -2,6 +2,7 @@
 
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 import type { FaceIdMode } from "@/types/faceId";
+import { useT } from "@/hooks/useI18n";
 
 // ── Tab: Face ID ──────────────────────────────────────────────────────────────
 // Only rendered when the admin's org-wide Face ID Verification toggle
@@ -21,15 +22,17 @@ export default function TabFaceId({
   mode: FaceIdMode;
   onRegister: () => void;
 }) {
+  const t = useT();
   const status = registration?.status;
   const needsApproval = mode === "self_service_hr_approval";
 
   return (
     <div>
       <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
-        Your organisation requires a registered face ID for web clock-in/out. Register once here —
-        we run a quick liveness check to confirm it&apos;s really you{needsApproval ? ", then send it to HR for approval" : ", and it takes effect immediately"}.
-        You won&apos;t be able to submit your onboarding profile until this step is complete.
+        {needsApproval
+          ? t("Your organisation requires a registered face ID for web clock-in/out. Register once here — we run a quick liveness check to confirm it's really you, then send it to HR for approval.")
+          : t("Your organisation requires a registered face ID for web clock-in/out. Register once here — we run a quick liveness check to confirm it's really you, and it takes effect immediately.")}{" "}
+        {t("You won't be able to submit your onboarding profile until this step is complete.")}
       </p>
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem",
@@ -43,10 +46,10 @@ export default function TabFaceId({
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: ".9rem", color: "var(--on-bg)" }}>
-              {status === "approved" && (needsApproval ? "Face ID approved" : "Face ID registered")}
-              {status === "pending" && "Face ID submitted — pending HR approval"}
-              {status === "rejected" && "Face ID rejected — please register again"}
-              {!status && "Face ID not yet registered"}
+              {status === "approved" && (needsApproval ? t("Face ID approved") : t("Face ID registered"))}
+              {status === "pending" && t("Face ID submitted — pending HR approval")}
+              {status === "rejected" && t("Face ID rejected — please register again")}
+              {!status && t("Face ID not yet registered")}
             </div>
           </div>
         </div>
@@ -60,7 +63,7 @@ export default function TabFaceId({
           // is the actual fix for the confusing "why did clicking do
           // nothing" experience that would otherwise cause.
           <span style={{ fontSize: ".83rem", color: "var(--on-variant)", fontWeight: 600 }}>
-            Awaiting review
+            {t("Awaiting review")}
           </span>
         ) : (
           <button
@@ -69,7 +72,7 @@ export default function TabFaceId({
             onClick={onRegister}
             type="button"
           >
-            {status === "approved" ? "Update" : status ? "Register Again" : "Register Face ID"}
+            {status === "approved" ? t("Update") : status ? t("Register Again") : t("Register Face ID")}
           </button>
         )}
       </div>

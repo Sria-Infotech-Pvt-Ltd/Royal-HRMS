@@ -84,12 +84,12 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
   const cards    = dashboard?.stat_cards;
 
   const TABS: (AttendanceTabItem & { id: TabId })[] = [
-    { id: "attendance", label: "Attendance", icon: "ti-calendar-stats" },
-    { id: "ot", label: "OT Entry", icon: "ti-clock-plus" },
-    { id: "invalid", label: "Invalid Punches", icon: "ti-alert-triangle", badge: dashboard?.tab_badges.invalid_punches },
-    { id: "unpunches", label: "Un-punches", icon: "ti-clock-off", badge: dashboard?.tab_badges.un_punches },
-    { id: "corrections", label: "Corrections", icon: "ti-file-description", badge: pendingCorrections },
-    { id: "weekly-off", label: "Weekly Off Assignment", icon: "ti-moon" },
+    { id: "attendance", label: t("Attendance"), icon: "ti-calendar-stats" },
+    { id: "ot", label: t("OT Entry"), icon: "ti-clock-plus" },
+    { id: "invalid", label: t("Invalid Punches"), icon: "ti-alert-triangle", badge: dashboard?.tab_badges.invalid_punches },
+    { id: "unpunches", label: t("Un-punches"), icon: "ti-clock-off", badge: dashboard?.tab_badges.un_punches },
+    { id: "corrections", label: t("Corrections"), icon: "ti-file-description", badge: pendingCorrections },
+    { id: "weekly-off", label: t("Weekly Off Assignment"), icon: "ti-moon" },
   ];
 
   return (
@@ -120,7 +120,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
             fontSize: 12, marginBottom: 16,
           }}
         >
-          🏢 Viewing data for {effectiveBranch} only
+          {t("🏢 Viewing data for {branch} only", { branch: effectiveBranch })}
         </div>
       )}
 

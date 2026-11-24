@@ -6,6 +6,8 @@ import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailP
 import { Candidate, EmailTemplate, RECRUITMENT_API } from "../interview-list/_data";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 interface Props {
   candidate: Candidate;
@@ -15,6 +17,7 @@ interface Props {
 }
 
 export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props) {
+  const t = useT();
   const isApprove = decision === "approve";
 
   const [remarks,          setRemarks]          = useState("");
@@ -57,7 +60,7 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
         setSelectedTemplate(preferred);
         setCompany(coRes.data?.data ?? null);
       })
-      .catch(() => setApiError("Could not load email templates."))
+      .catch(() => setApiError(tr("Could not load email templates.")))
       .finally(() => setLoadingTemplates(false));
   }, [isApprove]);
 
@@ -131,7 +134,7 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
       onDone(res.data.data);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setApiError(msg || "Action failed.");
+      setApiError(msg || t("Action failed."));
     } finally {
       setSaving(false);
     }
@@ -141,12 +144,12 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
 
   return (
     <Modal
-      title={<>{isApprove ? "Approve & Send Assessment Invite" : "Request Revision"} — {candidate.name}</>}
+      title={<>{isApprove ? t("Approve & Send Assessment Invite") : t("Request Revision")} — {candidate.name}</>}
       onClose={onClose}
       maxWidth={700}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button
             className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
             onClick={handleConfirm}
@@ -159,9 +162,9 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
             }
           >
             {saving ? (
-              <><i className="ti ti-loader-2 spin" /> Processing…</>
+              <><i className="ti ti-loader-2 spin" /> {t("Processing…")}</>
             ) : (
-              <><i className={`ti ${isApprove ? "ti-check" : "ti-alert-triangle"}`} /> Confirm & Send Email</>
+              <><i className={`ti ${isApprove ? "ti-check" : "ti-alert-triangle"}`} /> {t("Confirm & Send Email")}</>
             )}
           </button>
         </>
@@ -177,18 +180,18 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
           <div className={`alert ${isApprove ? "alert-success" : "alert-warn"} mb-16`}>
             <i className={`ti ${isApprove ? "ti-check" : "ti-alert-triangle"}`} />
             <div>
-              You are <strong>{isApprove ? "approving" : "requesting revision for"}</strong>{" "}
-              <strong>{candidate.name}</strong>.
-              An email will be sent using the selected template below.
+              {t("You are")} <strong>{isApprove ? t("approving") : t("requesting revision for")}</strong>{" "}
+              <strong>{candidate.name}</strong>.{" "}
+              {t("An email will be sent using the selected template below.")}
             </div>
           </div>
 
           {/* Template picker */}
           <div className="field-group mb-16">
-            <label className="field-label">Email Template *</label>
+            <label className="field-label">{t("Email Template *")}</label>
             {loadingTemplates ? (
               <div className="text-sm text-[var(--on-variant)]">
-                <i className="ti ti-loader-2 spin" /> Loading templates…
+                <i className="ti ti-loader-2 spin" /> {t("Loading templates…")}
               </div>
             ) : (
               <select
@@ -202,7 +205,7 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
                 }}
               >
                 {templateGroups.length === 0 && (
-                  <option value="">No active templates — create one in Settings → Email Templates</option>
+                  <option value="">{t("No active templates — create one in Settings → Email Templates")}</option>
                 )}
                 {templateGroups.map(g => (
                   <optgroup
@@ -221,7 +224,7 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
           {/* Manual inputs for non-auto variables */}
           {Object.keys(extraVars).length > 0 && (
             <div className="settings-card mb-16">
-              <div className="settings-card-title mb-8">Fill in template variables</div>
+              <div className="settings-card-title mb-8">{t("Fill in template variables")}</div>
               <div className="form-row cols-2">
                 {Object.keys(extraVars).map(key => (
                   <div key={key} className="field-group">
@@ -230,7 +233,7 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
                     </label>
                     <input
                       className="field-input"
-                      placeholder={`Enter ${key.replace(/_/g, " ")}`}
+                      placeholder={t("Enter {name}", { name: key.replace(/_/g, " ") })}
                       value={extraVars[key]}
                       onChange={e => setExtraVars(prev => ({ ...prev, [key]: e.target.value }))}
                     />
@@ -243,12 +246,12 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
           {/* Remarks */}
           <div className="field-group mb-16">
             <label className="field-label">
-              {isApprove ? "HR Remarks (optional)" : "Revision notes (required)"}
+              {isApprove ? t("HR Remarks (optional)") : t("Revision notes (required)")}
             </label>
             <textarea
               className="field-input"
               rows={2}
-              placeholder={isApprove ? "Any onboarding notes…" : "Specify what needs to be corrected…"}
+              placeholder={isApprove ? t("Any onboarding notes…") : t("Specify what needs to be corrected…")}
               value={remarks}
               onChange={e => setRemarks(e.target.value)}
               style={{ resize: "vertical" }}
@@ -259,13 +262,13 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
           {selectedTemplate && (
             <div className="settings-card">
               <div className="settings-card-title flex items-center gap-2 mb-8">
-                <i className="ti ti-mail" /> Email Preview
+                <i className="ti ti-mail" /> {t("Email Preview")}
               </div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 2 }}>
-                <strong>To:</strong> {candidate.email}
+                <strong>{t("To:")}</strong> {candidate.email}
               </div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
-                <strong>Subject:</strong>{" "}
+                <strong>{t("Subject:")}</strong>{" "}
                 {renderTemplateVars(selectedTemplate.subject, previewVars())}
               </div>
               <iframe
@@ -278,7 +281,7 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
                   borderRadius: 6,
                   display: "block",
                 }}
-                title="Email body preview"
+                title={t("Email body preview")}
               />
             </div>
           )}

@@ -6,6 +6,7 @@
 // would, which is what makes an "HR review queue" possible at all.
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { ApiReview } from "@/types/performanceHub";
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export default function ReviewActionModal({ review, onClose, onSaved }: Props) {
+  const t = useT();
   const [rating, setRating] = useState(review.manager_rating || "");
   const [notes, setNotes] = useState(review.manager_notes || "");
   const [saving, setSaving] = useState(false);
@@ -31,7 +33,7 @@ export default function ReviewActionModal({ review, onClose, onSaved }: Props) {
       onSaved();
     } catch (error: unknown) {
       const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(msg ?? "Failed to submit manager review.");
+      setErr(msg ?? t("Failed to submit manager review."));
     } finally {
       setSaving(false);
     }
@@ -41,37 +43,37 @@ export default function ReviewActionModal({ review, onClose, onSaved }: Props) {
     <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ width: "min(560px, 95vw)" }}>
         <div className="modal-header">
-          <div className="modal-title">Manager review — {review.employee_name}</div>
-          <button className="modal-close" onClick={onClose} aria-label="Close"><i className="ti ti-x" /></button>
+          <div className="modal-title">{t("Manager review — {name}", { name: review.employee_name })}</div>
+          <button className="modal-close" onClick={onClose} aria-label={t("Close")}><i className="ti ti-x" /></button>
         </div>
         <div className="modal-body">
           {err && <div className="alert alert-error mb-16">{err}</div>}
 
-          <h4 style={{ fontSize: "0.9rem", marginBottom: 10 }}>Self-review</h4>
+          <h4 style={{ fontSize: "0.9rem", marginBottom: 10 }}>{t("Self-review")}</h4>
           <div style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 16, display: "grid", gap: 6 }}>
-            <div><strong>Key strengths:</strong> {review.key_strengths || "—"}</div>
-            <div><strong>Development areas:</strong> {review.development_areas || "—"}</div>
-            <div><strong>Support needed:</strong> {review.support_needed || "—"}</div>
-            <div><strong>Self rating:</strong> {review.self_rating || "—"}</div>
+            <div><strong>{t("Key strengths:")}</strong> {review.key_strengths || "—"}</div>
+            <div><strong>{t("Development areas:")}</strong> {review.development_areas || "—"}</div>
+            <div><strong>{t("Support needed:")}</strong> {review.support_needed || "—"}</div>
+            <div><strong>{t("Self rating:")}</strong> {review.self_rating || "—"}</div>
           </div>
 
-          <h4 style={{ fontSize: "0.9rem", marginBottom: 10 }}>Manager review</h4>
+          <h4 style={{ fontSize: "0.9rem", marginBottom: 10 }}>{t("Manager review")}</h4>
           <div className="field-group mb-16">
-            <label className="field-label">Rating (1-5)</label>
+            <label className="field-label">{t("Rating (1-5)")}</label>
             <select className="field-input field-select" value={rating} onChange={e => setRating(e.target.value)}>
-              <option value="">— Select —</option>
+              <option value="">{t("— Select —")}</option>
               {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
           <div className="field-group mb-16">
-            <label className="field-label">Notes</label>
+            <label className="field-label">{t("Notes")}</label>
             <textarea className="field-input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={handleSubmit} disabled={saving || !rating}>
-            {saving ? "Submitting…" : "Submit Review"}
+            {saving ? t("Submitting…") : t("Submit Review")}
           </button>
         </div>
       </div>

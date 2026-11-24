@@ -12,6 +12,7 @@ import type { StatutoryDraft } from "./StatutoryAccountsStep";
 import { REQUIRED_DOC_LABELS } from "./DocumentsChecklistStep";
 import { maritalStatusLabel } from "@/lib/maritalStatus";
 import { formatDate, formatDateSlash } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   reservedEmployeeId: string;
@@ -41,15 +42,17 @@ interface Props {
 }
 
 function Row({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+  const t = useT();
   return (
     <div className="kv">
-      <span>{label}</span>
+      <span>{t(label)}</span>
       <b className={warn ? "warn" : ""}>{value || "—"}</b>
     </div>
   );
 }
 
 export default function ReviewStep(props: Props) {
+  const t = useT();
   const {
     reservedEmployeeId, positionTitle, orgUnitName, grade, effectiveFrom, firstName, lastName,
     form, employment, basicPay, statutory, emergencyContactCount, panNumber, aadhaarNumber, familyEntries, nomineeEntries,
@@ -64,7 +67,7 @@ export default function ReviewStep(props: Props) {
   // so it can never be a blockingReasons entry, only a reminder here.
   const { isMandatory: faceIdMandatory, registrationMode: faceIdMode, fallbackActive: faceFallbackActive } = useFaceVerificationStatus();
 
-  const missingRequiredDocs = requiredDocTypes.filter(t => !uploadedDocTypes.has(t));
+  const missingRequiredDocs = requiredDocTypes.filter(docType => !uploadedDocTypes.has(docType));
   // "Uploaded" used to count every file against the REQUIRED total (11 of 7): required and optional are counted apart.
   const optionalUploadedCount = [...uploadedDocTypes].filter(type => !requiredDocTypes.includes(type)).length;
   // A blank row left in the list is not a qualification / employer: only completed rows are counted.
@@ -82,28 +85,28 @@ export default function ReviewStep(props: Props) {
   // failing after a round trip). Anything appearing here blocks hiring;
   // this is no longer "can finish later" advisory text.
   const blockingReasons: string[] = [];
-  if (!firstName.trim()) blockingReasons.push("First name");
-  if (!lastName.trim()) blockingReasons.push("Last name");
-  if (!form.date_of_birth) blockingReasons.push("Date of birth");
-  if (!form.gender) blockingReasons.push("Gender");
-  if (!employment.employment_type) blockingReasons.push("Employment type");
-  if (!employment.branch) blockingReasons.push("Company code");
-  if (!panNumber.trim()) blockingReasons.push("PAN");
-  if (!aadhaarNumber.trim()) blockingReasons.push("Aadhaar");
-  if (!statutory.account_holder_name.trim()) blockingReasons.push("Account holder name");
-  if (!statutory.account_number.trim()) blockingReasons.push("Account number");
-  if (!statutory.ifsc_code.trim()) blockingReasons.push("IFSC code");
-  if (statutory.uan_number && statutory.uan_number.length !== 12) blockingReasons.push("UAN must be 12 digits");
+  if (!firstName.trim()) blockingReasons.push(t("First name"));
+  if (!lastName.trim()) blockingReasons.push(t("Last name"));
+  if (!form.date_of_birth) blockingReasons.push(t("Date of birth"));
+  if (!form.gender) blockingReasons.push(t("Gender"));
+  if (!employment.employment_type) blockingReasons.push(t("Employment type"));
+  if (!employment.branch) blockingReasons.push(t("Company code"));
+  if (!panNumber.trim()) blockingReasons.push(t("PAN"));
+  if (!aadhaarNumber.trim()) blockingReasons.push(t("Aadhaar"));
+  if (!statutory.account_holder_name.trim()) blockingReasons.push(t("Account holder name"));
+  if (!statutory.account_number.trim()) blockingReasons.push(t("Account number"));
+  if (!statutory.ifsc_code.trim()) blockingReasons.push(t("IFSC code"));
+  if (statutory.uan_number && statutory.uan_number.length !== 12) blockingReasons.push(t("UAN must be 12 digits"));
   // The shared EducationChecklist component's own copy ("at least one is
   // required before you can submit") was never actually enforced anywhere
   // in this wizard — QA report #39 caught the step passing through empty.
   // Enforcing it here at Review matches what that text already promises.
-  if (!educationEntries.some(e => e.institution?.trim())) blockingReasons.push("At least one education entry");
-  if (missingRequiredDocs.length) blockingReasons.push(`${missingRequiredDocs.length} required document(s)`);
-  if (overSharedScheme) blockingReasons.push(`nominee shares for ${overSharedScheme[0]} exceed 100%`);
+  if (!educationEntries.some(e => e.institution?.trim())) blockingReasons.push(t("At least one education entry"));
+  if (missingRequiredDocs.length) blockingReasons.push(t("{count} required document(s)", { count: missingRequiredDocs.length }));
+  if (overSharedScheme) blockingReasons.push(t("nominee shares for {scheme} exceed 100%", { scheme: overSharedScheme[0] }));
 
   const notPayrollReasons: string[] = [];
-  if (!form.father_name?.trim()) notPayrollReasons.push("father/mother's name is missing (EPF Form 2)");
+  if (!form.father_name?.trim()) notPayrollReasons.push(t("father/mother's name is missing (EPF Form 2)"));
 
   const fieldsFilled = [
     firstName, lastName, form.date_of_birth, form.gender, employment.employment_type,
@@ -118,18 +121,18 @@ export default function ReviewStep(props: Props) {
           only claims that when it's actually true. */}
       {blockingReasons.length === 0 ? (
         <div className="note info" style={{ marginBottom: 14 }}>
-          <b>Ready to hire</b>
-          The record is created in Onboarding status. Optional details (father/mother&apos;s name, non-required documents) can still be finished afterward.
+          <b>{t("Ready to hire")}</b>
+          {t("The record is created in Onboarding status. Optional details (father/mother's name, non-required documents) can still be finished afterward.")}
         </div>
       ) : (
         <div className="note warn" style={{ marginBottom: 14, borderColor: "var(--error)" }}>
-          <b>Not ready to hire — complete these first</b>
+          <b>{t("Not ready to hire — complete these first")}</b>
           {blockingReasons.join(", ")}.
         </div>
       )}
 
       <div className="kv" style={{ marginBottom: 6 }}>
-        <span>Record completeness{completeness < 100 ? " · Not payroll ready" : ""}</span><b>{completeness}%</b>
+        <span>{t("Record completeness")}{completeness < 100 ? ` · ${t("Not payroll ready")}` : ""}</span><b>{completeness}%</b>
       </div>
       <div className={`meter${completeness < 100 ? " mid" : ""}`} style={{ marginBottom: 16 }}>
         <i style={{ width: `${completeness}%` }} />
@@ -137,27 +140,27 @@ export default function ReviewStep(props: Props) {
 
       {notPayrollReasons.length > 0 && (
         <div className="note warn" style={{ marginBottom: 16 }}>
-          <b>Not payroll ready</b>
-          {notPayrollReasons.join("; ")} — the record can still be created in Onboarding status.
+          <b>{t("Not payroll ready")}</b>
+          {notPayrollReasons.join("; ")} — {t("the record can still be created in Onboarding status.")}
         </div>
       )}
 
       {faceIdMandatory && (
         <div className="note warn" style={{ marginBottom: 16 }}>
-          <b>Face ID after hiring</b>
+          <b>{t("Face ID after hiring")}</b>
           {faceIdMode === "hr_in_person" && (
-            <>Face ID is registered in person by HR. After the hire is created, register it on{" "}
-              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>Face ID Registrations</a>.
-              The new hire cannot register it themselves.</>
+            <>{t("Face ID is registered in person by HR. After the hire is created, register it on")}{" "}
+              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>{t("Face ID Registrations")}</a>.{" "}
+              {t("The new hire cannot register it themselves.")}</>
           )}
-          {faceIdMode === "self_service" && <>The new hire registers their own Face ID from their Profile page; it is active immediately.</>}
+          {faceIdMode === "self_service" && <>{t("The new hire registers their own Face ID from their Profile page; it is active immediately.")}</>}
           {faceIdMode === "self_service_hr_approval" && (
-            <>The new hire registers their Face ID from their Profile page, and HR approves it on{" "}
-              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>Face ID Registrations</a>.</>
+            <>{t("The new hire registers their Face ID from their Profile page, and HR approves it on")}{" "}
+              <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>{t("Face ID Registrations")}</a>.</>
           )}{" "}
           {faceFallbackActive
-            ? "Until then they can still clock in from the office; those punches are flagged for HR."
-            : "Until it is done they cannot clock in on the web."}
+            ? t("Until then they can still clock in from the office; those punches are flagged for HR.")
+            : t("Until it is done they cannot clock in on the web.")}
         </div>
       )}
 
@@ -171,23 +174,23 @@ export default function ReviewStep(props: Props) {
 
       <div className="g2" style={{ marginBottom: 16 }}>
         <div className="rvcard">
-          <h4>PERSONAL</h4>
+          <h4>{t("PERSONAL")}</h4>
           <div className="kvlist">
             <Row label="Legal name" value={`${firstName} ${lastName}`.trim()} />
             <Row label="Date of birth" value={formatDate(form.date_of_birth)} />
-            <Row label="Gender" value={form.gender ? form.gender[0].toUpperCase() + form.gender.slice(1) : ""} />
-            <Row label="Marital status" value={maritalStatusLabel(form.marital_status)} />
+            <Row label="Gender" value={form.gender ? t(form.gender[0].toUpperCase() + form.gender.slice(1)) : ""} />
+            <Row label="Marital status" value={t(maritalStatusLabel(form.marital_status))} />
             <Row label="Father/mother" value={form.father_name} />
             <Row label="Current address" value={[form.current_address, form.current_address_line2, form.current_village, form.current_district, form.current_state, form.current_pin_code].filter(Boolean).join(", ")} />
             <Row
               label="Emergency contacts"
-              value={emergencyContactCount > 0 ? `${emergencyContactCount} added` : "None added"}
+              value={emergencyContactCount > 0 ? t("{count} added", { count: emergencyContactCount }) : t("None added")}
               warn={emergencyContactCount < 2}
             />
           </div>
         </div>
         <div className="rvcard">
-          <h4>EMPLOYMENT</h4>
+          <h4>{t("EMPLOYMENT")}</h4>
           <div className="kvlist">
             <Row label="Employee number" value={reservedEmployeeId} />
             <Row label="Position" value={positionTitle} />
@@ -195,14 +198,14 @@ export default function ReviewStep(props: Props) {
             <Row label="Grade / band" value={grade} />
             <Row label="Employment type" value={employment.employment_type} />
             <Row label="Date of joining" value={formatDateSlash(effectiveFrom)} />
-            <Row label="Work location" value={employment.work_location || "From the Company Code address"} />
+            <Row label="Work location" value={employment.work_location || t("From the Company Code address")} />
             <Row label="Annual CTC" value={employment.annual_ctc ? `₹${Number(employment.annual_ctc).toLocaleString("en-IN")}` : ""} />
           </div>
         </div>
       </div>
 
       <div className="rvcard" style={{ marginBottom: 16 }}>
-        <h4>STATUTORY &amp; ACCOUNTS</h4>
+        <h4>{t("STATUTORY & ACCOUNTS")}</h4>
         <div className="g2">
           <div className="kvlist">
             <Row label="PAN" value={panNumber ? `${panNumber.slice(0, 3)}••••${panNumber.slice(-1)}` : ""} warn={!panNumber} />
@@ -211,21 +214,21 @@ export default function ReviewStep(props: Props) {
             <Row label="IFSC / bank" value={statutory.bank_name ? `${"•".repeat(statutory.ifsc_code.length)} · ${statutory.bank_name}` : "•".repeat(statutory.ifsc_code.length)} />
           </div>
           <div className="kvlist">
-            <Row label="Tax regime" value={basicPay.tax_regime === "old" ? "Old Regime" : "New Regime (115BAC)"} />
+            <Row label="Tax regime" value={basicPay.tax_regime === "old" ? t("Old Regime") : t("New Regime (115BAC)")} />
           </div>
         </div>
       </div>
 
       <div className="g2" style={{ marginBottom: 16 }}>
         <div className="rvcard">
-          <h4>FAMILY &amp; NOMINATION</h4>
+          <h4>{t("FAMILY & NOMINATION")}</h4>
           <div className="kvlist">
             <Row label="Family members" value={String(familyEntries.length)} />
             <Row label="Nominees" value={String(nomineeEntries.length)} />
           </div>
         </div>
         <div className="rvcard">
-          <h4>EDUCATION &amp; EXPERIENCE</h4>
+          <h4>{t("EDUCATION & EXPERIENCE")}</h4>
           <div className="kvlist">
             <Row label="Qualifications" value={String(completedEducation)} warn={completedEducation === 0} />
             <Row label="Employers" value={String(completedExperience)} />
@@ -235,17 +238,17 @@ export default function ReviewStep(props: Props) {
 
       <div className="g2" style={{ marginBottom: 20 }}>
         <div className="rvcard">
-          <h4>DOCUMENTS</h4>
+          <h4>{t("DOCUMENTS")}</h4>
           <div className="kvlist">
-            <Row label="Required uploaded" value={`${requiredDocTypes.length - missingRequiredDocs.length} of ${requiredDocTypes.length}`} />
+            <Row label="Required uploaded" value={t("{done} of {total}", { done: requiredDocTypes.length - missingRequiredDocs.length, total: requiredDocTypes.length })} />
             {optionalUploadedCount > 0 && <Row label="Optional uploaded" value={String(optionalUploadedCount)} />}
             {missingRequiredDocs.length > 0 && (
-              <Row label="Missing required" value={missingRequiredDocs.map(k => REQUIRED_DOC_LABELS[k] ?? k).join(", ")} warn />
+              <Row label="Missing required" value={missingRequiredDocs.map(k => t(REQUIRED_DOC_LABELS[k] ?? k)).join(", ")} warn />
             )}
           </div>
         </div>
         <div className="rvcard">
-          <h4>ASSETS</h4>
+          <h4>{t("ASSETS")}</h4>
           <div className="kvlist">
             <Row label="Assets to issue" value={String(assetEntries.length)} />
           </div>
@@ -255,10 +258,10 @@ export default function ReviewStep(props: Props) {
       <button
         onClick={onHire}
         disabled={hiring || blockingReasons.length > 0}
-        title={blockingReasons.length > 0 ? `Complete these first: ${blockingReasons.join(", ")}` : undefined}
+        title={blockingReasons.length > 0 ? t("Complete these first: {reasons}", { reasons: blockingReasons.join(", ") }) : undefined}
         className="btn btn-filled"
       >
-        {hiring ? "Hiring…" : "Hire employee →"}
+        {hiring ? t("Hiring…") : t("Hire employee →")}
       </button>
     </div>
   );

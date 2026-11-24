@@ -13,6 +13,7 @@ import { formatDateTime } from "@/lib/formatDate";
 import ConfirmModal from "@/components/ConfirmModal";
 import { useToast } from "@/components/ToastProvider";
 import { useApiErrors } from "@/hooks/useApiErrors";
+import { useT } from "@/hooks/useI18n";
 
 interface Draft {
   id: string;
@@ -25,6 +26,7 @@ interface Draft {
 }
 
 export default function DraftsPopover({ onResume }: { onResume: (hireActionId: string) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -61,10 +63,10 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
     try {
       await clientApi.delete(API.hireActions.detail(draft.id));
       setDrafts(prev => prev?.filter(d => d.id !== draft.id) ?? null);
-      showToast("Draft discarded.", "success");
+      showToast(t("Draft discarded."), "success");
       setDraftToDelete(null);
     } catch (err: unknown) {
-      handleError(err, "Could not discard the draft.");
+      handleError(err, t("Could not discard the draft."));
     } finally {
       setIsDeleting(false);
     }
@@ -76,15 +78,15 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
           <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" />
         </svg>
-        Drafts
+        {t("Drafts")}
         {drafts && drafts.length > 0 && <span className="cntbadge">{drafts.length}</span>}
       </button>
       {open && (
         <div className="draftpop">
           {drafts === null ? (
-            <div className="draftempty">Loading…</div>
+            <div className="draftempty">{t("Loading…")}</div>
           ) : drafts.length === 0 ? (
-            <div className="draftempty">No saved drafts yet. Start hiring someone and press <b>Save draft</b>.</div>
+            <div className="draftempty">{t("No saved drafts yet. Start hiring someone and press")} <b>{t("Save draft")}</b>.</div>
           ) : (
             drafts.map(d => (
               <div className="draftrow" key={d.id}>
@@ -95,12 +97,12 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
                     {formatDateTime(d.updated_at)}
                   </span>
                   {d.existing_employee_match && (
-                    <span className="meta" style={{ color: "var(--warn)" }}>Possible leftover: {d.existing_employee_match}</span>
+                    <span className="meta" style={{ color: "var(--warn)" }}>{t("Possible leftover: {name}", { name: d.existing_employee_match })}</span>
                   )}
                 </div>
                 <span className="acts">
-                  <button className="btn btn-outline" onClick={() => { setOpen(false); onResume(d.id); }}>Resume</button>
-                  <button className="mini" onClick={() => setDraftToDelete(d)}>Discard</button>
+                  <button className="btn btn-outline" onClick={() => { setOpen(false); onResume(d.id); }}>{t("Resume")}</button>
+                  <button className="mini" onClick={() => setDraftToDelete(d)}>{t("Discard")}</button>
                 </span>
               </div>
             ))
@@ -109,9 +111,11 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
       )}
       {draftToDelete && (
         <ConfirmModal
-          title="Discard this draft?"
-          body={`The draft for ${draftToDelete.label} will be deleted${draftToDelete.reserved_employee_id ? ` and employee number ${draftToDelete.reserved_employee_id} released` : ""}. This cannot be undone.`}
-          confirmLabel="Discard draft"
+          title={t("Discard this draft?")}
+          body={draftToDelete.reserved_employee_id
+            ? t("The draft for {label} will be deleted and employee number {code} released. This cannot be undone.", { label: draftToDelete.label, code: draftToDelete.reserved_employee_id })
+            : t("The draft for {label} will be deleted. This cannot be undone.", { label: draftToDelete.label })}
+          confirmLabel={t("Discard draft")}
           danger
           saving={isDeleting}
           onConfirm={() => confirmDelete(draftToDelete)}

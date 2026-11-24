@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
 import type { Position } from "@/types/orgStructure";
 
 interface Props {
@@ -17,6 +18,7 @@ function Spin() {
 }
 
 export default function DeactivatePositionModal({ position, onClose, onDeactivated }: Props) {
+  const t = useT();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -28,7 +30,7 @@ export default function DeactivatePositionModal({ position, onClose, onDeactivat
       await clientApi.post(API.orgStructure.positions.deactivate(position.id));
       onDeactivated();
     } catch (err: unknown) {
-      setSubmitError((err as { message?: string })?.message ?? "Failed to deactivate this position.");
+      setSubmitError((err as { message?: string })?.message ?? t("Failed to deactivate this position."));
     } finally {
       setIsSubmitting(false);
     }
@@ -38,14 +40,14 @@ export default function DeactivatePositionModal({ position, onClose, onDeactivat
 
   return (
     <Modal
-      title={<><i className="ti ti-eye-off" style={{ marginRight: 8 }} />Deactivate position</>}
+      title={<><i className="ti ti-eye-off" style={{ marginRight: 8 }} />{t("Deactivate position")}</>}
       onClose={onClose}
       maxWidth={440}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-danger" onClick={submit} disabled={isSubmitting}>
-            {isSubmitting ? <><Spin />&nbsp;Deactivating…</> : "Deactivate position"}
+            {isSubmitting ? <><Spin />&nbsp;{t("Deactivating…")}</> : t("Deactivate position")}
           </button>
         </>
       }
@@ -64,9 +66,7 @@ export default function DeactivatePositionModal({ position, onClose, onDeactivat
         <div className="alert alert-warn mb-16" style={{ alignItems: "flex-start" }}>
           <i className="ti ti-alert-triangle" />
           <div>
-            This position currently has an active holder, <b>{position.holder_name}</b>. Deactivating
-            it does <b>not</b> end their placement or vacate the seat — the position will just show as
-            <b> Inactive</b>. Vacate it first if that&apos;s what you actually want.
+            {t("This position currently has an active holder,")} <b>{position.holder_name}</b>{t(". Deactivating it does")} <b>{t("not")}</b> {t("end their placement or vacate the seat — the position will just show as")} <b>{t("Inactive")}</b>{t(". Vacate it first if that's what you actually want.")}
           </div>
         </div>
       )}
@@ -75,15 +75,13 @@ export default function DeactivatePositionModal({ position, onClose, onDeactivat
         <div className="alert alert-warn mb-16" style={{ alignItems: "flex-start" }}>
           <i className="ti ti-crown" />
           <div>
-            This is the <b>chief</b> position for {position.org_unit_name}. Deactivating it leaves the
-            unit without a visible head until another position is marked chief.
+            {t("This is the")} <b>{t("chief")}</b> {t("position for {unit}. Deactivating it leaves the unit without a visible head until another position is marked chief.", { unit: position.org_unit_name })}
           </div>
         </div>
       )}
 
       <div style={{ fontSize: 11.5, color: "var(--outline)" }}>
-        Deactivated positions keep their full placement history and stay visible in the tree, tagged
-        <b> Inactive</b> — nothing is deleted, and this can be reversed at any time.
+        {t("Deactivated positions keep their full placement history and stay visible in the tree, tagged")} <b>{t("Inactive")}</b>{t(" — nothing is deleted, and this can be reversed at any time.")}
       </div>
     </Modal>
   );

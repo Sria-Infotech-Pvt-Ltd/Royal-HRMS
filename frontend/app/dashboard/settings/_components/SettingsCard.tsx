@@ -5,6 +5,7 @@
 // is a separate button beside it, because a button must not sit inside a link. In list view the card is one compact row.
 
 import Link from "next/link";
+import { useT } from "@/hooks/useI18n";
 import type { SettingsLayout } from "@/hooks/useSettingsPrefs";
 import type { SettingsItem } from "./settingsItems";
 
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function SettingsCard({ item, layout, isPinned, onTogglePinned }: Props) {
+  const t = useT();
   const isList = layout === "list";
   return (
     <div style={{ position: "relative", height: "100%" }}>
@@ -26,12 +28,12 @@ export default function SettingsCard({ item, layout, isPinned, onTogglePinned }:
       >
         <span className="settings-card-icon-tile" aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", fontSize: 20, background: "var(--bg-low)", color: "var(--on-variant)", transition: "background .15s ease, color .15s ease" }}><i className={`ti ${item.icon}`} /></span>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: "var(--on-bg)" }}>{item.label}</span>
-          <span style={{ display: "block", marginTop: 3, fontSize: 12.5, lineHeight: 1.45, color: "var(--on-variant)", ...(isList ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>{item.desc}</span>
+          <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: "var(--on-bg)" }}>{t(item.label)}</span>
+          <span style={{ display: "block", marginTop: 3, fontSize: 12.5, lineHeight: 1.45, color: "var(--on-variant)", ...(isList ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>{t(item.desc)}</span>
         </span>
       </Link>
       <button
-        type="button" aria-pressed={isPinned} aria-label={isPinned ? `Unpin ${item.label}` : `Pin ${item.label}`} title={isPinned ? "Unpin" : "Pin to the top"}
+        type="button" aria-pressed={isPinned} aria-label={isPinned ? t("Unpin {label}", { label: t(item.label) }) : t("Pin {label}", { label: t(item.label) })} title={isPinned ? t("Unpin") : t("Pin to the top")}
         onClick={() => onTogglePinned(item.id)}
         style={{ position: "absolute", top: isList ? "50%" : 12, right: 12, transform: isList ? "translateY(-50%)" : undefined, width: 28, height: 28, borderRadius: 8, border: 0, cursor: "pointer", display: "grid", placeItems: "center", fontSize: 16, background: "transparent", color: isPinned ? "var(--primary)" : "var(--outline)", transition: "color .15s ease" }}
       >

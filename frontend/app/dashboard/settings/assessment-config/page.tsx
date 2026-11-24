@@ -7,6 +7,8 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDateTime } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 
 interface AssessmentConfig {
   default_pass_percentage: number;
@@ -33,13 +35,13 @@ const FIELD_META: { key: FieldKey; icon: string; label: string; desc: string }[]
 
 function currentValue(config: AssessmentConfig, field: FieldKey): string {
   if (field === "pass_percentage") return `${config.default_pass_percentage}%`;
-  if (field === "max_attempts")    return config.max_attempts === 0 ? "Unlimited" : String(config.max_attempts);
-  if (field === "time_limit")      return config.time_limit_mins ? `${config.time_limit_mins} min` : "No limit";
+  if (field === "max_attempts")    return config.max_attempts === 0 ? tr("Unlimited") : String(config.max_attempts);
+  if (field === "time_limit")      return config.time_limit_mins ? tr("{count} min", { count: config.time_limit_mins }) : tr("No limit");
   return "—";
 }
 
 function apiErrMsg(e: unknown) {
-  return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to save.";
+  return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? tr("Failed to save.");
 }
 
 function fmtDate(iso: string) {
@@ -48,6 +50,7 @@ function fmtDate(iso: string) {
 
 export default function AssessmentConfigPage() {
   const router = useRouter();
+  const t = useT();
   const { data, loading, error, refetch } = useFetch<AssessmentConfig>(API.settings.assessmentConfig);
 
   const [editing,  setEditing]  = useState<EditState | null>(null);
@@ -100,12 +103,12 @@ export default function AssessmentConfigPage() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Assessment Config</div>
-          <div className="page-sub">Global defaults for all assessments — override per-assessment in the assessment form.</div>
+          <div className="page-title">{t("Assessment Config")}</div>
+          <div className="page-sub">{t("Global defaults for all assessments — override per-assessment in the assessment form.")}</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
-            <i className="ti ti-arrow-left" /> Back
+            <i className="ti ti-arrow-left" /> {t("Back")}
           </button>
         </div>
       </div>
@@ -113,7 +116,7 @@ export default function AssessmentConfigPage() {
       {loading && (
         <div className="flex items-center gap-2 py-12 text-[13px] text-[var(--on-variant)]">
           <i className="ti ti-loader-2 animate-spin text-[20px]" style={{ color: "var(--primary)" }} />
-          Loading config…
+          {t("Loading config…")}
         </div>
       )}
 
@@ -130,9 +133,9 @@ export default function AssessmentConfigPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: "2px solid var(--outline-v)" }}>
-                    <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600, width: "28%" }}>Setting</th>
-                    <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600 }}>Description</th>
-                    <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600, width: "14%" }}>Default Value</th>
+                    <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600, width: "28%" }}>{t("Setting")}</th>
+                    <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600 }}>{t("Description")}</th>
+                    <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--on-variant)", fontWeight: 600, width: "14%" }}>{t("Default Value")}</th>
                     <th style={{ width: 80 }} />
                   </tr>
                 </thead>
@@ -149,10 +152,10 @@ export default function AssessmentConfigPage() {
                           }}>
                             <i className={`ti ${f.icon}`} style={{ color: "var(--primary)", fontSize: 15 }} />
                           </div>
-                          <span style={{ fontWeight: 500, color: "var(--on-bg)" }}>{f.label}</span>
+                          <span style={{ fontWeight: 500, color: "var(--on-bg)" }}>{t(f.label)}</span>
                         </div>
                       </td>
-                      <td style={{ padding: "14px", color: "var(--on-variant)" }}>{f.desc}</td>
+                      <td style={{ padding: "14px", color: "var(--on-variant)" }}>{t(f.desc)}</td>
                       <td style={{ padding: "14px", fontWeight: 600, color: "var(--primary)" }}>
                         {currentValue(config, f.key)}
                       </td>
@@ -162,7 +165,7 @@ export default function AssessmentConfigPage() {
                           style={{ padding: "4px 12px", fontSize: 12 }}
                           onClick={() => openEdit(f.key)}
                         >
-                          <i className="ti ti-edit" /> Edit
+                          <i className="ti ti-edit" /> {t("Edit")}
                         </button>
                       </td>
                     </tr>
@@ -174,7 +177,7 @@ export default function AssessmentConfigPage() {
 
           {config.updated_at && (
             <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 10 }}>
-              Last updated: {fmtDate(config.updated_at)}
+              {t("Last updated: {date}", { date: fmtDate(config.updated_at) })}
             </p>
           )}
         </>
@@ -182,16 +185,16 @@ export default function AssessmentConfigPage() {
 
       {editing && (
         <Modal
-          title={<>Edit — {FIELD_META.find(f => f.key === editing.field)?.label}</>}
+          title={<>{t("Edit")} — {t(FIELD_META.find(f => f.key === editing.field)?.label ?? "")}</>}
           onClose={() => setEditing(null)}
           maxWidth={440}
           footer={
             <>
               <button className="btn btn-ghost" onClick={() => setEditing(null)} disabled={saving}>
-                Cancel
+                {t("Cancel")}
               </button>
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save"}
+                {saving ? <><i className="ti ti-loader-2 spin" /> {t("Saving…")}</> : t("Save")}
               </button>
             </>
           }
@@ -204,7 +207,7 @@ export default function AssessmentConfigPage() {
 
               {editing.field === "pass_percentage" && (
                 <div className="field-group">
-                  <label className="field-label">Default Pass Percentage *</label>
+                  <label className="field-label">{t("Default Pass Percentage *")}</label>
                   <input
                     type="number" min={1} max={100}
                     className="field-input"
@@ -213,14 +216,14 @@ export default function AssessmentConfigPage() {
                     placeholder="70"
                   />
                   <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginTop: 4 }}>
-                    Used as default when creating a new assessment. Override per-assessment in the assessment form.
+                    {t("Used as default when creating a new assessment. Override per-assessment in the assessment form.")}
                   </div>
                 </div>
               )}
 
               {editing.field === "max_attempts" && (
                 <div className="field-group">
-                  <label className="field-label">Default Maximum Attempts</label>
+                  <label className="field-label">{t("Default Maximum Attempts")}</label>
                   <input
                     type="number" min={0}
                     className="field-input"
@@ -229,7 +232,7 @@ export default function AssessmentConfigPage() {
                     placeholder="3"
                   />
                   <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginTop: 4 }}>
-                    Set to <strong>0</strong> for unlimited attempts globally. Individual assessments can override this.
+                    {t("Set to")} <strong>0</strong> {t("for unlimited attempts globally. Individual assessments can override this.")}
                   </div>
                 </div>
               )}
@@ -237,7 +240,7 @@ export default function AssessmentConfigPage() {
               {editing.field === "time_limit" && (
                 <>
                   <div className="field-group mb-16">
-                    <label className="field-label">Global Time Limit</label>
+                    <label className="field-label">{t("Global Time Limit")}</label>
                     <label style={{
                       display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
                       padding: "10px 12px", borderRadius: 8,
@@ -254,23 +257,23 @@ export default function AssessmentConfigPage() {
                         } : p)}
                       />
                       <span style={{ fontSize: ".88rem", color: "var(--on-bg)" }}>
-                        Enable a default time limit for assessments
+                        {t("Enable a default time limit for assessments")}
                       </span>
                     </label>
                   </div>
 
                   {editing.time_limit_enabled && (
                     <div className="field-group">
-                      <label className="field-label">Duration (minutes) *</label>
+                      <label className="field-label">{t("Duration (minutes) *")}</label>
                       <input
                         type="number" min={1}
                         className="field-input"
                         value={editing.time_limit_mins}
                         onChange={e => setEditing(p => p ? { ...p, time_limit_mins: e.target.value } : p)}
-                        placeholder="e.g. 30"
+                        placeholder={t("e.g. 30")}
                       />
                       <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginTop: 4 }}>
-                        Per-assessment overrides take precedence. <code>null</code> = no global limit.
+                        {t("Per-assessment overrides take precedence.")} <code>null</code> {t("= no global limit.")}
                       </div>
                     </div>
                   )}

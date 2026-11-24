@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import type { Holiday, HolidayType } from "@/types/holidays";
 
 const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -36,13 +37,14 @@ export default function HolidayListView({
   loading, filtered, pageRows, page, totalPages, pageSize, year,
   onPageChange, onAdd, onView, onEdit, onDelete, onToggleActive,
 }: Props) {
+  const t = useT();
   return (
     <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm overflow-hidden">
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-[var(--outline)]">
           <i className="ti ti-calendar-off text-5xl text-[var(--outline)]" />
-          <p className="text-sm font-medium">{loading ? "Loading holidays…" : `No holidays found for ${year}`}</p>
-          {!loading && <button onClick={onAdd} className="mt-1 text-sm text-[var(--info)] hover:underline">+ Add the first holiday</button>}
+          <p className="text-sm font-medium">{loading ? t("Loading holidays…") : t("No holidays found for {year}", { year })}</p>
+          {!loading && <button onClick={onAdd} className="mt-1 text-sm text-[var(--info)] hover:underline">{t("+ Add the first holiday")}</button>}
         </div>
       ) : (
         <>
@@ -52,7 +54,7 @@ export default function HolidayListView({
                 <tr className="bg-[var(--bg-mid)] border-b border-[var(--outline-v)]">
                   {["Holiday Name","Date","Day","Holiday Type","Mandatory / Optional","Applicable Company Codes","Status","Actions"].map(col => (
                     <th key={col} className="px-4 py-3 text-left text-xs font-bold text-[var(--outline)] uppercase tracking-wider whitespace-nowrap">
-                      {col}
+                      {t(col)}
                     </th>
                   ))}
                 </tr>
@@ -86,20 +88,20 @@ export default function HolidayListView({
                       <button onClick={() => onToggleActive(h)}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors ${h.is_active ? "bg-[var(--success-c)] text-[var(--success)] hover:bg-[var(--success-c)]" : "bg-[var(--bg-mid)] text-[var(--on-variant)] hover:bg-[var(--bg-mid)]"}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${h.is_active ? "bg-[var(--success)]" : "bg-[var(--outline)]"}`} />
-                        {h.is_active ? "Active" : "Inactive"}
+                        {h.is_active ? t("Active") : t("Inactive")}
                       </button>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <button onClick={() => onView(h)} aria-label={`View ${h.name}`} title="View"
+                        <button onClick={() => onView(h)} aria-label={t("View {name}", { name: h.name })} title={t("View")}
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
                           <i className="ti ti-eye text-xs" />
                         </button>
-                        <button onClick={() => onEdit(h)} aria-label={`Edit ${h.name}`} title="Edit"
+                        <button onClick={() => onEdit(h)} aria-label={t("Edit {name}", { name: h.name })} title={t("Edit")}
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
                           <i className="ti ti-edit text-xs" />
                         </button>
-                        <button onClick={() => onDelete(h)} aria-label={`Delete ${h.name}`} title="Delete"
+                        <button onClick={() => onDelete(h)} aria-label={t("Delete {name}", { name: h.name })} title={t("Delete")}
                           className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] hover:border-[var(--error)] hover:text-[var(--error)] transition-colors">
                           <i className="ti ti-trash text-xs" />
                         </button>
@@ -114,11 +116,11 @@ export default function HolidayListView({
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--outline-v)] bg-[var(--bg-mid)]">
               <span className="text-xs text-[var(--on-variant)]">
-                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}
+                {t("Showing {from}–{to} of {total}", { from: (page - 1) * pageSize + 1, to: Math.min(page * pageSize, filtered.length), total: filtered.length })}
               </span>
               <div className="flex items-center gap-1">
                 <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page === 1}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-40 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label="Previous">
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-40 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label={t("Previous")}>
                   <i className="ti ti-chevron-left text-xs" />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
@@ -128,7 +130,7 @@ export default function HolidayListView({
                   </button>
                 ))}
                 <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page === totalPages}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-40 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label="Next">
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-40 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors" aria-label={t("Next")}>
                   <i className="ti ti-chevron-right text-xs" />
                 </button>
               </div>

@@ -1,5 +1,6 @@
 // Rules for documents employees upload (ESS Documents tab and tax proofs). The server enforces the
 // same type and size limits — these checks just tell the employee straight away.
+import { tr } from "@/lib/i18n/tr";
 
 export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 export const MAX_FILE_SIZE_LABEL = "5 MB";
@@ -24,10 +25,10 @@ export function openFilePreview(file: File): void {
 export function validateDocumentFile(file: File): string | null {
   const lowerName = file.name.toLowerCase();
   if (!ACCEPTED_EXTENSIONS.some(extension => lowerName.endsWith(extension))) {
-    return `Unsupported file type. Please choose a ${ACCEPTED_TYPES_LABEL} file.`;
+    return tr("Unsupported file type. Please choose a {types} file.", { types: ACCEPTED_TYPES_LABEL });
   }
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return `File is too large (${formatFileSize(file.size)}). Maximum allowed size is ${MAX_FILE_SIZE_LABEL}.`;
+    return tr("File is too large ({size}). Maximum allowed size is {max}.", { size: formatFileSize(file.size), max: MAX_FILE_SIZE_LABEL });
   }
   return null;
 }

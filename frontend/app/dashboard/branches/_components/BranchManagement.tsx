@@ -7,6 +7,8 @@ import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import type { GSTRegistration } from "@/types/company";
 import {
   type StateObj, type CityObj, type Branch, type BranchStats, type BranchDistribution,
@@ -20,6 +22,7 @@ import EmployeeDistributionChart from "./EmployeeDistributionChart";
 import { TransferConfirmModal, HqConfirmModal, DeleteConfirmModal, type TransferConfirmState } from "./BranchConfirmModals";
 
 export default function BranchManagement() {
+  const t = useT();
   const user      = useCurrentUser();
   const canEdit   = usePermission("settings.edit");
   const isHrAdmin = !isUnrestrictedUser(user) && !!user?.branch;
@@ -101,7 +104,7 @@ export default function BranchManagement() {
         .catch(() => {});
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setError(e.message ?? "Failed to load branch data.");
+      setError(e.message ?? tr("Failed to load branch data."));
     } finally {
       setIsLoading(false);
     }
@@ -177,53 +180,53 @@ export default function BranchManagement() {
     const name = editForm.branch_name.trim();
     const addr = editForm.address.trim();
 
-    if (!editForm.state)       errs.state       = "Please select a state.";
-    if (!editForm.city)        errs.city        = "Please select a city.";
+    if (!editForm.state)       errs.state       = t("Please select a state.");
+    if (!editForm.city)        errs.city        = t("Please select a city.");
     else if (editForm.city === OTHER_CITY) {
       const cityName = newCityName.trim();
-      if (!cityName)                       errs.new_city_name = "Please enter a city name.";
-      else if (!CITY_NAME_RE.test(cityName)) errs.new_city_name = "City name may only contain letters, spaces, hyphens and apostrophes.";
+      if (!cityName)                       errs.new_city_name = t("Please enter a city name.");
+      else if (!CITY_NAME_RE.test(cityName)) errs.new_city_name = t("City name may only contain letters, spaces, hyphens and apostrophes.");
     }
-    if (!name)                 errs.branch_name = "Branch name is required.";
-    else if (name.length > 200) errs.branch_name = "Branch name must be under 200 characters.";
+    if (!name)                 errs.branch_name = t("Branch name is required.");
+    else if (name.length > 200) errs.branch_name = t("Branch name must be under 200 characters.");
     else if (!BRANCH_NAME_RE.test(name))
-                                errs.branch_name = "Branch name may only contain letters, numbers, spaces, & - and . characters.";
-    if (!addr)                 errs.address     = "Address is required.";
-    if (codeLoading)           errs.branch_code = "Branch code is still generating, please wait.";
+                                errs.branch_name = t("Branch name may only contain letters, numbers, spaces, & - and . characters.");
+    if (!addr)                 errs.address     = t("Address is required.");
+    if (codeLoading)           errs.branch_code = t("Branch code is still generating, please wait.");
 
     if (editForm.state && !editForm.gst_registration) {
       const stateName = states.find(s => String(s.id) === editForm.state)?.name;
       const matchCount = stateName ? gstRegistrations.filter(r => r.state === stateName).length : 0;
       if (matchCount > 1) {
-        errs.gst_registration = `${stateName} has ${matchCount} GST registrations on file — select which one this branch uses.`;
+        errs.gst_registration = t("{stateName} has {matchCount} GST registrations on file — select which one this branch uses.", { stateName: stateName ?? "", matchCount });
       }
     }
     if (modalMode === "add" && !editForm.branch_code && !codeLoading)
-                               errs.branch_code = "Branch code could not be generated. Try re-selecting the city.";
+                               errs.branch_code = t("Branch code could not be generated. Try re-selecting the city.");
 
     if (editForm.geofencing_enabled) {
       const lat = editForm.latitude.trim();
       const lon = editForm.longitude.trim();
 
       if (!lat && !lon) {
-        errs.latitude = "Latitude and longitude are required to enable geofencing.";
+        errs.latitude = t("Latitude and longitude are required to enable geofencing.");
       } else if (!lat || !lon) {
-        if (!lat) errs.latitude  = "Both latitude and longitude must be provided together.";
-        if (!lon) errs.longitude = "Both latitude and longitude must be provided together.";
+        if (!lat) errs.latitude  = t("Both latitude and longitude must be provided together.");
+        if (!lon) errs.longitude = t("Both latitude and longitude must be provided together.");
       } else {
-        if (isNaN(Number(lat))) errs.latitude  = "Latitude must be a valid number.";
-        else if (Math.abs(Number(lat)) > 90) errs.latitude = "Latitude must be between -90 and 90 degrees.";
-        if (isNaN(Number(lon))) errs.longitude = "Longitude must be a valid number.";
-        else if (Math.abs(Number(lon)) > 180) errs.longitude = "Longitude must be between -180 and 180 degrees.";
+        if (isNaN(Number(lat))) errs.latitude  = t("Latitude must be a valid number.");
+        else if (Math.abs(Number(lat)) > 90) errs.latitude = t("Latitude must be between -90 and 90 degrees.");
+        if (isNaN(Number(lon))) errs.longitude = t("Longitude must be a valid number.");
+        else if (Math.abs(Number(lon)) > 180) errs.longitude = t("Longitude must be between -180 and 180 degrees.");
         if (!errs.latitude && !errs.longitude && Number(lat) === 0 && Number(lon) === 0) {
-          errs.latitude = "0, 0 is not a real office location. Enter the office coordinates.";
+          errs.latitude = t("0, 0 is not a real office location. Enter the office coordinates.");
         }
       }
 
       const radius = editForm.allowed_radius_meters.trim();
-      if (!radius) errs.allowed_radius_meters = "Allowed radius is required.";
+      if (!radius) errs.allowed_radius_meters = t("Allowed radius is required.");
       else if (isNaN(Number(radius)) || Number(radius) < 10 || Number(radius) > 5000)
-                    errs.allowed_radius_meters = "Allowed radius must be between 10 and 5000 metres.";
+                    errs.allowed_radius_meters = t("Allowed radius must be between 10 and 5000 metres.");
     }
 
     return errs;
@@ -236,14 +239,14 @@ export default function BranchManagement() {
     const f = branchAdminForm;
     if (isLeaderActive(f)) {
       if (f.mode === "existing") {
-        if (!f.employeeId) errs.branchAdminEmployee = "Select an employee.";
+        if (!f.employeeId) errs.branchAdminEmployee = t("Select an employee.");
         // Admin access comes from the seat; moving someone in without one never made them admin.
-        if (!f.positionId) errs.branchAdminPosition = "Select the position they will hold.";
+        if (!f.positionId) errs.branchAdminPosition = t("Select the position they will hold.");
       } else {
-        if (!f.name.trim())        errs.branchAdminName        = "Name is required.";
-        if (!f.email.trim())       errs.branchAdminEmail       = "Email is required.";
-        else if (!EMAIL_RE.test(f.email.trim())) errs.branchAdminEmail = "Enter a valid email.";
-        if (!f.positionId)         errs.branchAdminPosition    = "Select the position they will hold.";
+        if (!f.name.trim())        errs.branchAdminName        = t("Name is required.");
+        if (!f.email.trim())       errs.branchAdminEmail       = t("Email is required.");
+        else if (!EMAIL_RE.test(f.email.trim())) errs.branchAdminEmail = t("Enter a valid email.");
+        if (!f.positionId)         errs.branchAdminPosition    = t("Select the position they will hold.");
       }
     }
     return errs;
@@ -274,7 +277,7 @@ export default function BranchManagement() {
       // Admin access = holding a branch-wide seat while working in this Company Code, so both are
       // set: the branch move (as before) and the seat, via the Org Chart's own "assign holder" call.
       const employee = leaderEmployees.find(e => e.id === f.employeeId);
-      if (!employee) throw new Error("The selected employee could not be found. Reopen the form and try again.");
+      if (!employee) throw new Error(t("The selected employee could not be found. Reopen the form and try again."));
       await clientApi.put(API.employees.detail(f.employeeId), { branch: branchName });
       const seat = branchAdminSeats.find(s => s.id === f.positionId);
       if (seat?.holder !== employee.uuid) {
@@ -332,32 +335,34 @@ export default function BranchManagement() {
       const branchName = editForm.branch_name.trim();
       setModalMode(null);
       fetchData();
-      if (modalMode === "edit") setInviteAlert({ type: "success", text: `${branchName} was updated.` });
+      if (modalMode === "edit") setInviteAlert({ type: "success", text: t("{branchName} was updated.", { branchName }) });
 
       // Leadership assignment runs after the branch is already saved and the
       // modal is closed — the branch itself must never be blocked or rolled
       // back by a problem with this optional, secondary step.
       if (shouldApplyLeader()) {
-        const savedVerb = modalMode === "add" ? "created" : "updated";
+        const isAdd = modalMode === "add";
         try {
           await applyLeaderRole(branchAdminForm, branchName);
           setInviteAlert({
             type: "success",
             text: branchAdminForm.mode === "new"
-              ? `${branchName} was ${savedVerb} and its Company Code Admin was invited by email.`
-              : `${branchName} was ${savedVerb} and its Company Code Admin was assigned.`,
+              ? (isAdd ? t("{branchName} was created and its Company Code Admin was invited by email.", { branchName }) : t("{branchName} was updated and its Company Code Admin was invited by email.", { branchName }))
+              : (isAdd ? t("{branchName} was created and its Company Code Admin was assigned.", { branchName }) : t("{branchName} was updated and its Company Code Admin was assigned.", { branchName })),
           });
         } catch (e) {
           setInviteAlert({
             type: "warn",
-            text: `${branchName} was ${savedVerb}, but assigning its Company Code Admin failed: ${(e as { message?: string })?.message ?? "unknown error"} — use the Employees page instead.`,
+            text: isAdd
+              ? t("{branchName} was created, but assigning its Company Code Admin failed: {reason} — use the Employees page instead.", { branchName, reason: (e as { message?: string })?.message ?? t("unknown error") })
+              : t("{branchName} was updated, but assigning its Company Code Admin failed: {reason} — use the Employees page instead.", { branchName, reason: (e as { message?: string })?.message ?? t("unknown error") }),
           });
         }
         setBranchAdminForm(EMPTY_LEADER);
       }
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setSaveError(e.message ?? "Failed to save branch.");
+      setSaveError(e.message ?? t("Failed to save branch."));
     } finally {
       setSaving(false);
     }
@@ -372,7 +377,7 @@ export default function BranchManagement() {
       setLeaderErrors(leaderErrs);
       // The admin section can be folded away; it opens by itself when it has a problem, and this says why Save did nothing.
       if (Object.keys(leaderErrs).length > 0) {
-        setSaveError("Complete the Company Code Admin details, or clear them to save without an admin.");
+        setSaveError(t("Complete the Company Code Admin details, or clear them to save without an admin."));
       }
       return;
     }
@@ -445,7 +450,7 @@ export default function BranchManagement() {
 
   // GET the Company Code, then the admin section's options and current admin, before showing the form.
   const loadEditDetails = async (branchId: number, requestId: number) => {
-    const loadFailed = "Could not load this Company Code's saved details. Close the form and try again.";
+    const loadFailed = t("Could not load this Company Code's saved details. Close the form and try again.");
     try {
       const res = await clientApi.get<Envelope<Branch>>(API.branches.detail(branchId));
       const saved = res.data.data;
@@ -482,7 +487,7 @@ export default function BranchManagement() {
       fetchData();
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setDeleteError(e.message ?? "Failed to delete branch.");
+      setDeleteError(e.message ?? t("Failed to delete branch."));
     } finally {
       setDeleting(false);
     }
@@ -503,15 +508,15 @@ export default function BranchManagement() {
   const gstChoiceRequired = gstOptionsForState.length > 1;
 
   if (isLoading && branches.length === 0) {
-    return <div className="p-8 text-center text-[var(--on-variant)]">Loading Company Codes...</div>;
+    return <div className="p-8 text-center text-[var(--on-variant)]">{t("Loading Company Codes...")}</div>;
   }
 
   return (
     <>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Company Codes</h1>
-          <p className="page-sub">{isHrAdmin ? "Your Company Code details" : "Manage all Company Code locations"}</p>
+          <h1 className="page-title">{t("Company Codes")}</h1>
+          <p className="page-sub">{isHrAdmin ? t("Your Company Code details") : t("Manage all Company Code locations")}</p>
         </div>
         {canEdit && (
           <div className="page-actions">
@@ -536,7 +541,7 @@ export default function BranchManagement() {
                 setLeaderEmployees(options.employees);
               });
             }}>
-              <i className="ti ti-plus" /> Add Company Code
+              <i className="ti ti-plus" /> {t("Add Company Code")}
             </button>
           </div>
         )}
@@ -556,7 +561,7 @@ export default function BranchManagement() {
             type="button"
             onClick={() => setInviteAlert(null)}
             style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, marginLeft: 12 }}
-            aria-label="Dismiss"
+            aria-label={t("Dismiss")}
           >
             <i className="ti ti-x" />
           </button>
@@ -566,22 +571,22 @@ export default function BranchManagement() {
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon si-primary"><i className="ti ti-building" /></div>
-          <div className="stat-label">Total Company Codes</div>
+          <div className="stat-label">{t("Total Company Codes")}</div>
           <div className="stat-value">{stats.total_branches}</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon si-success"><i className="ti ti-users" /></div>
-          <div className="stat-label">Total Workforce</div>
+          <div className="stat-label">{t("Total Workforce")}</div>
           <div className="stat-value">{stats.total_employees}</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon si-info"><i className="ti ti-map-pin" /></div>
-          <div className="stat-label">Cities Covered</div>
+          <div className="stat-label">{t("Cities Covered")}</div>
           <div className="stat-value">{stats.total_cities}</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon si-warn"><i className="ti ti-building-skyscraper" /></div>
-          <div className="stat-label">Active Company Codes</div>
+          <div className="stat-label">{t("Active Company Codes")}</div>
           <div className="stat-value">{stats.total_active_branches}</div>
         </div>
       </div>
@@ -601,8 +606,8 @@ export default function BranchManagement() {
       ) : (
         <div className="empty-state mb-24 card">
           <i className="ti ti-building-skyscraper" />
-          <h3>No Company Codes Found</h3>
-          <p>You haven&apos;t added any Company Codes yet.</p>
+          <h3>{t("No Company Codes Found")}</h3>
+          <p>{t("You haven't added any Company Codes yet.")}</p>
         </div>
       )}
 
@@ -613,7 +618,7 @@ export default function BranchManagement() {
           title={
             <>
               <i className="ti ti-building-skyscraper" style={{ marginRight: "8px" }} />
-              {modalMode === "add" ? "Add New Company Code" : `Edit Company Code: ${editForm.branch_name}`}
+              {modalMode === "add" ? t("Add New Company Code") : t("Edit Company Code: {name}", { name: editForm.branch_name })}
             </>
           }
           onClose={() => setModalMode(null)}
@@ -622,19 +627,19 @@ export default function BranchManagement() {
           scrollBody
           footer={
             <>
-              <button className="btn btn-ghost" onClick={() => setModalMode(null)}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => setModalMode(null)}>{t("Cancel")}</button>
               <button
                 className="btn btn-filled"
                 onClick={handleSave}
                 disabled={saving || codeLoading || citiesLoading || transferChecking || editLoading || (modalMode === "edit" && !editForm.branch_code)}
               >
                 {saving ? (
-                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{modalMode === "add" ? "Creating…" : "Saving…"}</>
+                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{modalMode === "add" ? t("Creating…") : t("Saving…")}</>
                 ) : transferChecking ? (
-                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Checking…</>
+                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{t("Checking…")}</>
                 ) : codeLoading || citiesLoading ? (
-                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Please wait…</>
-                ) : modalMode === "add" ? "Create Branch" : "Save Changes"}
+                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{t("Please wait…")}</>
+                ) : modalMode === "add" ? t("Create Branch") : t("Save Changes")}
               </button>
             </>
           }
@@ -647,7 +652,7 @@ export default function BranchManagement() {
               {editLoading ? (
                 <div className="p-8 text-center text-[var(--on-variant)]">
                   <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />
-                  Loading saved details…
+                  {t("Loading saved details…")}
                 </div>
               ) : modalMode === "edit" && !editForm.branch_code ? null : (
               <BranchFormBody

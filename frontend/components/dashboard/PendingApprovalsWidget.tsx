@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { PROFILE_CORRECTION_TOPIC } from "@/app/dashboard/ess/_components/ProfileCorrectionModal";
@@ -28,6 +29,7 @@ const ROWS: ApprovalRow[] = [
 ];
 
 export default function PendingApprovalsWidget() {
+  const t = useT();
   const { data, loading } = useFetch<PendingApprovals>(API.dashboard.pendingApprovals);
   // Anyone who can see this widget sees every ticket, so the open count is organisation-wide.
   const { data: openTickets } = useFetch<{ count: number }>(`${API.hrHelp.list}?status=open&page_size=1&topic=${PROFILE_CORRECTION_TOPIC}`);
@@ -43,15 +45,15 @@ export default function PendingApprovalsWidget() {
   return (
     <div className="card mb-16">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-checks" /> Pending Approvals</div>
+        <div className="card-title"><i className="ti ti-checks" /> {t("Pending Approvals")}</div>
         {!loading && (
-          <span className="badge badge-warn">{total} pending</span>
+          <span className="badge badge-warn">{t("{total} pending", { total })}</span>
         )}
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : (
         <div style={{ padding: 0 }}>
@@ -67,8 +69,8 @@ export default function PendingApprovalsWidget() {
                   <i className={`ti ${row.icon}`} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{row.label}</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 1 }}>Awaiting action</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{t(row.label)}</div>
+                  <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 1 }}>{t("Awaiting action")}</div>
                 </div>
                 <span style={{ fontSize: 18, fontWeight: 700, color: row.color, minWidth: 24, textAlign: "right" }}>{count}</span>
                 <i className="ti ti-chevron-right" style={{ fontSize: 13, color: "var(--outline)", marginLeft: 2 }} />
@@ -80,7 +82,7 @@ export default function PendingApprovalsWidget() {
 
       <div style={{ padding: "10px 20px", borderTop: "1px solid var(--bg-high)", background: "var(--bg-low)" }}>
         <a href="/dashboard/approvals" style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none" }}>
-          View all pending approvals <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
+          {t("View all pending approvals")} <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
         </a>
       </div>
     </div>

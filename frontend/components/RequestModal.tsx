@@ -9,9 +9,7 @@
 
 import type { ReactNode } from "react";
 import Modal from "@/components/Modal";
-
-const SUBTITLE = "Complete the required information. Your submission will appear in My Requests.";
-const FOOTER_NOTE = "Submissions are routed for approval and retained in My Requests.";
+import { useT } from "@/hooks/useI18n";
 
 interface RequestModalProps {
   title: ReactNode;
@@ -34,21 +32,22 @@ export default function RequestModal({
   onClose,
   onSubmit,
   submitting = false,
-  submitLabel = "Submit request",
+  submitLabel,
   submittingLabel,
   closeDisabled,
   error,
-  footerNote = FOOTER_NOTE,
+  footerNote,
   maxWidth,
   children,
 }: RequestModalProps) {
+  const t = useT();
   return (
     <Modal
       title={
         <div>
           <div>{title}</div>
           <div style={{ fontSize: 12, fontWeight: 400, color: "var(--on-variant)", marginTop: 2 }}>
-            {SUBTITLE}
+            {t("Complete the required information. Your submission will appear in My Requests.")}
           </div>
         </div>
       }
@@ -57,15 +56,15 @@ export default function RequestModal({
       maxWidth={maxWidth}
       footer={
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{footerNote}</span>
+          <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{footerNote ?? t("Submissions are routed for approval and retained in My Requests.")}</span>
           <div style={{ display: "flex", gap: 10 }}>
             <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>
-              Cancel
+              {t("Cancel")}
             </button>
             <button className="btn btn-filled" onClick={onSubmit} disabled={submitting}>
               {submitting
-                ? (submittingLabel ?? <><i className="ti ti-loader-2 spin" /> Submitting…</>)
-                : submitLabel}
+                ? (submittingLabel ?? <><i className="ti ti-loader-2 spin" /> {t("Submitting…")}</>)
+                : (submitLabel ?? t("Submit request"))}
             </button>
           </div>
         </div>

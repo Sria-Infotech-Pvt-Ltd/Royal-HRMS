@@ -20,6 +20,7 @@ import PincodeSelect from "@/components/PincodeSelect";
 import CountrySelect from "@/components/CountrySelect";
 import { StateSelect, DistrictSelect } from "@/components/StateDistrictSelect";
 import type { ProfileForm } from "@/app/onboarding/_types";
+import { useT } from "@/hooks/useI18n";
 
 export type AddressFormFields = Pick<
   ProfileForm,
@@ -46,14 +47,15 @@ interface Props {
 }
 
 function SuggestButton({ onClick, isWaiting, isDone, isLoading }: { onClick: () => void; isWaiting: boolean; isDone: boolean; isLoading: boolean }) {
+  const t = useT();
   // Deliberately NOT the native `disabled` attribute: browsers grey a real disabled button out whatever the CSS says, and a dead button
   // gives no reason. Three looks: no PIN code yet (faded, and a click says why), already filled from the PIN code (a green tick: nothing
   // left to suggest, and a click just applies it again), and ready (bright).
   const state = isWaiting ? " is-waiting" : isDone ? " is-done" : "";
-  const title = isWaiting ? "Needs a 6-digit PIN code" : isDone ? "Already filled in from the PIN code" : "Fill this in from the PIN code";
+  const title = isWaiting ? t("Needs a 6-digit PIN code") : isDone ? t("Already filled in from the PIN code") : t("Fill this in from the PIN code");
   return (
     <button type="button" onClick={onClick} className={`hw-suggest${state}`} aria-busy={isLoading} title={title}>
-      {isLoading ? <i className="ti ti-loader-2 spin" /> : isDone ? <><i className="ti ti-circle-check" /> Filled</> : <><i className="ti ti-wand" /> Suggest</>}
+      {isLoading ? <i className="ti ti-loader-2 spin" /> : isDone ? <><i className="ti ti-circle-check" /> {t("Filled")}</> : <><i className="ti ti-wand" /> {t("Suggest")}</>}
     </button>
   );
 }
@@ -74,6 +76,7 @@ interface PlaceFromPincode { pincode: string; state: string; district: string; l
  * With no PIN code, or an unknown one, a button says so under the row.
  */
 function useAddressSuggest(prefix: Prefix, form: AddressFormFields, onFieldChange: Props["onFieldChange"]) {
+  const t = useT();
   const { lookup } = usePincodeLookup();
   const [suggesting, setSuggesting] = useState<SuggestField | null>(null);
   const [note, setNote] = useState("");
@@ -121,19 +124,19 @@ function useAddressSuggest(prefix: Prefix, form: AddressFormFields, onFieldChang
 
   async function suggest(field: SuggestField) {
     if (!isPincodeReady) {
-      setNote("Enter the 6-digit PIN code first. Suggest fills the state, district and city from it. You can also choose the state, then the district, then pick the PIN code from the list.");
+      setNote(t("Enter the 6-digit PIN code first. Suggest fills the state, district and city from it. You can also choose the state, then the district, then pick the PIN code from the list."));
       return;
     }
     setNote("");
     setSuggesting(field);
     const found = await lookup(pincode);
     setSuggesting(null);
-    if (!found) { setNote(`We could not find PIN code ${pincode}. Check it, or choose the state and district yourself.`); return; }
+    if (!found) { setNote(t("We could not find PIN code {pincode}. Check it, or choose the state and district yourself.", { pincode })); return; }
     const answer = settle(found);
     setPlace(answer);
     if (field === "village") {
       if (answer.locality) onFieldChange(`${prefix}_village`, answer.locality);
-      else setNote("That PIN code has no area name to suggest. Type the city.");
+      else setNote(t("That PIN code has no area name to suggest. Type the city."));
       return;
     }
     if (answer.state) onFieldChange(`${prefix}_state`, answer.state);
@@ -144,6 +147,7 @@ function useAddressSuggest(prefix: Prefix, form: AddressFormFields, onFieldChang
 }
 
 export default function AddressFields({ form, extras, onFieldChange, onExtrasChange }: Props) {
+  const t = useT();
   const currentSuggest = useAddressSuggest("current", form, onFieldChange);
   const permanentSuggest = useAddressSuggest("permanent", form, onFieldChange);
   const current = usePincodesInDistrict(form.current_state, form.current_district);
@@ -166,18 +170,18 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
     return (
       <div className="g3" style={{ marginBottom: 14 }}>
         <div className="f">
-          <label>City</label>
+          <label>{t("City")}</label>
           <div className="flex gap-2">
             <input value={form[`${prefix}_village`]} onChange={e => onFieldChange(`${prefix}_village`, e.target.value)} className="finput" />
             <SuggestButton onClick={() => s.suggest("village")} isWaiting={!s.isPincodeReady} isDone={s.isDone("village")} isLoading={s.suggesting === "village"} />
           </div>
         </div>
         <div className="f">
-          <label>Landmark</label>
-          <input value={extras[landmarkKey]} onChange={e => onExtrasChange(landmarkKey, e.target.value)} placeholder="Near…" className="finput" />
+          <label>{t("Landmark")}</label>
+          <input value={extras[landmarkKey]} onChange={e => onExtrasChange(landmarkKey, e.target.value)} placeholder={t("Near…")} className="finput" />
         </div>
         <div className="f">
-          <label>Country</label>
+          <label>{t("Country")}</label>
           <CountrySelect value={extras[countryKey]} onChange={v => onExtrasChange(countryKey, v)} mode="name" inputClassName="finput" />
         </div>
       </div>
@@ -194,7 +198,7 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
       <>
         <div className="g3" style={{ marginBottom: s.note ? 6 : 10 }}>
           <div className="f">
-            <label>State</label>
+            <label>{t("State")}</label>
             <div className="flex gap-2">
               <StateSelect value={state} inputClassName="finput"
                 onChange={v => { onFieldChange(`${prefix}_state`, v); onFieldChange(`${prefix}_district`, ""); onFieldChange(`${prefix}_pin_code`, ""); }} />
@@ -202,7 +206,7 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
             </div>
           </div>
           <div className="f">
-            <label>District</label>
+            <label>{t("District")}</label>
             <div className="flex gap-2">
               <DistrictSelect value={district} state={state} inputClassName="finput"
                 onChange={v => { onFieldChange(`${prefix}_district`, v); onFieldChange(`${prefix}_pin_code`, ""); }} />
@@ -210,10 +214,10 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
             </div>
           </div>
           <div className="f hw-field" data-hw-invalid={s.note ? "true" : undefined}>
-            <label>PIN code</label>
+            <label>{t("PIN code")}</label>
             <PincodeSelect value={form[`${prefix}_pin_code`]} options={pins.options} isLoading={pins.isLoading} inputClassName="finput"
               onChange={(pincode, area) => pickPincode(prefix, pincode, area)} />
-            {pins.options.length > 0 && <div className="hint">{pins.options.length} PIN codes in {district}</div>}
+            {pins.options.length > 0 && <div className="hint">{t("{count} PIN codes in {district}", { count: pins.options.length, district })}</div>}
           </div>
         </div>
         {s.note && <p className="hint bad" role="status" style={{ margin: "0 0 10px" }}>{s.note}</p>}
@@ -223,17 +227,17 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
 
   return (
     <div>
-      <div className="sechead">CURRENT ADDRESS</div>
+      <div className="sechead">{t("CURRENT ADDRESS")}</div>
       <div className="g2" style={{ marginBottom: 10 }}>
         <div className="f">
-          <label>Address line 1</label>
+          <label>{t("Address line 1")}</label>
           <input value={form.current_address} onChange={e => onFieldChange("current_address", e.target.value)}
-            placeholder="Flat / house no., building" className="finput" />
+            placeholder={t("Flat / house no., building")} className="finput" />
         </div>
         <div className="f">
-          <label>Address line 2</label>
+          <label>{t("Address line 2")}</label>
           <input value={form.current_address_line2} onChange={e => onFieldChange("current_address_line2", e.target.value)}
-            placeholder="Street, area" className="finput" />
+            placeholder={t("Street, area")} className="finput" />
         </div>
       </div>
 
@@ -242,12 +246,12 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
       {cityRow("current")}
 
       <div className="togline" style={{ marginBottom: 16 }}>
-        <span>Permanent address is the same as current</span>
+        <span>{t("Permanent address is the same as current")}</span>
         <div className="seg">
           {["true", "false"].map(v => (
             <button key={v} type="button" onClick={() => onFieldChange("permanent_same_as_current", v)}
               aria-pressed={form.permanent_same_as_current === v}>
-              {v === "true" ? "Yes" : "No"}
+              {v === "true" ? t("Yes") : t("No")}
             </button>
           ))}
         </div>
@@ -255,17 +259,17 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
 
       {!sameAsCurrent && (
         <>
-          <div className="sechead">PERMANENT ADDRESS</div>
+          <div className="sechead">{t("PERMANENT ADDRESS")}</div>
           <div className="g2" style={{ marginBottom: 10 }}>
             <div className="f">
-              <label>Address line 1</label>
+              <label>{t("Address line 1")}</label>
               <input value={form.permanent_address} onChange={e => onFieldChange("permanent_address", e.target.value)}
-                placeholder="Flat / house no., building" className="finput" />
+                placeholder={t("Flat / house no., building")} className="finput" />
             </div>
             <div className="f">
-              <label>Address line 2</label>
+              <label>{t("Address line 2")}</label>
               <input value={form.permanent_address_line2} onChange={e => onFieldChange("permanent_address_line2", e.target.value)}
-                placeholder="Street, area" className="finput" />
+                placeholder={t("Street, area")} className="finput" />
             </div>
           </div>
           {locationRow("permanent")}

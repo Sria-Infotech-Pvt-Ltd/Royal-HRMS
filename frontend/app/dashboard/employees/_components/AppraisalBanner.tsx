@@ -7,6 +7,7 @@
 // without performance.manage_cycles or when there's no active cycle.
 
 import { useRouter } from "next/navigation";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
@@ -24,24 +25,25 @@ export default function AppraisalBanner() {
   const canManage = usePermission("performance.manage_cycles");
   const { data } = useFetch<BannerSummary>(canManage ? API.performance.bannerSummary : null);
   const router = useRouter();
+  const t = useT();
 
   if (!canManage || !data || !data.cycle_name) return null;
 
   const remaining = data.total - data.self_reviews_done;
   const summary = data.latest_employee_name
-    ? `${data.latest_employee_name}${data.latest_employee_code ? ` · ${data.latest_employee_code}` : ""} · ${data.latest_status_display} · ${remaining > 0 ? `${remaining} other employee review${remaining === 1 ? "" : "s"} still pending` : "All self-reviews submitted"}.`
-    : "No employee reviews started yet.";
+    ? `${data.latest_employee_name}${data.latest_employee_code ? ` · ${data.latest_employee_code}` : ""} · ${data.latest_status_display} · ${remaining > 0 ? (remaining === 1 ? t("{count} other employee review still pending", { count: remaining }) : t("{count} other employee reviews still pending", { count: remaining })) : t("All self-reviews submitted")}.`
+    : t("No employee reviews started yet.");
 
   return (
     <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "16px 22px", flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: "var(--r-card)" }}>
       <div>
         <div style={{ fontWeight: 700, fontSize: 14, color: "var(--on-bg)" }}>
-          {data.cycle_name} appraisal · HR review queue
+          {t("{cycle} appraisal · HR review queue", { cycle: data.cycle_name })}
         </div>
         <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>{summary}</div>
       </div>
       <button className="btn btn-ghost btn-sm" onClick={() => router.push("/dashboard/performance")}>
-        Open employee review
+        {t("Open employee review")}
       </button>
     </div>
   );

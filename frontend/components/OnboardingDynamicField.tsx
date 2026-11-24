@@ -5,6 +5,7 @@ import CountrySelect from "@/components/CountrySelect";
 import { StateSelect, DistrictSelect } from "@/components/StateDistrictSelect";
 import LanguagesSelect from "@/components/LanguagesSelect";
 import { MARITAL_STATUS_OPTIONS } from "@/lib/maritalStatus";
+import { useT } from "@/hooks/useI18n";
 
 const INP = "field-input";
 
@@ -92,13 +93,14 @@ interface Props {
 export default function DynamicField({ config, value, onChange, placeholder, pairedState }: Props) {
   const choiceOptions = BUILTIN_CHOICE_FIELDS[config.field_key];
   const isPinCode = PIN_CODE_FIELDS.has(config.field_key);
+  const t = useT();
 
   const label = (
     <label className="field-label">
       {config.label}
       {config.required
         ? <Req />
-        : <span style={{ color: "var(--on-variant)", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}>OPTIONAL</span>}
+        : <span style={{ color: "var(--on-variant)", fontWeight: 400, marginLeft: 6, fontSize: 10.5 }}>{t("OPTIONAL")}</span>}
     </label>
   );
 
@@ -107,8 +109,8 @@ export default function DynamicField({ config, value, onChange, placeholder, pai
       <div className="field-group">
         {label}
         <select className={`${INP} field-select`} value={value} onChange={e => onChange(e.target.value)}>
-          <option value="">Select</option>
-          {choiceOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <option value="">{t("Select")}</option>
+          {choiceOptions.map(o => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
         </select>
       </div>
     );
@@ -164,7 +166,7 @@ export default function DynamicField({ config, value, onChange, placeholder, pai
       <div className="field-group">
         {label}
         <select className={`${INP} field-select`} value={value} onChange={e => onChange(e.target.value)}>
-          <option value="">Select</option>
+          <option value="">{t("Select")}</option>
           {config.options.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       </div>
@@ -205,7 +207,7 @@ export default function DynamicField({ config, value, onChange, placeholder, pai
         className={INP}
         value={value}
         onChange={e => onChange(isPinCode ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value)}
-        placeholder={isPinCode ? "e.g. 500081" : placeholder}
+        placeholder={isPinCode ? t("e.g. 500081") : placeholder}
         inputMode={isPinCode ? "numeric" : undefined}
         maxLength={isPinCode ? 6 : undefined}
       />

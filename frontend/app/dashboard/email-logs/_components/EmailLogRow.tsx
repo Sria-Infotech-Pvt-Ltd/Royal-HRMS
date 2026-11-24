@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 
 export type EmailLogEntry = {
   id:                     string;
@@ -31,6 +32,7 @@ interface Props {
 
 /** One sent (or failed) email as a table row; clicking it opens the delivery details, including why a send failed. */
 export default function EmailLogRow({ row, moduleClass, sentAt, canResend, isResending, onResend }: Props) {
+  const t = useT();
   const [isOpen, setIsOpen] = useState(false);
   const isFailed = row.status === "failed";
   const tone = isFailed ? "failed" : "sent";
@@ -58,8 +60,8 @@ export default function EmailLogRow({ row, moduleClass, sentAt, canResend, isRes
         <td className="el-hide-md">{row.template_name ? <span className="el-template">{row.template_name}</span> : "—"}</td>
         <td>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span className={`badge ${isFailed ? "badge-error" : "badge-success"}`}>{isFailed ? "Failed" : "Sent"}</span>
-            {row.is_resend && <span className="badge badge-neutral" style={{ fontSize: 10 }}>Resend</span>}
+            <span className={`badge ${isFailed ? "badge-error" : "badge-success"}`}>{isFailed ? t("Failed") : t("Sent")}</span>
+            {row.is_resend && <span className="badge badge-neutral" style={{ fontSize: 10 }}>{t("Resend")}</span>}
           </div>
         </td>
         <td className="el-hide-md">{row.triggered_by_name || "—"}</td>
@@ -69,15 +71,15 @@ export default function EmailLogRow({ row, moduleClass, sentAt, canResend, isRes
               it; an onboarding invitation is re-issued with a fresh link. Without the permission the button is shown but switched off. */}
           {row.resend_blocked_reason ? (
             <span title={row.resend_blocked_reason} style={{ fontSize: 11, color: "var(--on-variant)", cursor: "help" }}>
-              <i className="ti ti-info-circle" /> Re-issue from the employee
+              <i className="ti ti-info-circle" /> {t("Re-issue from the employee")}
             </span>
           ) : (
             <button
               className="btn btn-filled btn-sm" style={{ fontSize: ".78rem" }} onClick={() => onResend(row)} disabled={!canResend || isResending} suppressHydrationWarning
-              aria-label={`Resend to ${row.recipient_email}`}
-              title={!canResend ? "You need permission to resend emails." : isInvite ? "Send this person a fresh invitation link" : "Send this email again"}
+              aria-label={t("Resend to {email}", { email: row.recipient_email })}
+              title={!canResend ? t("You need permission to resend emails.") : isInvite ? t("Send this person a fresh invitation link") : t("Send this email again")}
             >
-              {isResending ? <><i className="ti ti-loader-2 animate-spin" /> Resending…</> : <><i className="ti ti-repeat" /> {isInvite ? "Resend invite" : "Resend"}</>}
+              {isResending ? <><i className="ti ti-loader-2 animate-spin" /> {t("Resending…")}</> : <><i className="ti ti-repeat" /> {isInvite ? t("Resend invite") : t("Resend")}</>}
             </button>
           )}
         </td>
@@ -85,14 +87,14 @@ export default function EmailLogRow({ row, moduleClass, sentAt, canResend, isRes
       {isOpen && (
         <tr className="el-detail">
           <td colSpan={8}>
-            {isFailed && <div className="el-error" role="alert"><b>Why it failed:</b> {row.error_message || "The mail server did not give a reason."}</div>}
+            {isFailed && <div className="el-error" role="alert"><b>{t("Why it failed:")}</b> {row.error_message || t("The mail server did not give a reason.")}</div>}
             <dl className="el-detail-grid">
-              <div><dt>Sent at</dt><dd>{sentAt}</dd></div>
-              <div><dt>Mail account used</dt><dd>{row.smtp_settings_name || "—"}</dd></div>
-              <div><dt>Attachments</dt><dd>{row.had_attachments ? "Yes" : "None"}</dd></div>
-              <div><dt>Sensitive content</dt><dd>{row.has_sensitive_context ? "Yes" : "No"}</dd></div>
-              <div><dt>Template</dt><dd>{row.template_name || "—"}</dd></div>
-              <div><dt>Triggered by</dt><dd>{row.triggered_by_name || "System"}</dd></div>
+              <div><dt>{t("Sent at")}</dt><dd>{sentAt}</dd></div>
+              <div><dt>{t("Mail account used")}</dt><dd>{row.smtp_settings_name || "—"}</dd></div>
+              <div><dt>{t("Attachments")}</dt><dd>{row.had_attachments ? t("Yes") : t("None")}</dd></div>
+              <div><dt>{t("Sensitive content")}</dt><dd>{row.has_sensitive_context ? t("Yes") : t("No")}</dd></div>
+              <div><dt>{t("Template")}</dt><dd>{row.template_name || "—"}</dd></div>
+              <div><dt>{t("Triggered by")}</dt><dd>{row.triggered_by_name || t("System")}</dd></div>
             </dl>
           </td>
         </tr>

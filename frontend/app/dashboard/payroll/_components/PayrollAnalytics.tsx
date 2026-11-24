@@ -1,6 +1,7 @@
 "use client";
 
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle } from "@/types/payroll";
 import { cyclePeriodLabel } from "./payrollDashboardShared";
@@ -60,6 +61,7 @@ function EmptyChart({ message }: { message: string }) {
 }
 
 export default function PayrollAnalytics() {
+  const t = useT();
   const { data: cyclesPage, loading } =
     useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
 
@@ -92,30 +94,30 @@ export default function PayrollAnalytics() {
       <div className="stats-grid" style={{ marginBottom: 0 }}>
         {[
           {
-            label: "Total Payslips Issued",
+            label: t("Total Payslips Issued"),
             value: loading ? "—" : String(totalPayslips),
-            sub: `across ${cycles.length} payroll run${cycles.length !== 1 ? "s" : ""}`,
+            sub: cycles.length === 1 ? t("across {count} payroll run", { count: cycles.length }) : t("across {count} payroll runs", { count: cycles.length }),
             icon: "ti-file-invoice",
             cls: "si-primary",
           },
           {
-            label: "Completed Runs",
+            label: t("Completed Runs"),
             value: loading ? "—" : String(paidCycles.length),
-            sub: "Paid or closed",
+            sub: t("Paid or closed"),
             icon: "ti-circle-check",
             cls: "si-success",
           },
           {
-            label: "Latest Pay Date",
+            label: t("Latest Pay Date"),
             value: loading ? "—" : (latestCycle?.pay_date ?? "—"),
-            sub: latestCycle ? STATUS_LABEL[latestCycle.status] ?? latestCycle.status : "No cycles yet",
+            sub: latestCycle ? (STATUS_LABEL[latestCycle.status] ? t(STATUS_LABEL[latestCycle.status]) : latestCycle.status) : t("No cycles yet"),
             icon: "ti-calendar-event",
             cls: "si-info",
           },
           {
-            label: "Avg. Payslips / Run",
+            label: t("Avg. Payslips / Run"),
             value: loading || cycles.length === 0 ? "—" : String(Math.round(totalPayslips / cycles.length)),
-            sub: "Employees processed",
+            sub: t("Employees processed"),
             icon: "ti-users",
             cls: "si-primary",
           },
@@ -139,13 +141,13 @@ export default function PayrollAnalytics() {
       <div className="payroll-chart-row" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 }}>
         <div className="card">
           <div className="card-header">
-            <div className="card-title"><i className="ti ti-chart-bar" /> Employees Processed per Payroll Run</div>
+            <div className="card-title"><i className="ti ti-chart-bar" /> {t("Employees Processed per Payroll Run")}</div>
           </div>
           <div className="card-body">
             {loading ? (
-              <EmptyChart message="Loading…" />
+              <EmptyChart message={t("Loading…")} />
             ) : monthlyData.length === 0 ? (
-              <EmptyChart message="No payroll cycles yet. Data appears here after your first run." />
+              <EmptyChart message={t("No payroll cycles yet. Data appears here after your first run.")} />
             ) : (
               <BarChart data={monthlyData} max={maxMonthly} color="var(--primary)" />
             )}
@@ -154,13 +156,13 @@ export default function PayrollAnalytics() {
 
         <div className="card">
           <div className="card-header">
-            <div className="card-title"><i className="ti ti-chart-donut" /> Cycle Status</div>
+            <div className="card-title"><i className="ti ti-chart-donut" /> {t("Cycle Status")}</div>
           </div>
           <div className="card-body">
             {loading ? (
-              <div style={{ padding: 20, textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>Loading…</div>
+              <div style={{ padding: 20, textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>{t("Loading…")}</div>
             ) : cycles.length === 0 ? (
-              <div style={{ padding: 20, textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>No data yet</div>
+              <div style={{ padding: 20, textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>{t("No data yet")}</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {[...statusCounts.entries()].map(([status, count]) => {
@@ -168,8 +170,8 @@ export default function PayrollAnalytics() {
                   return (
                     <div key={status}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12 }}>
-                        <span style={{ fontWeight: 500 }}>{STATUS_LABEL[status] ?? status}</span>
-                        <span style={{ color: "var(--on-variant)" }}>{count} cycle{count !== 1 ? "s" : ""}</span>
+                        <span style={{ fontWeight: 500 }}>{STATUS_LABEL[status] ? t(STATUS_LABEL[status]) : status}</span>
+                        <span style={{ color: "var(--on-variant)" }}>{count === 1 ? t("{count} cycle", { count }) : t("{count} cycles", { count })}</span>
                       </div>
                       <div style={{ height: 6, background: "var(--bg-low)", borderRadius: 3, overflow: "hidden" }}>
                         <div style={{ height: "100%", width: `${pct}%`, background: STATUS_COLOR[status] ?? "var(--outline)", borderRadius: 3, transition: "width 0.4s" }} />
@@ -186,30 +188,30 @@ export default function PayrollAnalytics() {
       {/* Recent cycles list */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-history" /> All Payroll Cycles</div>
+          <div className="card-title"><i className="ti ti-history" /> {t("All Payroll Cycles")}</div>
         </div>
         {loading ? (
           <div style={{ padding: "32px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
             <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 20, display: "block", marginBottom: 8 }} />
-            Loading…
+            {t("Loading…")}
           </div>
         ) : cycles.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center", color: "var(--on-variant)" }}>
             <i className="ti ti-chart-off" style={{ fontSize: 32, display: "block", marginBottom: 12 }} />
-            <div style={{ fontWeight: 600 }}>No analytics yet</div>
-            <div style={{ fontSize: 13, marginTop: 4 }}>Analytics populate automatically as you run and complete payroll cycles.</div>
+            <div style={{ fontWeight: 600 }}>{t("No analytics yet")}</div>
+            <div style={{ fontSize: 13, marginTop: 4 }}>{t("Analytics populate automatically as you run and complete payroll cycles.")}</div>
           </div>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Period</th>
-                  <th>Cycle Start</th>
-                  <th>Cycle End</th>
-                  <th>Pay Date</th>
-                  <th style={{ textAlign: "right" }}>Employees</th>
-                  <th>Status</th>
+                  <th>{t("Period")}</th>
+                  <th>{t("Cycle Start")}</th>
+                  <th>{t("Cycle End")}</th>
+                  <th>{t("Pay Date")}</th>
+                  <th style={{ textAlign: "right" }}>{t("Employees")}</th>
+                  <th>{t("Status")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,7 +226,7 @@ export default function PayrollAnalytics() {
                     <td style={{ textAlign: "right", fontWeight: 600 }}>{c.payslip_count}</td>
                     <td>
                       <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: `${STATUS_COLOR[c.status] ?? "var(--outline)"}22`, color: STATUS_COLOR[c.status] ?? "var(--on-variant)" }}>
-                        {STATUS_LABEL[c.status] ?? c.status}
+                        {STATUS_LABEL[c.status] ? t(STATUS_LABEL[c.status]) : c.status}
                       </span>
                     </td>
                   </tr>
@@ -238,7 +240,7 @@ export default function PayrollAnalytics() {
       {/* Note about advanced analytics */}
       <div className="alert alert-info">
         <i className="ti ti-info-circle" />
-        <span>Gross/net payroll trends, department breakdowns, and overtime cost charts will be available once dedicated analytics endpoints are built. The data above is computed live from your payroll cycle records.</span>
+        <span>{t("Gross/net payroll trends, department breakdowns, and overtime cost charts will be available once dedicated analytics endpoints are built. The data above is computed live from your payroll cycle records.")}</span>
       </div>
 
       <style jsx>{`

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import { useT } from "@/hooks/useI18n";
+import { tr } from "@/lib/i18n/tr";
 import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
 import type { OnboardingFieldConfigByStep, CustomFieldFileValue, OnboardingSection, EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
@@ -41,6 +43,7 @@ import { confirmDialog } from "@/components/DialogProvider";
 export default function HREmployeeOnboardingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const t = useT();
   const canEdit    = usePermission("onboarding.edit");
   const canApprove = usePermission("onboarding.approve");
   const { isMandatory: faceIdMandatory, hrNote: faceIdHrNote, fallbackActive: faceFallbackActive } = useFaceVerificationStatus();
@@ -99,7 +102,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     if (highest >= 0) setHighestSaved(prev => Math.max(prev, highest));
   }, [steps, completedStepNumbers]);
   const [docTypeConfig, setDocTypeConfig] = useState<DocumentTypeConfig[]>([]);
-  const docTypes = docTypeConfig.filter(t => t.visible).sort((a, b) => a.order - b.order);
+  const docTypes = docTypeConfig.filter(config => config.visible).sort((a, b) => a.order - b.order);
   const uploadedTypes = new Set(docs.map(d => d.document_type));
 
   const [saving, setSaving] = useState(false);
@@ -249,16 +252,16 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   // remains.
   const saveEducationEntries = useCallback(async (): Promise<boolean> => {
     if (!educationEntries.some(e => e.institution.trim())) {
-      setEducationErr("Please add at least one education entry (with an institution) before continuing.");
+      setEducationErr(tr("Please add at least one education entry (with an institution) before continuing."));
       return false;
     }
     for (const entry of educationEntries) {
       if (!entry.level) {
-        setEducationErr("Select an education type for every entry.");
+        setEducationErr(tr("Select an education type for every entry."));
         return false;
       }
       if (entry.level === "other" && !entry.custom_level_label.trim()) {
-        setEducationErr("Name the custom education type for every entry marked \"Other\".");
+        setEducationErr(tr("Name the custom education type for every entry marked \"Other\"."));
         return false;
       }
     }
@@ -290,7 +293,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setEducationErr(msg ?? "Failed to save. Please try again.");
+      setEducationErr(msg ?? tr("Failed to save. Please try again."));
       return false;
     }
   }, [educationEntries, employeeUuid]);
@@ -321,7 +324,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   const saveExperienceEntries = useCallback(async (): Promise<boolean> => {
     for (const entry of experienceEntries) {
       if (!entry.employer_name.trim()) {
-        setExperienceErr("Employer name is required for every entry — remove any blank ones, or fill them in.");
+        setExperienceErr(tr("Employer name is required for every entry — remove any blank ones, or fill them in."));
         return false;
       }
     }
@@ -355,7 +358,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setExperienceErr(msg ?? "Failed to save. Please try again.");
+      setExperienceErr(msg ?? tr("Failed to save. Please try again."));
       return false;
     }
   }, [experienceEntries, employeeUuid, refetchTotalExperience]);
@@ -404,11 +407,11 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   // save just returned before nominee payloads are sent.
   const saveFamilyNominationEntries = useCallback(async (): Promise<boolean> => {
     if (!familyEntries.every(e => e.name.trim())) {
-      setFamilyNominationErr("Name is required for every family member entry.");
+      setFamilyNominationErr(tr("Name is required for every family member entry."));
       return false;
     }
     if (!nomineeEntries.every(e => e.family_member)) {
-      setFamilyNominationErr("Select a family member for every nominee entry.");
+      setFamilyNominationErr(tr("Select a family member for every nominee entry."));
       return false;
     }
     setFamilyNominationErr(null);
@@ -462,7 +465,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setFamilyNominationErr(msg ?? "Failed to save. Please try again.");
+      setFamilyNominationErr(msg ?? tr("Failed to save. Please try again."));
       return false;
     }
   }, [familyEntries, nomineeEntries, employeeUuid]);
@@ -486,7 +489,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
 
   const saveAssetEntries = useCallback(async (): Promise<boolean> => {
     if (!assetEntries.every(e => e.asset_type)) {
-      setAssetErr("Select an asset type for every entry.");
+      setAssetErr(tr("Select an asset type for every entry."));
       return false;
     }
     setAssetErr(null);
@@ -509,7 +512,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setAssetErr(msg ?? "Failed to save. Please try again.");
+      setAssetErr(msg ?? tr("Failed to save. Please try again."));
       return false;
     }
   }, [assetEntries, employeeUuid]);
@@ -548,15 +551,15 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         API.onboarding.employees.step(employeeUuid, currentStep.step), { ...form, ...customForStep },
       );
       if (res.data?.success === false) {
-        setSaveErr(res.data.message ?? "Please fill in all required fields.");
+        setSaveErr(res.data.message ?? tr("Please fill in all required fields."));
         return false;
       }
-      setSaveMsg("Saved.");
+      setSaveMsg(tr("Saved."));
       setTimeout(() => setSaveMsg(null), 2000);
       return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSaveErr(msg ?? "Save failed. Please try again.");
+      setSaveErr(msg ?? tr("Save failed. Please try again."));
       return false;
     } finally {
       setSaving(false);
@@ -565,15 +568,15 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
 
   async function handlePanCardUpload(file: File) {
     const value = form.pan_number.trim().toUpperCase();
-    if (!value) { setPanErr("Enter the PAN number before uploading the PAN card."); return; }
-    if (!PAN_RE.test(value)) { setPanErr("Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter."); return; }
+    if (!value) { setPanErr(tr("Enter the PAN number before uploading the PAN card.")); return; }
+    if (!PAN_RE.test(value)) { setPanErr(tr("Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter.")); return; }
     setPanErr(null);
     setPanSaving(true);
     try {
       await clientApi.patch(API.onboarding.employees.step(employeeUuid, 4), { pan_number: value });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setPanErr(msg ?? "Could not save PAN number. Please try again.");
+      setPanErr(msg ?? tr("Could not save PAN number. Please try again."));
       return;
     } finally {
       setPanSaving(false);
@@ -595,7 +598,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
       setDocs(r.data?.data ?? []);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSaveErr(msg ?? "Upload failed. Max 5 MB, PDF/JPG/PNG only.");
+      setSaveErr(msg ?? tr("Upload failed. Max 5 MB, PDF/JPG/PNG only."));
     } finally {
       setUploading(null);
     }
@@ -615,7 +618,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
       setCustomFileValues(data?.data ?? []);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setFileUploadError(msg ?? "Failed to upload file. Please try again.");
+      setFileUploadError(msg ?? tr("Failed to upload file. Please try again."));
     } finally {
       setUploadingFileKey(null);
     }
@@ -628,7 +631,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
       setCustomFileValues(prev => prev.filter(v => v.id !== valueId));
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setFileUploadError(msg ?? "Failed to delete file. Please try again.");
+      setFileUploadError(msg ?? tr("Failed to delete file. Please try again."));
     }
   }
 
@@ -636,7 +639,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     const ok = await saveSection();
     if (ok) {
       setHighestSaved(prev => Math.max(prev, tab));
-      if (tab < steps.length - 1) setTab(t => t + 1);
+      if (tab < steps.length - 1) setTab(current => current + 1);
     }
   }
 
@@ -650,21 +653,21 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
       setSubmitted(true);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSaveErr(msg ?? "Submission failed. Please try again.");
+      setSaveErr(msg ?? tr("Submission failed. Please try again."));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleApproveNow() {
-    if (!(await confirmDialog(`Approve and activate ${employeeName || "this employee"}'s account? They'll get full access immediately.`))) return;
+    if (!(await confirmDialog(tr("Approve and activate {name}'s account? They'll get full access immediately.", { name: employeeName || tr("this employee") })))) return;
     setApproving(true);
     try {
       await clientApi.post(API.onboarding.approve(employeeUuid), { decision: "approve" });
       router.push(`/dashboard/employees/${id}`);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSaveErr(msg ?? "Approval failed — approve it from the Onboarding Approvals screen instead.");
+      setSaveErr(msg ?? tr("Approval failed — approve it from the Onboarding Approvals screen instead."));
     } finally {
       setApproving(false);
     }
@@ -675,9 +678,9 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     [fieldConfig, steps, tab],
   );
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "var(--on-variant)" }}>Loading…</div>;
-  if (notFound) return <div className="alert alert-error">Employee not found.</div>;
-  if (!canEdit) return <div className="alert alert-error">You do not have permission to complete onboarding for this employee.</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "var(--on-variant)" }}>{t("Loading…")}</div>;
+  if (notFound) return <div className="alert alert-error">{t("Employee not found.")}</div>;
+  if (!canEdit) return <div className="alert alert-error">{t("You do not have permission to complete onboarding for this employee.")}</div>;
 
   if (submitted) {
     return (
@@ -685,20 +688,20 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--success-c)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem" }}>
           <i className="ti ti-check" style={{ color: "var(--success)", fontSize: 30 }} />
         </div>
-        <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: ".5rem" }}>Onboarding submitted for {employeeName}</h2>
+        <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: ".5rem" }}>{t("Onboarding submitted for {name}", { name: employeeName })}</h2>
         <p style={{ color: "var(--on-variant)", marginBottom: "1.5rem" }}>
           {canApprove
-            ? "You can approve it now, or leave it for review in Onboarding Approvals."
-            : "It's now awaiting HR approval."}
+            ? t("You can approve it now, or leave it for review in Onboarding Approvals.")
+            : t("It's now awaiting HR approval.")}
         </p>
         {saveErr && <div className="alert alert-error" style={{ marginBottom: 16, textAlign: "left" }}>{saveErr}</div>}
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           <button className="btn btn-ghost" onClick={() => router.push(`/dashboard/employees/${id}`)}>
-            Back to Profile
+            {t("Back to Profile")}
           </button>
           {canApprove && (
             <button className="btn btn-filled" onClick={handleApproveNow} disabled={approving}>
-              {approving ? "Approving…" : "Approve Now"}
+              {approving ? t("Approving…") : t("Approve Now")}
             </button>
           )}
         </div>
@@ -713,18 +716,18 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     <>
       <div className="page-header">
         <div>
-          <div className="page-title">Complete Onboarding — {employeeName}</div>
-          <div className="page-sub">Fill in the employee&apos;s onboarding profile on their behalf.</div>
+          <div className="page-title">{t("Complete Onboarding — {name}", { name: employeeName })}</div>
+          <div className="page-sub">{t("Fill in the employee's onboarding profile on their behalf.")}</div>
         </div>
         <button className="btn btn-ghost" onClick={() => router.push(`/dashboard/employees/${id}`)}>
-          <i className="ti ti-arrow-left" /> Back
+          <i className="ti ti-arrow-left" /> {t("Back")}
         </button>
       </div>
 
       <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", height: "calc(100vh - 230px)", minHeight: 520 }}>
         <div className="wiz" style={{ flex: 1, minHeight: 0 }}>
           <HireWizardSidebar
-            steps={steps.map(s => ({ label: s.shortLabel, sub: s.label }))}
+            steps={steps.map(s => ({ label: t(s.shortLabel), sub: t(s.label) }))}
             currentStep={tab}
             highestSaved={highestSaved}
             onStepClick={setTab}
@@ -734,12 +737,12 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
           <div className="wiz-main">
             <div className="stephead">
               <div>
-                <h3>{steps[tab].label.split(" ").slice(0, -1).join(" ")} <em className="hl">{steps[tab].label.split(" ").slice(-1)}</em></h3>
-                <p>Step {tab + 1} of {steps.length}</p>
+                <h3>{t(steps[tab].label).split(" ").slice(0, -1).join(" ")} <em className="hl">{t(steps[tab].label).split(" ").slice(-1)}</em></h3>
+                <p>{t("Step {current} of {total}", { current: tab + 1, total: steps.length })}</p>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{progressPct}% complete</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{t("{percent}% complete", { percent: progressPct })}</div>
                   <div style={{ height: 5, width: 100, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden", marginTop: 4 }}>
                     <div style={{ height: "100%", width: `${progressPct}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.3s ease" }} />
                   </div>
@@ -842,17 +845,17 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         </div>
 
         <div className="modal-foot">
-          <button className="btn btn-ghost" onClick={() => setTab(t => Math.max(0, t - 1))} disabled={tab === 0 || saving} type="button">
-            <i className="ti ti-arrow-left" /> Previous
+          <button className="btn btn-ghost" onClick={() => setTab(current => Math.max(0, current - 1))} disabled={tab === 0 || saving} type="button">
+            <i className="ti ti-arrow-left" /> {t("Previous")}
           </button>
           {tab < steps.length - 1 ? (
             <button className="btn btn-filled" onClick={next} disabled={saving} type="button">
-              {saving ? "Saving…" : <>Save & Continue <i className="ti ti-arrow-right" /></>}
+              {saving ? t("Saving…") : <>{t("Save & Continue")} <i className="ti ti-arrow-right" /></>}
             </button>
           ) : (
             <div style={{ display: "flex", gap: ".75rem" }}>
               <button className="btn btn-ghost" onClick={saveSection} disabled={saving} type="button">
-                {saving ? "Saving…" : "Save"}
+                {saving ? t("Saving…") : t("Save")}
               </button>
               <button
                 className="btn btn-filled"
@@ -861,7 +864,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
                 type="button"
                 style={{ background: "var(--success)", borderColor: "var(--success)" }}
               >
-                {saving ? "Submitting…" : <><i className="ti ti-check" /> Submit for Approval</>}
+                {saving ? t("Submitting…") : <><i className="ti ti-check" /> {t("Submit for Approval")}</>}
               </button>
             </div>
           )}
@@ -873,18 +876,18 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         <div>
           {faceIdMandatory ? (
             <>
-              <b>Face ID registration required.</b> {faceIdHrNote}{" "}
+              <b>{t("Face ID registration required.")}</b> {faceIdHrNote}{" "}
               {faceFallbackActive
-                ? "Until it is done, this employee can still clock in from the office; those punches are flagged for HR."
-                : "Until it is done, this employee cannot clock in on the web."}{" "}
+                ? t("Until it is done, this employee can still clock in from the office; those punches are flagged for HR.")
+                : t("Until it is done, this employee cannot clock in on the web.")}{" "}
               <a href="/dashboard/face-id-registrations" style={{ color: "var(--primary)", fontWeight: 600 }}>
-                Face ID Registrations
+                {t("Face ID Registrations")}
               </a>
             </>
           ) : (
             <>
-              Face ID registration isn&apos;t required at the moment. It starts to apply if your organisation turns on{" "}
-              Attendance Settings → Face ID Verification.
+              {t("Face ID registration isn't required at the moment. It starts to apply if your organisation turns on")}{" "}
+              {t("Attendance Settings → Face ID Verification.")}
             </>
           )}
         </div>

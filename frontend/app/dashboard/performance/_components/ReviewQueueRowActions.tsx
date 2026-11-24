@@ -9,6 +9,7 @@
 // the file-length rule in CLAUDE.md.
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { ApiReview } from "@/types/performanceHub";
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export default function ReviewQueueRowActions({ review, onReview, onChanged }: Props) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   async function handleCalibrate() {
@@ -45,7 +47,7 @@ export default function ReviewQueueRowActions({ review, onReview, onChanged }: P
   if (review.self_submitted_at && !review.manager_submitted_at) {
     return (
       <button className="btn btn-filled btn-sm" onClick={() => onReview(review)}>
-        Review
+        {t("Review")}
       </button>
     );
   }
@@ -53,7 +55,7 @@ export default function ReviewQueueRowActions({ review, onReview, onChanged }: P
   if (review.manager_submitted_at && !review.hr_calibrated_at) {
     return (
       <button className="btn btn-filled btn-sm" onClick={handleCalibrate} disabled={busy}>
-        {busy ? "Calibrating…" : "Calibrate"}
+        {busy ? t("Calibrating…") : t("Calibrate")}
       </button>
     );
   }
@@ -61,7 +63,7 @@ export default function ReviewQueueRowActions({ review, onReview, onChanged }: P
   if (review.hr_calibrated_at && !review.published_at) {
     return (
       <button className="btn btn-filled btn-sm" onClick={handlePublish} disabled={busy}>
-        {busy ? "Publishing…" : "Publish"}
+        {busy ? t("Publishing…") : t("Publish")}
       </button>
     );
   }

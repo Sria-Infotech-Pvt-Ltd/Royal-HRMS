@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 
 // India's 22 scheduled languages plus English (the language most HR forms
 // in India actually ask about) and the handful of other international
@@ -30,6 +31,7 @@ interface LanguagesSelectProps {
  * stores/emits the same comma-separated string this field already used, so
  * it's a drop-in replacement for the free-text input with no schema change. */
 export default function LanguagesSelect({ value, onChange, placeholder, inputClassName = "field-input" }: LanguagesSelectProps) {
+  const t = useT();
   const selected = useMemo(() => parseSelected(value), [value]);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -63,7 +65,7 @@ export default function LanguagesSelect({ value, onChange, placeholder, inputCla
         }}
       >
         {selected.length === 0 ? (
-          <span style={{ color: "var(--on-variant, #7c8aa3)" }}>{placeholder ?? "Select languages"}</span>
+          <span style={{ color: "var(--on-variant, #7c8aa3)" }}>{placeholder ?? t("Select languages")}</span>
         ) : (
           selected.map(lang => (
             <span
@@ -98,13 +100,13 @@ export default function LanguagesSelect({ value, onChange, placeholder, inputCla
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search languages…"
+            placeholder={t("Search languages…")}
             className={inputClassName}
             style={{ margin: 6, width: "calc(100% - 12px)" }}
           />
           <div style={{ overflowY: "auto" }}>
             {filtered.length === 0 && (
-              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>No matches.</div>
+              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--on-variant)" }}>{t("No matches.")}</div>
             )}
             {filtered.map(lang => (
               <label

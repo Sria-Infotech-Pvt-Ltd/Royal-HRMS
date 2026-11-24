@@ -1,3 +1,5 @@
+import { tr } from "@/lib/i18n/tr";
+
 // ─── API endpoints ────────────────────────────────────────────────────────────
 export const EMAIL_TEMPLATES_BASE           = "/settings/email-templates/";
 export const emailTemplateDetail            = (id: number) => `/settings/email-templates/${id}/`;
@@ -128,13 +130,13 @@ const SLUG_RE = /^[a-z][a-z0-9_]*$/;
 export function validateTemplateForm(form: TemplateForm, isAdd: boolean): TemplateFormErrors {
   const e: TemplateFormErrors = {};
   if (isAdd) {
-    if (!form.display_name.trim())  e.display_name  = "Display name is required";
-    if (!form.name.trim())          e.name          = "Slug is required";
-    else if (!SLUG_RE.test(form.name)) e.name       = "Slug must start with a letter and contain only lowercase letters, digits, and underscores";
-    if (!form.template_type.trim()) e.template_type = "Category is required";
+    if (!form.display_name.trim())  e.display_name  = tr("Display name is required");
+    if (!form.name.trim())          e.name          = tr("Slug is required");
+    else if (!SLUG_RE.test(form.name)) e.name       = tr("Slug must start with a letter and contain only lowercase letters, digits, and underscores");
+    if (!form.template_type.trim()) e.template_type = tr("Category is required");
   }
-  if (!form.subject.trim()) e.subject = "Subject is required";
-  if (!form.body.trim())    e.body    = "Body is required";
+  if (!form.subject.trim()) e.subject = tr("Subject is required");
+  if (!form.body.trim())    e.body    = tr("Body is required");
   return e;
 }
 

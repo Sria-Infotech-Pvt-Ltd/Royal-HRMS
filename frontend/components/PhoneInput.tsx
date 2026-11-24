@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 
 interface CountryDialOption { iso: string; dial: string; flag: string; name: string; }
 
@@ -91,6 +92,7 @@ interface PhoneInputProps {
  * existed, so it's a drop-in replacement for a plain `<input>` with no
  * schema change on either side. */
 export default function PhoneInput({ value, onChange, placeholder, className, inputClassName = "field-input" }: PhoneInputProps) {
+  const t = useT();
   const { country, national } = useMemo(() => splitValue(value), [value]);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -124,7 +126,7 @@ export default function PhoneInput({ value, onChange, placeholder, className, in
         type="button"
         onClick={() => setOpen(o => !o)}
         className={inputClassName}
-        title={country.name}
+        title={t(country.name)}
         style={{ width: 76, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer" }}
       >
         <span style={{ fontSize: 16, lineHeight: 1 }}>{country.flag}</span>
@@ -165,7 +167,7 @@ export default function PhoneInput({ value, onChange, placeholder, className, in
               }}
             >
               <span style={{ fontSize: 15 }}>{c.flag}</span>
-              <span style={{ flex: 1 }}>{c.name}</span>
+              <span style={{ flex: 1 }}>{t(c.name)}</span>
               <span style={{ color: "var(--on-variant)" }}>+{c.dial}</span>
             </button>
           ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 import { useMemo, useState } from "react";
 import { useToast } from "@/components/ToastProvider";
 import { useReportActions, useReportPreview } from "@/hooks/useReports";
@@ -30,6 +31,7 @@ function lookOf(report: ReportDefinition): { icon: string; accent: string } {
 /** One report: its filters, a preview of the first rows, a download, and an email to chosen colleagues. */
 export default function ReportCard({ report, limits }: ReportCardProps) {
   const { showToast } = useToast();
+  const t = useT();
   const [filters, setFilters] = useState<ReportFilterValues>(() => defaultFilters(report));
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -38,7 +40,7 @@ export default function ReportCard({ report, limits }: ReportCardProps) {
   const actions = useReportActions(report.key, stable);
 
   async function handleDownload() {
-    if (await actions.download()) showToast(`${report.title} downloaded.`, "success");
+    if (await actions.download()) showToast(t("{title} downloaded.", { title: report.title }), "success");
   }
 
   async function handleSend(recipientIds: string[], note: string) {
@@ -86,12 +88,12 @@ export default function ReportCard({ report, limits }: ReportCardProps) {
       {/* One row: the main action takes the width; email and preview are small icon buttons with a tooltip and a spoken name. */}
       <div className="rp-actions">
         <button type="button" className="btn btn-filled btn-sm rp-download" onClick={handleDownload} disabled={actions.isBusy}>
-          <i className="ti ti-download" /> Download CSV
+          <i className="ti ti-download" /> {t("Download CSV")}
         </button>
-        <button type="button" className="rp-icon-btn" title="Email report" aria-label="Email report" onClick={() => { actions.clearError(); setIsSending(true); }}>
+        <button type="button" className="rp-icon-btn" title={t("Email report")} aria-label={t("Email report")} onClick={() => { actions.clearError(); setIsSending(true); }}>
           <i className="ti ti-mail-forward" />
         </button>
-        <button type="button" className={`rp-icon-btn${isPreviewing ? " is-on" : ""}`} title={isPreviewing ? "Hide preview" : "Preview"} aria-label={isPreviewing ? "Hide preview" : "Preview"} aria-pressed={isPreviewing} onClick={() => setIsPreviewing(!isPreviewing)}>
+        <button type="button" className={`rp-icon-btn${isPreviewing ? " is-on" : ""}`} title={isPreviewing ? t("Hide preview") : t("Preview")} aria-label={isPreviewing ? t("Hide preview") : t("Preview")} aria-pressed={isPreviewing} onClick={() => setIsPreviewing(!isPreviewing)}>
           <i className={`ti ${isPreviewing ? "ti-eye-off" : "ti-eye"}`} />
         </button>
       </div>
@@ -99,17 +101,17 @@ export default function ReportCard({ report, limits }: ReportCardProps) {
 
       {isPreviewing && (
         <div style={{ overflowX: "auto" }}>
-          {preview.loading && <p style={{ fontSize: 13 }}>Loading…</p>}
+          {preview.loading && <p style={{ fontSize: 13 }}>{t("Loading…")}</p>}
           {preview.error && <p role="alert" style={{ color: "var(--error)", fontSize: 13 }}>{preview.error}</p>}
           {preview.data && (
             <>
               <p style={{ fontSize: 12, color: "var(--on-variant)", margin: "0 0 6px" }}>
-                {preview.data.row_count} row{preview.data.row_count === 1 ? "" : "s"} · showing the first {preview.data.rows.length}
+                {preview.data.row_count === 1 ? t("{count} row", { count: preview.data.row_count }) : t("{count} rows", { count: preview.data.row_count })} · {t("showing the first {count}", { count: preview.data.rows.length })}
               </p>
               <table className="data-table" style={{ minWidth: 480 }}>
                 <thead><tr>{preview.data.headers.map(header => <th key={header}>{header}</th>)}</tr></thead>
                 <tbody>
-                  {preview.data.rows.length === 0 && <tr><td colSpan={preview.data.headers.length || 1}>No rows for these filters.</td></tr>}
+                  {preview.data.rows.length === 0 && <tr><td colSpan={preview.data.headers.length || 1}>{t("No rows for these filters.")}</td></tr>}
                   {preview.data.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}
                 </tbody>
               </table>

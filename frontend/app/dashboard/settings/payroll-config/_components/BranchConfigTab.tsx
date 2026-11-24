@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -13,6 +14,7 @@ interface PagedResponse<T> { results: T[]; count: number; }
 const PF_DEFAULTS = { rate: "12", ceiling: "15,000" };
 
 export default function BranchConfigTab() {
+  const t = useT();
   const { data: configs, loading: configLoading, refetch } = useFetch<BranchPayrollConfig[]>(API.payroll.branchConfig);
   const { data: structures } = useFetch<SalaryStructureListItem[]>(API.payroll.structures);
   const { data: branchPage, loading: branchLoading } = useFetch<PagedResponse<BranchOption>>(API.branches.list);
@@ -48,18 +50,18 @@ export default function BranchConfigTab() {
 
   function validateDraft(): string | null {
     for (const [key, label] of [
-      ["pf_employee_rate", "PF Employee Rate"], ["pf_employer_rate", "PF Employer Rate"],
+      ["pf_employee_rate", t("PF Employee Rate")], ["pf_employer_rate", t("PF Employer Rate")],
     ] as const) {
       const raw = current[key];
       if (raw === undefined || raw === null || raw === "") continue;
       const n = Number(raw);
-      if (Number.isNaN(n)) return `Enter a valid number for ${label}.`;
-      if (n < 0) return `${label} cannot be negative.`;
-      if (n > 100) return `${label} cannot exceed 100%.`;
+      if (Number.isNaN(n)) return t("Enter a valid number for {label}.", { label });
+      if (n < 0) return t("{label} cannot be negative.", { label });
+      if (n > 100) return t("{label} cannot exceed 100%.", { label });
     }
     const ceiling = current.pf_wage_ceiling;
     if (ceiling !== undefined && ceiling !== null && ceiling !== "" && Number(ceiling) < 0) {
-      return "PF Wage Ceiling cannot be negative.";
+      return t("PF Wage Ceiling cannot be negative.");
     }
     return null;
   }
@@ -77,9 +79,9 @@ export default function BranchConfigTab() {
       }
       setDraft({});
       refetch();
-      flash("Branch config saved.");
+      flash(t("Branch config saved."));
     } catch (err: unknown) {
-      flash((err as { message?: string })?.message || "Failed to save.", true);
+      flash((err as { message?: string })?.message || t("Failed to save."), true);
     } finally {
       setSaving(false);
     }
@@ -93,9 +95,9 @@ export default function BranchConfigTab() {
       await clientApi.delete(API.payroll.branchConfigDetail(existingConfig.id));
       setDraft({});
       refetch();
-      flash("Override removed — branch will use system defaults.");
+      flash(t("Override removed — branch will use system defaults."));
     } catch (err: unknown) {
-      flash((err as { message?: string })?.message || "Failed to remove override.", true);
+      flash((err as { message?: string })?.message || t("Failed to remove override."), true);
     } finally {
       setSaving(false);
     }
@@ -107,8 +109,8 @@ export default function BranchConfigTab() {
       <div className="w-60 shrink-0">
         <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--outline-v)]">
-            <span className="font-semibold text-[13px] text-[var(--on-bg)]">All Company Codes</span>
-            <div className="text-[11px] text-[var(--outline)] mt-0.5">Select to view or override PF</div>
+            <span className="font-semibold text-[13px] text-[var(--on-bg)]">{t("All Company Codes")}</span>
+            <div className="text-[11px] text-[var(--outline)] mt-0.5">{t("Select to view or override PF")}</div>
           </div>
           {loading ? (
             <div className="px-4 py-6 text-center text-[var(--outline)] text-xs"><i className="ti ti-loader-2 animate-spin" /></div>
@@ -125,8 +127,8 @@ export default function BranchConfigTab() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-medium text-[13px] text-[var(--on-bg)] truncate">{b.branch_name}</div>
                       {hasOverride
-                        ? <span className="shrink-0 text-[10px] font-semibold text-[var(--info)] bg-[var(--info-c)] border border-[var(--info)] px-1.5 py-0.5 rounded">Custom</span>
-                        : <span className="shrink-0 text-[10px] font-semibold text-[var(--outline)] bg-[var(--bg-mid)] px-1.5 py-0.5 rounded">Default</span>
+                        ? <span className="shrink-0 text-[10px] font-semibold text-[var(--info)] bg-[var(--info-c)] border border-[var(--info)] px-1.5 py-0.5 rounded">{t("Custom")}</span>
+                        : <span className="shrink-0 text-[10px] font-semibold text-[var(--outline)] bg-[var(--bg-mid)] px-1.5 py-0.5 rounded">{t("Default")}</span>
                       }
                     </div>
                     <div className="text-[10px] text-[var(--outline)] mt-0.5">{b.state_name}</div>
@@ -134,7 +136,7 @@ export default function BranchConfigTab() {
                 );
               })}
               {branches.length === 0 && (
-                <div className="px-4 py-6 text-center text-[var(--outline)] text-xs">No Company Codes found</div>
+                <div className="px-4 py-6 text-center text-[var(--outline)] text-xs">{t("No Company Codes found")}</div>
               )}
             </div>
           )}
@@ -152,8 +154,8 @@ export default function BranchConfigTab() {
         {!selectedBranch ? (
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] px-6 py-12 text-center text-[var(--outline)]">
             <i className="ti ti-building text-3xl mb-2 block" />
-            <div className="text-sm">Select a Company Code to view its PF configuration</div>
-            <div className="text-[11px] mt-1">All Company Codes use standard defaults unless overridden</div>
+            <div className="text-sm">{t("Select a Company Code to view its PF configuration")}</div>
+            <div className="text-[11px] mt-1">{t("All Company Codes use standard defaults unless overridden")}</div>
           </div>
         ) : (
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] overflow-hidden">
@@ -163,12 +165,12 @@ export default function BranchConfigTab() {
                 <span className="ml-2 text-[12px] text-[var(--outline)]">{selectedBranch.state_name}</span>
                 {!existingConfig && (
                   <span className="ml-2 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded">
-                    Using system defaults
+                    {t("Using system defaults")}
                   </span>
                 )}
                 {existingConfig && (
                   <span className="ml-2 text-[11px] font-semibold text-[var(--info)] bg-[var(--info-c)] border border-[var(--info)] px-2 py-0.5 rounded">
-                    Custom override active
+                    {t("Custom override active")}
                   </span>
                 )}
               </div>
@@ -179,7 +181,7 @@ export default function BranchConfigTab() {
                     disabled={saving}
                     className="px-3 py-1.5 text-[12px] font-medium text-[var(--error)] border border-[var(--error)] rounded-lg hover:bg-[var(--error-c)] disabled:opacity-50"
                   >
-                    Remove Override
+                    {t("Remove Override")}
                   </button>
                 )}
                 {hasChanges && (
@@ -188,14 +190,14 @@ export default function BranchConfigTab() {
                       onClick={() => setDraft({})}
                       className="px-3 py-1.5 text-[12px] font-medium text-[var(--on-variant)] border border-[var(--outline-v)] rounded-lg hover:bg-[var(--bg-mid)]"
                     >
-                      Discard
+                      {t("Discard")}
                     </button>
                     <button
                       onClick={saveConfig}
                       disabled={saving}
                       className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--info)] text-white rounded-lg hover:bg-[var(--info)] disabled:opacity-50"
                     >
-                      {saving ? "Saving…" : <><i className="ti ti-device-floppy text-sm" /> Save Override</>}
+                      {saving ? t("Saving…") : <><i className="ti ti-device-floppy text-sm" /> {t("Save Override")}</>}
                     </button>
                   </>
                 )}
@@ -208,26 +210,26 @@ export default function BranchConfigTab() {
                 <div className="flex items-start gap-3 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-[12px] text-emerald-800">
                   <i className="ti ti-info-circle mt-0.5 shrink-0" />
                   <span>
-                    This branch uses <strong>system defaults</strong> — PF at {PF_DEFAULTS.rate}% employee / {PF_DEFAULTS.rate}% employer on basic salary up to ₹{PF_DEFAULTS.ceiling}.
-                    Override below only if this branch has non-standard PF rules (e.g. PF-exempt establishment).
+                    {t("This branch uses")} <strong>{t("system defaults")}</strong> {t("— PF at {employee}% employee / {employer}% employer on basic salary up to ₹{ceiling}.", { employee: PF_DEFAULTS.rate, employer: PF_DEFAULTS.rate, ceiling: PF_DEFAULTS.ceiling })}
+                    {t("Override below only if this branch has non-standard PF rules (e.g. PF-exempt establishment).")}
                   </span>
                 </div>
               )}
 
               {/* Salary structure override */}
               <div>
-                <div className="text-[12px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-3">Salary Structure</div>
+                <div className="text-[12px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-3">{t("Salary Structure")}</div>
                 <div>
-                  <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">Structure Override</label>
-                  <div className="text-[11px] text-[var(--outline)] mb-2">Leave blank to use the company default structure</div>
+                  <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">{t("Structure Override")}</label>
+                  <div className="text-[11px] text-[var(--outline)] mb-2">{t("Leave blank to use the company default structure")}</div>
                   <select
                     value={current.salary_structure ?? ""}
                     onChange={e => set("salary_structure", e.target.value || null as unknown as string)}
                     className="w-full max-w-xs rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
                   >
-                    <option value="">— Use company default —</option>
+                    <option value="">{t("— Use company default —")}</option>
                     {(structures ?? []).filter(s => s.is_active).map(s => (
-                      <option key={s.id} value={s.id}>{s.name}{s.is_default ? " (Default)" : ""}</option>
+                      <option key={s.id} value={s.id}>{s.name}{s.is_default ? ` ${t("(Default)")}` : ""}</option>
                     ))}
                   </select>
                 </div>
@@ -236,14 +238,14 @@ export default function BranchConfigTab() {
               {/* PF config */}
               <div>
                 <div className="text-[12px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-3">
-                  Provident Fund (PF)
-                  {!existingConfig && <span className="ml-2 normal-case font-normal text-[var(--outline)]">— defaults shown, edit to override</span>}
+                  {t("Provident Fund (PF)")}
+                  {!existingConfig && <span className="ml-2 normal-case font-normal text-[var(--outline)]">{t("— defaults shown, edit to override")}</span>}
                 </div>
 
                 <div className="flex items-center justify-between mb-3 py-2 px-3 bg-[var(--bg-mid)] rounded-lg">
                   <div>
-                    <span className="text-[13px] font-medium text-[var(--on-bg)]">PF Applicable</span>
-                    {!existingConfig && <span className="ml-2 text-[11px] text-[var(--outline)]">(default: yes)</span>}
+                    <span className="text-[13px] font-medium text-[var(--on-bg)]">{t("PF Applicable")}</span>
+                    {!existingConfig && <span className="ml-2 text-[11px] text-[var(--outline)]">{t("(default: yes)")}</span>}
                   </div>
                   <button
                     onClick={() => set("pf_applicable", !(current.pf_applicable ?? true))}
@@ -256,20 +258,20 @@ export default function BranchConfigTab() {
                 {(current.pf_applicable ?? true) && (
                   <div className="grid grid-cols-3 gap-3">
                     <NumField
-                      label="Employee Rate (%)"
-                      placeholder="Default: 12"
+                      label={t("Employee Rate (%)")}
+                      placeholder={t("Default: 12")}
                       value={String(current.pf_employee_rate ?? "")}
                       onChange={v => set("pf_employee_rate", v)}
                     />
                     <NumField
-                      label="Employer Rate (%)"
-                      placeholder="Default: 12"
+                      label={t("Employer Rate (%)")}
+                      placeholder={t("Default: 12")}
                       value={String(current.pf_employer_rate ?? "")}
                       onChange={v => set("pf_employer_rate", v)}
                     />
                     <NumField
-                      label="Wage Ceiling (₹)"
-                      placeholder="Default: 15000"
+                      label={t("Wage Ceiling (₹)")}
+                      placeholder={t("Default: 15000")}
                       value={String(current.pf_wage_ceiling ?? "")}
                       onChange={v => set("pf_wage_ceiling", v)}
                     />
@@ -283,9 +285,9 @@ export default function BranchConfigTab() {
 
       {confirmRemove && selectedBranch && (
         <ConfirmModal
-          title="Remove PF override?"
-          body={`This removes the custom PF configuration for ${selectedBranch.branch_name}. The branch will immediately fall back to system defaults (${PF_DEFAULTS.rate}% employee / ${PF_DEFAULTS.rate}% employer on basic salary up to ₹${PF_DEFAULTS.ceiling}) for any payroll processed after this. This cannot be undone.`}
-          confirmLabel="Remove Override"
+          title={t("Remove PF override?")}
+          body={t("This removes the custom PF configuration for {branch}. The branch will immediately fall back to system defaults ({employee}% employee / {employer}% employer on basic salary up to ₹{ceiling}) for any payroll processed after this. This cannot be undone.", { branch: selectedBranch.branch_name, employee: PF_DEFAULTS.rate, employer: PF_DEFAULTS.rate, ceiling: PF_DEFAULTS.ceiling })}
+          confirmLabel={t("Remove Override")}
           danger
           saving={saving}
           onConfirm={removeConfig}

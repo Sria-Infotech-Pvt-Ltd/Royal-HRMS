@@ -1,5 +1,6 @@
 import type { CompanyData, CompanyFieldErrors } from "@/types/company";
 import { validatePortalUrl } from "@/lib/portalUrl";
+import { tr } from "@/lib/i18n/tr";
 
 // ─── Indian states / UTs ──────────────────────────────────────────────────────
 
@@ -267,25 +268,25 @@ export const FINANCIAL_YEAR_OPTIONS = MONTH_ORDER.map(start => {
 export function entityComplianceHint(jurisdiction: string, entityType: string, entityLabel: string): string | null {
   if (!entityType) return null;
   if (jurisdiction === "foreign") {
-    return `A foreign ${entityLabel.split(" — ")[0].toLowerCase()} is identified by its local incorporation number and tax ID. India-specific IDs (PAN, GSTIN, TAN) don't apply.`;
+    return tr("A foreign {entity} is identified by its local incorporation number and tax ID. India-specific IDs (PAN, GSTIN, TAN) don't apply.", { entity: entityLabel.split(" — ")[0].toLowerCase() });
   }
   if (CIN_ENTITY_TYPES.has(entityType)) {
-    return `A ${entityLabel.split(" — ")[0]} files a CIN and needs directors with DINs. PAN 4th char should be C.`;
+    return tr("A {entity} files a CIN and needs directors with DINs. PAN 4th char should be C.", { entity: entityLabel.split(" — ")[0] });
   }
   if (entityType === "llp") {
-    return "An LLP doesn't file a CIN — it's identified by its LLPIN, filed under the LLP Act rather than the Companies Act. PAN 4th char should be F.";
+    return tr("An LLP doesn't file a CIN — it's identified by its LLPIN, filed under the LLP Act rather than the Companies Act. PAN 4th char should be F.");
   }
   if (entityType === "partnership") {
-    return "A Partnership Firm doesn't file a CIN — enter its registration number from the certificate instead. PAN 4th char should be F.";
+    return tr("A Partnership Firm doesn't file a CIN — enter its registration number from the certificate instead. PAN 4th char should be F.");
   }
   if (entityType === "sole_proprietorship") {
-    return "A Proprietorship uses the proprietor's own PAN (4th char P) — no separate CIN or firm PAN.";
+    return tr("A Proprietorship uses the proprietor's own PAN (4th char P) — no separate CIN or firm PAN.");
   }
   if (entityType === "huf") {
-    return "An HUF isn't registered under the Companies Act — no CIN. It's identified by its own HUF PAN (4th char H) and the karta's details.";
+    return tr("An HUF isn't registered under the Companies Act — no CIN. It's identified by its own HUF PAN (4th char H) and the karta's details.");
   }
   if (entityType === "trust_society") {
-    return "A Trust or Society is registered under trust/society law, not the Companies Act — no CIN. Identified by its own PAN (4th char T for a Trust, A for a Society) and registration certificate.";
+    return tr("A Trust or Society is registered under trust/society law, not the Companies Act — no CIN. Identified by its own PAN (4th char T for a Trust, A for a Society) and registration certificate.");
   }
   return null;
 }
@@ -396,23 +397,23 @@ const VALID_GST_STATE_CODES = new Set(Object.values(GST_STATE_CODES));
 export function gstinLiveStatus(gstin: string, companyPan: string, state: string): { ok: boolean; text: string } | null {
   const v = gstin.trim().toUpperCase();
   if (v.length < 15) return null;
-  if (!GSTIN_RE.test(v)) return { ok: false, text: "Not a valid GSTIN format." };
+  if (!GSTIN_RE.test(v)) return { ok: false, text: tr("Not a valid GSTIN format.") };
   if (gstinCheckDigit(v.slice(0, 14)) !== v[14]) {
-    return { ok: false, text: "Invalid GSTIN checksum — check for a typo." };
+    return { ok: false, text: tr("Invalid GSTIN checksum — check for a typo.") };
   }
   if (!VALID_GST_STATE_CODES.has(v.slice(0, 2))) {
-    return { ok: false, text: `${v.slice(0, 2)} isn't a valid GST state code.` };
+    return { ok: false, text: tr("{code} isn't a valid GST state code.", { code: v.slice(0, 2) }) };
   }
 
   const pan = companyPan.trim().toUpperCase();
   if (pan && v.slice(2, 12) !== pan) {
-    return { ok: false, text: `Belongs to PAN ${v.slice(2, 12)}, not the company PAN.` };
+    return { ok: false, text: tr("Belongs to PAN {pan}, not the company PAN.", { pan: v.slice(2, 12) }) };
   }
   const expectedCode = state ? GST_STATE_CODES[state] : undefined;
   if (expectedCode && v.slice(0, 2) !== expectedCode) {
-    return { ok: false, text: `State code ${v.slice(0, 2)} doesn't match ${state}.` };
+    return { ok: false, text: tr("State code {code} doesn't match {state}.", { code: v.slice(0, 2), state }) };
   }
-  return { ok: true, text: pan ? "valid · PAN matches" : "valid format" };
+  return { ok: true, text: pan ? tr("valid · PAN matches") : tr("valid format") };
 }
 
 // ─── Validators ───────────────────────────────────────────────────────────────
@@ -466,36 +467,36 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
 
   if (isDraft) {
     if (f.website && !isValidWebsite(f.website.trim()))
-      e.website = "Enter a valid website, e.g. www.example.com.";
+      e.website = tr("Enter a valid website, e.g. www.example.com.");
     const draftPortalError = validatePortalUrl(f.portal_url ?? "");
     if (draftPortalError) e.portal_url = draftPortalError;
     return e;
   }
 
-  if (!f.company_name.trim()) e.company_name = "Company name is required.";
-  if (!f.address.trim())      e.address      = "Address is required.";
-  if (!f.city.trim())         e.city         = "City is required.";
+  if (!f.company_name.trim()) e.company_name = tr("Company name is required.");
+  if (!f.address.trim())      e.address      = tr("Address is required.");
+  if (!f.city.trim())         e.city         = tr("City is required.");
 
   if (f.jurisdiction === "india") {
-    if (!f.pan.trim())                              e.pan = "PAN is required for an Indian entity.";
-    else if (!PAN_RE.test(f.pan.trim().toUpperCase())) e.pan = "Enter a valid 10-character PAN.";
+    if (!f.pan.trim())                              e.pan = tr("PAN is required for an Indian entity.");
+    else if (!PAN_RE.test(f.pan.trim().toUpperCase())) e.pan = tr("Enter a valid 10-character PAN.");
 
     // TAN is intentionally NOT required here, for any entity type — matches
     // the approved design reference, which marks it "(for TDS)"/optional
     // throughout and never makes it required per entity type. Format is
     // still checked whenever a value is actually entered.
-    if (f.tan.trim() && !TAN_RE.test(f.tan.trim().toUpperCase())) e.tan = "Enter a valid 10-character TAN.";
+    if (f.tan.trim() && !TAN_RE.test(f.tan.trim().toUpperCase())) e.tan = tr("Enter a valid 10-character TAN.");
 
     const regConfig = REGISTRATION_NUMBER_CONFIG[f.entity_type] ?? null;
     if (regConfig) {
       if (regConfig.required && !f.cin.trim()) {
-        e.cin = `${regConfig.label} is required for this entity type.`;
+        e.cin = tr("{label} is required for this entity type.", { label: regConfig.label });
       } else if (f.cin.trim() && CIN_ENTITY_TYPES.has(f.entity_type) && !CIN_RE.test(f.cin.trim().toUpperCase())) {
-        e.cin = "Enter a valid CIN (e.g. U74999MH2020PTC123456).";
+        e.cin = tr("Enter a valid CIN (e.g. U74999MH2020PTC123456).");
       } else if (f.cin.trim() && f.entity_type === "llp" && !LLPIN_RE.test(f.cin.trim().toUpperCase())) {
-        e.cin = "LLPIN is 3 letters + 4 digits (e.g. AAB-1234).";
+        e.cin = tr("LLPIN is 3 letters + 4 digits (e.g. AAB-1234).");
       } else if (f.cin.trim() && !CIN_ENTITY_TYPES.has(f.entity_type) && f.entity_type !== "llp" && f.cin.trim().length < 3) {
-        e.cin = "Enter the registration number from your certificate.";
+        e.cin = tr("Enter the registration number from your certificate.");
       }
     }
 
@@ -509,68 +510,68 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
       if (parsed) {
         const expectedClass = CIN_CLASS_BY_ENTITY[f.entity_type];
         if (expectedClass && parsed.classCode !== expectedClass) {
-          e.cin = `This CIN's company class (${parsed.classCode}) doesn't match the selected entity type (expected ${expectedClass}).`;
+          e.cin = tr("This CIN's company class ({found}) doesn't match the selected entity type (expected {expected}).", { found: parsed.classCode, expected: expectedClass });
         } else if (parsed.listing === "Listed" && CIN_CANNOT_BE_LISTED_ENTITY_TYPES.has(f.entity_type)) {
-          e.cin = "This CIN's listing prefix (L) marks it as a listed company, which isn't possible for this entity type.";
+          e.cin = tr("This CIN's listing prefix (L) marks it as a listed company, which isn't possible for this entity type.");
         } else if (f.state && ROC_STATE_CODES[f.state] && parsed.stateCode !== ROC_STATE_CODES[f.state]) {
-          e.cin = `This CIN's state code (${parsed.stateCode}) doesn't match the registered office state (${f.state}).`;
+          e.cin = tr("This CIN's state code ({code}) doesn't match the registered office state ({state}).", { code: parsed.stateCode, state: f.state });
         } else if (f.date_of_incorporation && parsed.year !== f.date_of_incorporation.slice(0, 4)) {
-          e.cin = `This CIN's registration year (${parsed.year}) doesn't match the Date of Incorporation (${f.date_of_incorporation.slice(0, 4)}).`;
+          e.cin = tr("This CIN's registration year ({year}) doesn't match the Date of Incorporation ({incorporationYear}).", { year: parsed.year, incorporationYear: f.date_of_incorporation.slice(0, 4) });
         }
       }
     }
 
-    if (f.pin_code.trim() && !isValidPin(f.pin_code.trim())) e.pin_code = "Enter a valid 6-digit Indian PIN code (can't start with 0).";
+    if (f.pin_code.trim() && !isValidPin(f.pin_code.trim())) e.pin_code = tr("Enter a valid 6-digit Indian PIN code (can't start with 0).");
 
     if (f.iec.trim() && !PAN_RE.test(f.iec.trim().toUpperCase())) {
-      e.iec = "IEC is PAN-based since 2018 — enter a valid 10-character PAN-format code.";
+      e.iec = tr("IEC is PAN-based since 2018 — enter a valid 10-character PAN-format code.");
     } else if (f.iec.trim() && f.pan.trim() && f.iec.trim().toUpperCase() !== f.pan.trim().toUpperCase()) {
-      e.iec = `IEC is PAN-based since 2018 and should match the company PAN (${f.pan.trim().toUpperCase()}).`;
+      e.iec = tr("IEC is PAN-based since 2018 and should match the company PAN ({pan}).", { pan: f.pan.trim().toUpperCase() });
     }
   } else {
-    if (!f.country_of_registration.trim()) e.country_of_registration = "Country of registration is required for a foreign entity.";
-    if (!f.registration_number.trim())     e.registration_number     = "Registration number is required for a foreign entity.";
+    if (!f.country_of_registration.trim()) e.country_of_registration = tr("Country of registration is required for a foreign entity.");
+    if (!f.registration_number.trim())     e.registration_number     = tr("Registration number is required for a foreign entity.");
     // EIN is a US IRS-issued tax ID — only required for US-registered
     // entities, same idea as CIN only applying to certain India entity types.
-    if (f.country_of_registration === "US" && !f.ein.trim()) e.ein = "EIN is required for a US entity.";
+    if (f.country_of_registration === "US" && !f.ein.trim()) e.ein = tr("EIN is required for a US entity.");
   }
 
   if (!f.communication_address_same_as_registered) {
-    if (!f.communication_address.trim()) e.communication_address = "Communication address is required when it differs from the registered office.";
-    if (!f.communication_city.trim())    e.communication_city    = "Communication city is required when it differs from the registered office.";
+    if (!f.communication_address.trim()) e.communication_address = tr("Communication address is required when it differs from the registered office.");
+    if (!f.communication_city.trim())    e.communication_city    = tr("Communication city is required when it differs from the registered office.");
     if (f.communication_pin_code.trim() && !isValidPin(f.communication_pin_code.trim()))
-      e.communication_pin_code = "Enter a valid 6-digit Indian PIN code (can't start with 0).";
+      e.communication_pin_code = tr("Enter a valid 6-digit Indian PIN code (can't start with 0).");
   }
 
   if (f.date_of_incorporation) {
     const today = new Date().toISOString().slice(0, 10);
     if (f.date_of_incorporation > today) {
-      e.date_of_incorporation = "Date of Incorporation can't be in the future.";
+      e.date_of_incorporation = tr("Date of Incorporation can't be in the future.");
     } else if (f.date_of_incorporation < MIN_INCORPORATION_DATE) {
-      e.date_of_incorporation = "Enter a realistic Date of Incorporation.";
+      e.date_of_incorporation = tr("Enter a realistic Date of Incorporation.");
     }
   }
 
   if (f.website && !isValidWebsite(f.website.trim()))
-    e.website = "Enter a valid website, e.g. www.example.com.";
+    e.website = tr("Enter a valid website, e.g. www.example.com.");
   const portalError = validatePortalUrl(f.portal_url ?? "");
   if (portalError) e.portal_url = portalError;
-  if (f.official_phone && !PHONE_RE.test(f.official_phone)) e.official_phone = "Enter a valid phone number.";
-  if (f.primary_email && !EMAIL_RE.test(f.primary_email))   e.primary_email  = "Enter a valid email address.";
-  if (f.signatory_email && !EMAIL_RE.test(f.signatory_email)) e.signatory_email = "Enter a valid email address.";
+  if (f.official_phone && !PHONE_RE.test(f.official_phone)) e.official_phone = tr("Enter a valid phone number.");
+  if (f.primary_email && !EMAIL_RE.test(f.primary_email))   e.primary_email  = tr("Enter a valid email address.");
+  if (f.signatory_email && !EMAIL_RE.test(f.signatory_email)) e.signatory_email = tr("Enter a valid email address.");
 
   if (f.udyam_msme.trim() && !UDYAM_RE.test(f.udyam_msme.trim().toUpperCase()))
-    e.udyam_msme = "Enter a valid Udyam number (e.g. UDYAM-TS-00-0000000).";
+    e.udyam_msme = tr("Enter a valid Udyam number (e.g. UDYAM-TS-00-0000000).");
   if (f.epfo_code.trim() && !LOOSE_REGISTRATION_RE.test(f.epfo_code.trim().toUpperCase()))
-    e.epfo_code = "EPFO code must be 30 characters or fewer, letters/digits/slashes/hyphens only.";
+    e.epfo_code = tr("EPFO code must be 30 characters or fewer, letters/digits/slashes/hyphens only.");
   if (f.esic_code.trim() && !ESIC_RE.test(f.esic_code.trim()))
-    e.esic_code = "ESIC code must be exactly 17 digits.";
+    e.esic_code = tr("ESIC code must be exactly 17 digits.");
   if (f.professional_tax_reg.trim() && !LOOSE_REGISTRATION_RE.test(f.professional_tax_reg.trim().toUpperCase()))
-    e.professional_tax_reg = "Must be 30 characters or fewer, letters/digits/slashes/hyphens only.";
+    e.professional_tax_reg = tr("Must be 30 characters or fewer, letters/digits/slashes/hyphens only.");
   if (f.signatory_din_pan.trim()) {
     const v = f.signatory_din_pan.trim().toUpperCase();
     if (!DIN_RE.test(v) && !PAN_RE.test(v)) {
-      e.signatory_din_pan = "Enter a valid DIN (8 digits) or PAN (10 characters) — the signatory is not always a director.";
+      e.signatory_din_pan = tr("Enter a valid DIN (8 digits) or PAN (10 characters) — the signatory is not always a director.");
     }
   }
 

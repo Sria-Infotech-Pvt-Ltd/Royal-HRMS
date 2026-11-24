@@ -3,6 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { RecruitmentFunnel } from "@/types/dashboard";
+import { useT } from "@/hooks/useI18n";
 
 const STAGES: { key: keyof RecruitmentFunnel; label: string; icon: string }[] = [
   { key: "interviews_scheduled", label: "Scheduled",        icon: "ti-calendar-event" },
@@ -13,6 +14,7 @@ const STAGES: { key: keyof RecruitmentFunnel; label: string; icon: string }[] = 
 ];
 
 export default function HrRecruitmentFunnel() {
+  const t = useT();
   const { data, loading } = useFetch<RecruitmentFunnel>(API.dashboard.hrRecruitmentFunnel);
 
   const maxVal = data
@@ -22,12 +24,12 @@ export default function HrRecruitmentFunnel() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-filter" /> Recruitment Funnel</div>
+        <div className="card-title"><i className="ti ti-filter" /> {t("Recruitment Funnel")}</div>
       </div>
 
       {loading ? (
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+          <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
         </div>
       ) : (
         <div style={{ padding: "12px 20px 16px" }}>
@@ -41,7 +43,7 @@ export default function HrRecruitmentFunnel() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <i className={`ti ${stage.icon}`} style={{ fontSize: 13, color: "var(--on-variant)", width: 16 }} />
-                    <span style={{ fontSize: 12, fontWeight: 500, color: "var(--on-bg)" }}>{stage.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: "var(--on-bg)" }}>{t(stage.label)}</span>
                   </div>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "var(--on-bg)", minWidth: 24, textAlign: "right" }}>{val}</span>
                 </div>

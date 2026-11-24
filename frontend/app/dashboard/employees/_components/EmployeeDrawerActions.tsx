@@ -10,6 +10,7 @@
 // Perform an action (raise) + Leave; HR sees all three.
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 import type { Employee } from "../_data";
 import PerformActionModal from "./PerformActionModal";
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export default function EmployeeDrawerActions({ employee, onChanged, isExited = false }: Props) {
+  const t = useT();
   const canEdit   = usePermission("employees.edit");
   const canRaise  = usePermission("employees.raise_action");
   const canPay    = usePermission("payroll.view");
@@ -40,18 +42,18 @@ export default function EmployeeDrawerActions({ employee, onChanged, isExited = 
   return (
     <>
       <div className="emp-record-actions">
-        {canAct   && <button className="rvbtn" type="button" onClick={() => setOpen("action")}>Perform an action</button>}
-        {canPay   && <button className="rvbtn" type="button" onClick={() => setOpen("pay")}>Basic pay</button>}
-        {canLeave && <button className="rvbtn" type="button" onClick={() => setOpen("leave")}>Leave</button>}
+        {canAct   && <button className="rvbtn" type="button" onClick={() => setOpen("action")}>{t("Perform an action")}</button>}
+        {canPay   && <button className="rvbtn" type="button" onClick={() => setOpen("pay")}>{t("Basic pay")}</button>}
+        {canLeave && <button className="rvbtn" type="button" onClick={() => setOpen("leave")}>{t("Leave")}</button>}
       </div>
       <div className="hint">
         {canEditRecord
-          ? <>Press <b>Edit full record</b> to correct existing data. Use an <b>action</b> for effective-dated changes.</>
+          ? <>{t("Press")} <b>{t("Edit full record")}</b> {t("to correct existing data. Use an")} <b>{t("action")}</b> {t("for effective-dated changes.")}</>
           : canRaise
-            ? <>Use an <b>action</b> for effective-dated changes — it is sent to the approvers on its route, and nothing changes until they approve.</>
+            ? <>{t("Use an")} <b>{t("action")}</b> {t("for effective-dated changes — it is sent to the approvers on its route, and nothing changes until they approve.")}</>
             : canEditPay
-              ? <>Use <b>Basic pay</b> to revise this employee&apos;s pay with an effective date. Other changes to the record are made by HR.</>
-              : <>This record is read-only for your role.</>}
+              ? <>{t("Use")} <b>{t("Basic pay")}</b> {t("to revise this employee's pay with an effective date. Other changes to the record are made by HR.")}</>
+              : <>{t("This record is read-only for your role.")}</>}
       </div>
 
       {open === "action" && (

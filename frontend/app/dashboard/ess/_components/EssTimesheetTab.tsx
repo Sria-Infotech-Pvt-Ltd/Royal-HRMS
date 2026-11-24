@@ -4,6 +4,7 @@
 // selected) instead of on a page of its own. Pick a week, enter hours per project, save a draft or submit for approval.
 
 import { useTimesheetWeek } from "@/hooks/useTimesheetWeek";
+import { useT } from "@/hooks/useI18n";
 import TimesheetEditor from "../../timesheet/_components/TimesheetEditor";
 import TimesheetHeader from "../../timesheet/_components/TimesheetHeader";
 
@@ -17,18 +18,19 @@ interface Props {
 }
 
 export default function EssTimesheetTab({ week, isReadOnly, onGoToWeek, onBack }: Props) {
+  const t = useT();
   const { view, loading, error, refetch, save, submit, isSaving, isSubmitting, problems } = useTimesheetWeek(week);
 
   return (
     <div className="ess-card">
       <button type="button" className="rvbtn ghost" style={{ marginBottom: 8 }} onClick={onBack}>
-        <i className="ti ti-arrow-left" aria-hidden="true" /> Back to Attendance
+        <i className="ti ti-arrow-left" aria-hidden="true" /> {t("Back to Attendance")}
       </button>
-      {loading && <p>Loading…</p>}
+      {loading && <p>{t("Loading…")}</p>}
       {!loading && !view && (
         <div role="alert">
-          <p>{error ?? "The timesheet could not be loaded."}</p>
-          <button type="button" className="rvbtn" onClick={refetch}>Try again</button>
+          <p>{error ?? t("The timesheet could not be loaded.")}</p>
+          <button type="button" className="rvbtn" onClick={refetch}>{t("Try again")}</button>
         </div>
       )}
       {view && (

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Modal from "@/components/Modal";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import type { EmployeeExpenseSummary, EmployeePayslip, ExpenseItem } from "@/types/payroll";
 
@@ -22,6 +23,7 @@ const fmt = (n: string | number) =>
   `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
 export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const expenses: ExpenseItem[] = summary?.expenses ?? [];
 
@@ -52,11 +54,11 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
     if (manualMode || expenses.length === 0) {
       const amount = Number(manualAmount);
       if (manualAmount.trim() === "" || Number.isNaN(amount)) {
-        setErr("Enter a reimbursement amount.");
+        setErr(t("Enter a reimbursement amount."));
         return;
       }
       if (amount < 0) {
-        setErr("Reimbursement amount cannot be negative.");
+        setErr(t("Reimbursement amount cannot be negative."));
         return;
       }
     }
@@ -66,11 +68,11 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
         ? { reimbursements: manualAmount }
         : { expense_ids: [...checked] };
       await clientApi.patch(API.payroll.payslipReimbBonus(payslip.id), payload);
-      showToast("Reimbursements updated.", "success");
+      showToast(t("Reimbursements updated."), "success");
       onSaved();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? "Failed to save.";
+        ?? t("Failed to save.");
       showToast(msg, "error");
     } finally {
       setSaving(false);
@@ -82,18 +84,18 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
       title={
         <>
           <i className="ti ti-receipt" style={{ marginRight: 6 }} />
-          Reimbursements — {payslip.employee_name}
+          {t("Reimbursements — {name}", { name: payslip.employee_name })}
         </>
       }
       onClose={onClose}
       maxWidth={520}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
             {saving
-              ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</>
-              : <><i className="ti ti-check" /> Save</>
+              ? <><i className="ti ti-loader-2 animate-spin" /> {t("Saving…")}</>
+              : <><i className="ti ti-check" /> {t("Save")}</>
             }
           </button>
         </>
@@ -113,13 +115,13 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
               className={`btn btn-sm ${!manualMode ? "btn-filled" : "btn-ghost"}`}
               onClick={() => setManualMode(false)}
             >
-              <i className="ti ti-list-check" /> From expense claims
+              <i className="ti ti-list-check" /> {t("From expense claims")}
             </button>
             <button
               className={`btn btn-sm ${manualMode ? "btn-filled" : "btn-ghost"}`}
               onClick={() => setManualMode(true)}
             >
-              <i className="ti ti-pencil" /> Enter manually
+              <i className="ti ti-pencil" /> {t("Enter manually")}
             </button>
           </div>
         )}
@@ -127,7 +129,7 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
         {!manualMode && expenses.length > 0 && (
           <>
             <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              Select expense claims to disburse in this payroll run.
+              {t("Select expense claims to disburse in this payroll run.")}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
               {expenses.map(exp => (
@@ -144,7 +146,7 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{exp.title}</div>
                     <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                      {CATEGORY_LABEL[exp.category] ?? exp.category} · {exp.expense_date}
+                      {CATEGORY_LABEL[exp.category] ? t(CATEGORY_LABEL[exp.category]) : exp.category} · {exp.expense_date}
                     </div>
                   </div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: "var(--info)", flexShrink: 0 }}>
@@ -154,7 +156,7 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
               ))}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--outline-v)", fontWeight: 700 }}>
-              <span>Total selected</span>
+              <span>{t("Total selected")}</span>
               <span style={{ color: "var(--info)" }}>{fmt(checkedTotal)}</span>
             </div>
           </>
@@ -164,10 +166,10 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
           <div>
             {expenses.length === 0 && (
               <div className="alert alert-info" style={{ marginBottom: 12 }}>
-                <i className="ti ti-info-circle" /> No approved expense claims found for this employee.
+                <i className="ti ti-info-circle" /> {t("No approved expense claims found for this employee.")}
               </div>
             )}
-            <label className="field-label">Reimbursement Amount (₹)</label>
+            <label className="field-label">{t("Reimbursement Amount (₹)")}</label>
             <input
               type="number"
               className="field-input"

@@ -109,7 +109,7 @@ export default function TeamCoverageCard() {
                 <div className="lv-row-title">{fmtRangeLabel(row.start, row.end)}</div>
                 <div className="lv-row-meta">
                   {row.isAway
-                    ? `${row.maxCount} team member${row.maxCount === 1 ? "" : "s"} already away · Manager review required`
+                    ? `${row.maxCount === 1 ? tr("{count} team member already away", { count: row.maxCount }) : tr("{count} team members already away", { count: row.maxCount })} · ${tr("Manager review required")}`
                     : tr("No scheduled team overlap")}
                 </div>
               </div>

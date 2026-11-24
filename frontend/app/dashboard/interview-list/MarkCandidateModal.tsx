@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailPreview";
 import { Candidate, EmailTemplate, MODE_LABELS, RECRUITMENT_API } from "./_data";
 import clientApi from "@/lib/clientApi";
+import { useT } from "@/hooks/useI18n";
 
 interface Props {
   candidate:    Candidate;
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirmed }: Props) {
+  const t = useT();
   const isSelect = targetStatus === "selected";
 
   const [remarks,          setRemarks]          = useState("");
@@ -37,18 +39,18 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
     ])
       .then(([tplRes, coRes]) => {
         const grouped: Record<string, EmailTemplate[]> = tplRes.data?.data?.results ?? {} as Record<string, EmailTemplate[]>;
-        const all = Object.values(grouped).flat().filter(t => t.is_active);
-        const found = all.find(t => t.name === defaultSlug) ?? null;
+        const all = Object.values(grouped).flat().filter(template => template.is_active);
+        const found = all.find(template => template.name === defaultSlug) ?? null;
         setSelectedTemplate(found);
         if (!found) {
-          setApiError(`No active "${defaultSlug}" email template found. Create one in Settings → Email Templates first.`);
+          setApiError(t("No active \"{slug}\" email template found. Create one in Settings → Email Templates first.", { slug: defaultSlug }));
         }
 
         setCompany(coRes.data?.data ?? null);
       })
-      .catch(() => setApiError("Could not load templates or company info."))
+      .catch(() => setApiError(t("Could not load templates or company info.")))
       .finally(() => setLoadingTemplates(false));
-  }, [defaultSlug]);
+  }, [defaultSlug, t]);
 
   // Resolve every real variable the backend knows for this candidate — the
   // source of truth, so any template variable matching a real field
@@ -120,7 +122,7 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
       onConfirmed(res.data.data);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setApiError(msg || "Action failed.");
+      setApiError(msg || t("Action failed."));
     } finally {
       setSaving(false);
     }
@@ -132,20 +134,20 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
 
   return (
     <Modal
-      title={<>{isSelect ? "Select" : "Reject"} Candidate — {candidate.name}</>}
+      title={isSelect ? t("Select Candidate — {name}", { name: candidate.name }) : t("Reject Candidate — {name}", { name: candidate.name })}
       onClose={onClose}
       maxWidth={640}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button
             className={`btn ${isSelect ? "btn-success" : "btn-danger"}`}
             onClick={handleConfirm}
             disabled={saving || loadingTemplates || !selectedTemplate}
           >
             {saving
-              ? <><i className="ti ti-loader-2 spin" /> Sending…</>
-              : <><i className={`ti ${isSelect ? "ti-check" : "ti-x"}`} /> Confirm & Send Email</>
+              ? <><i className="ti ti-loader-2 spin" /> {t("Sending…")}</>
+              : <><i className={`ti ${isSelect ? "ti-check" : "ti-x"}`} /> {t("Confirm & Send Email")}</>
             }
           </button>
         </>
@@ -160,23 +162,23 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
       <div className={`alert ${isSelect ? "alert-success" : "alert-error"} mb-16`}>
         <i className={`ti ${isSelect ? "ti-check" : "ti-x"}`} />
         <div>
-          You are marking <strong>{candidate.name}</strong> as <strong>{targetStatus}</strong>.
-          An email will be sent using the selected template below.
+          {t("You are marking")} <strong>{candidate.name}</strong> {t("as")} <strong>{isSelect ? t("selected") : t("rejected")}</strong>.{" "}
+          {t("An email will be sent using the selected template below.")}
         </div>
       </div>
 
       {/* Email template — fixed by status, not manually chosen */}
       <div className="field-group mb-16">
-        <label className="field-label">Email Template</label>
+        <label className="field-label">{t("Email Template")}</label>
         {loadingTemplates ? (
           <div className="text-sm text-[var(--on-variant)]">
-            <i className="ti ti-loader-2 spin" /> Loading…
+            <i className="ti ti-loader-2 spin" /> {t("Loading…")}
           </div>
         ) : selectedTemplate ? (
           <div
             className="field-input"
             style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-low)", cursor: "not-allowed" }}
-            title="This template is fixed for this status and cannot be changed here"
+            title={t("This template is fixed for this status and cannot be changed here")}
           >
             <i className="ti ti-lock" style={{ color: "var(--on-variant)", fontSize: 14 }} />
             {selectedTemplate.display_name}
@@ -186,11 +188,11 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
 
       {/* Remarks */}
       <div className="field-group mb-16">
-        <label className="field-label">Interview feedback / remarks</label>
+        <label className="field-label">{t("Interview feedback / remarks")}</label>
         <textarea
           className="field-input"
           rows={2}
-          placeholder="Add interview notes…"
+          placeholder={t("Add interview notes…")}
           value={remarks}
           onChange={e => setRemarks(e.target.value)}
         />
@@ -200,13 +202,13 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
       {selectedTemplate && (
         <div className="settings-card">
           <div className="settings-card-title flex items-center gap-2 mb-8">
-            <i className="ti ti-mail" /> Email Preview
+            <i className="ti ti-mail" /> {t("Email Preview")}
           </div>
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 2 }}>
-            <strong>To:</strong> {candidate.email}
+            <strong>{t("To:")}</strong> {candidate.email}
           </div>
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
-            <strong>Subject:</strong> {previewSubject()}
+            <strong>{t("Subject:")}</strong> {previewSubject()}
           </div>
           <iframe
             srcDoc={previewHtml()}
@@ -218,12 +220,12 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
               borderRadius: 6,
               display: "block",
             }}
-            title="Email body preview"
+            title={t("Email body preview")}
           />
           {hasManualVars && (
             <div className="alert alert-warn mt-8" style={{ padding: "6px 10px", fontSize: 12 }}>
               <i className="ti ti-alert-triangle" />
-              <div>This template has extra variables that will be sent unfilled.</div>
+              <div>{t("This template has extra variables that will be sent unfilled.")}</div>
             </div>
           )}
         </div>

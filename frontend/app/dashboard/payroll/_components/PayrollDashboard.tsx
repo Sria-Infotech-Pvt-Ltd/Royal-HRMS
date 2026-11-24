@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle, PayrollSettings } from "@/types/payroll";
 import type { SalarySetupSummary } from "@/types/salarySetup";
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResume, onGoToSalarySetup }: Props) {
+  const t = useT();
   const { data: cyclesPage, loading: cyclesLoading, refetch } =
     useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
   const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
@@ -72,7 +74,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
     return result.reverse(); // most recent first
   })();
 
-  const calMonthName  = MONTHS_LONG[calMonth];
+  const calMonthName  = t(MONTHS_LONG[calMonth]);
   const calIsToday    = calMonth === nowMonth && calYear === nowYear;
   const calIsPast     = new Date(calYear, calMonth, 1) < new Date(nowYear, nowMonth, 1);
   const calIsFuture   = new Date(calYear, calMonth, 1) > new Date(nowYear, nowMonth, 1);
@@ -84,17 +86,17 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
 
   const STATS = [
     {
-      label: "Employees w/ Salary", value: empCount > 0 ? String(empCount) : "—", sub: salarySummary ? `of ${salarySummary.total} · ${salarySummary.payroll_ready} payroll ready` : "CTC configured", icon: "ti-users", cls: "si-primary",
-      onClick: onGoToSalarySetup, title: "Go to Salary Setup",
+      label: t("Employees w/ Salary"), value: empCount > 0 ? String(empCount) : "—", sub: salarySummary ? t("of {total} · {ready} payroll ready", { total: salarySummary.total, ready: salarySummary.payroll_ready }) : t("CTC configured"), icon: "ti-users", cls: "si-primary",
+      onClick: onGoToSalarySetup, title: t("Go to Salary Setup"),
     },
     {
-      label: "Pending Cycles", value: String(pending.length), sub: pending.length > 0 ? `${pending.length} need action` : "All up to date", icon: "ti-clock", cls: pending.length > 0 ? "si-warn" : "si-success",
+      label: t("Pending Cycles"), value: String(pending.length), sub: pending.length > 0 ? t("{count} need action", { count: pending.length }) : t("All up to date"), icon: "ti-clock", cls: pending.length > 0 ? "si-warn" : "si-success",
       onClick: pending.length > 0 ? scrollToPendingCycles : undefined,
-      title: pending.length > 0 ? "Jump to pending cycles" : undefined,
+      title: pending.length > 0 ? t("Jump to pending cycles") : undefined,
     },
-    { label: "Cycles paid this year",   value: String(paid.length),                   sub: "Completed payroll runs, all Company Codes",  icon: "ti-circle-check",  cls: "si-success"  },
-    { label: "Next Pay Day",         value: payDay ? `${payDay} ${MONTHS_LONG[nowMonth]}` : "—", sub: settings ? `Cycle ${settings.cycle_start_day}–${settings.cycle_end_day}` : "Not configured", icon: "ti-calendar-event", cls: "si-info" },
-    { label: "Total Payroll Runs",   value: String(cycles.length),                 sub: "All time",                icon: "ti-history",       cls: "si-primary"  },
+    { label: t("Cycles paid this year"),   value: String(paid.length),                   sub: t("Completed payroll runs, all Company Codes"),  icon: "ti-circle-check",  cls: "si-success"  },
+    { label: t("Next Pay Day"),         value: payDay ? `${payDay} ${t(MONTHS_LONG[nowMonth])}` : "—", sub: settings ? t("Cycle {start}–{end}", { start: settings.cycle_start_day, end: settings.cycle_end_day }) : t("Not configured"), icon: "ti-calendar-event", cls: "si-info" },
+    { label: t("Total Payroll Runs"),   value: String(cycles.length),                 sub: t("All time"),                icon: "ti-history",       cls: "si-primary"  },
   ];
 
   return (
@@ -175,7 +177,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
       {empCount === 0 && !cyclesLoading && (
         <div className="alert alert-warn">
           <i className="ti ti-alert-triangle" />
-          <span>No employee CTC has been configured. Go to <strong>Salary Setup</strong> tab to assign CTC before running payroll.</span>
+          <span>{t("No employee CTC has been configured. Go to")} <strong>{t("Salary Setup")}</strong> {t("tab to assign CTC before running payroll.")}</span>
         </div>
       )}
 

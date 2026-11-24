@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import Modal from "@/components/Modal";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -53,6 +54,7 @@ function getPageNumbers(current: number, total: number): (number | "…")[] {
 }
 
 export default function PayrollAdjustments() {
+  const t = useT();
   const canEdit = usePermission("payroll.edit");
   const today   = new Date();
 
@@ -90,7 +92,7 @@ export default function PayrollAdjustments() {
   }
 
   async function handleDelete(id: string) {
-    if (!(await confirmDialog("Delete this adjustment?"))) return;
+    if (!(await confirmDialog(t("Delete this adjustment?")))) return;
     setErrMsg("");
     try {
       await clientApi.delete(API.payroll.adjustmentDetail(id));
@@ -101,9 +103,9 @@ export default function PayrollAdjustments() {
       } else {
         refetch();
       }
-      setSaveMsg("Adjustment deleted.");
+      setSaveMsg(t("Adjustment deleted."));
     } catch {
-      setErrMsg("Failed to delete adjustment.");
+      setErrMsg(t("Failed to delete adjustment."));
     }
   }
 
@@ -122,13 +124,13 @@ export default function PayrollAdjustments() {
       const rowErrors = res.data?.data?.row_errors ?? [];
       reloadFromPageOne();
       if (rowErrors.length > 0) {
-        setErrMsg(`${imported} imported. ${rowErrors.length} row(s) had errors:\n` +
-          rowErrors.slice(0, 5).map((e: { row: number; error: string }) => `Row ${e.row}: ${e.error}`).join("\n"));
+        setErrMsg(t("{imported} imported. {count} row(s) had errors:", { imported, count: rowErrors.length }) + "\n" +
+          rowErrors.slice(0, 5).map((e: { row: number; error: string }) => t("Row {row}: {error}", { row: e.row, error: e.error })).join("\n"));
       } else {
-        setSaveMsg(`${imported} adjustment(s) imported.`);
+        setSaveMsg(t("{count} adjustment(s) imported.", { count: imported }));
       }
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Import failed.";
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Import failed.");
       setErrMsg(msg);
     } finally {
       setImporting(false);
@@ -150,14 +152,14 @@ export default function PayrollAdjustments() {
       {saveMsg && (
         <div className="alert alert-success" style={{ marginBottom: 16 }}>
           {saveMsg}
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={() => setSaveMsg("")}>Dismiss</button>
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={() => setSaveMsg("")}>{t("Dismiss")}</button>
         </div>
       )}
 
       {errMsg && (
         <div className="alert alert-error" style={{ marginBottom: 16, whiteSpace: "pre-line" }}>
           {errMsg}
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={() => setErrMsg("")}>Dismiss</button>
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={() => setErrMsg("")}>{t("Dismiss")}</button>
         </div>
       )}
 
@@ -165,7 +167,7 @@ export default function PayrollAdjustments() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 8 }}>
           <select className="field-input field-select" style={{ width: 130 }} value={month} onChange={e => changeMonth(e.target.value)}>
-            {MONTHS.map(m => <option key={m}>{m}</option>)}
+            {MONTHS.map(m => <option key={m} value={m}>{t(m)}</option>)}
           </select>
           <select className="field-input field-select" style={{ width: 90 }} value={year} onChange={e => changeYear(e.target.value)}>
             {["2024","2025","2026","2027"].map(y => <option key={y}>{y}</option>)}
@@ -174,12 +176,12 @@ export default function PayrollAdjustments() {
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn btn-ghost btn-sm" onClick={downloadTemplate}>
-            <i className="ti ti-download" /> Download Template
+            <i className="ti ti-download" /> {t("Download Template")}
           </button>
           {canEdit && (
             <>
               <label className={`btn btn-ghost btn-sm${importing ? " disabled" : ""}`} style={{ cursor: "pointer" }}>
-                <i className="ti ti-file-upload" /> {importing ? "Importing…" : "Bulk Import"}
+                <i className="ti ti-file-upload" /> {importing ? t("Importing…") : t("Bulk Import")}
                 <input
                   ref={fileRef}
                   type="file"
@@ -189,7 +191,7 @@ export default function PayrollAdjustments() {
                 />
               </label>
               <button className="btn btn-filled btn-sm" onClick={() => { setAddErr(""); setShowAdd(true); }}>
-                <i className="ti ti-plus" /> Add Adjustment
+                <i className="ti ti-plus" /> {t("Add Adjustment")}
               </button>
             </>
           )}
@@ -198,25 +200,25 @@ export default function PayrollAdjustments() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)" }}>Loading…</div>
+        <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)" }}>{t("Loading…")}</div>
       ) : rows.length === 0 ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--on-variant)", border: "1.5px dashed var(--outline-v)", borderRadius: "var(--radius)" }}>
           <i className="ti ti-adjustments-alt" style={{ fontSize: 32, display: "block", marginBottom: 8 }} />
-          No adjustments found.<br />
-          <span style={{ fontSize: 13 }}>No adjustments for {month} {year} — add individual adjustments or bulk import via Excel.</span>
+          {t("No adjustments found.")}<br />
+          <span style={{ fontSize: 13 }}>{t("No adjustments for {month} {year} — add individual adjustments or bulk import via Excel.", { month: t(month), year })}</span>
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table className="data-table">
             <thead>
               <tr>
-                <th>Employee</th>
-                <th>Code</th>
-                <th>Type</th>
-                <th>Label</th>
-                <th style={{ textAlign: "right" }}>Amount (₹)</th>
-                <th>Added By</th>
-                {canEdit && <th>Actions</th>}
+                <th>{t("Employee")}</th>
+                <th>{t("Code")}</th>
+                <th>{t("Type")}</th>
+                <th>{t("Label")}</th>
+                <th style={{ textAlign: "right" }}>{t("Amount (₹)")}</th>
+                <th>{t("Added By")}</th>
+                {canEdit && <th>{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -224,7 +226,7 @@ export default function PayrollAdjustments() {
                 <tr key={row.id}>
                   <td>{row.employee_name}</td>
                   <td style={{ fontFamily: "monospace", fontSize: 12 }}>{row.employee_code}</td>
-                  <td><span className={`badge ${TYPE_BADGE[row.type] ?? "badge-neutral"}`}>{TYPE_LABELS[row.type] ?? row.type}</span></td>
+                  <td><span className={`badge ${TYPE_BADGE[row.type] ?? "badge-neutral"}`}>{TYPE_LABELS[row.type] ? t(TYPE_LABELS[row.type]) : row.type}</span></td>
                   <td>{row.label}</td>
                   <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                     {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
@@ -232,7 +234,7 @@ export default function PayrollAdjustments() {
                   <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{row.created_by_name}</td>
                   {canEdit && (
                     <td>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => handleDelete(row.id)} aria-label="Delete">
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => handleDelete(row.id)} aria-label={t("Delete")}>
                         <i className="ti ti-trash" />
                       </button>
                     </td>
@@ -244,9 +246,9 @@ export default function PayrollAdjustments() {
           <div style={{ marginTop: 8, fontSize: 12, color: "var(--on-variant)" }}>
             {data && (
               <>
-                Showing {(data.page - 1) * data.page_size + 1}–{Math.min(data.page * data.page_size, data.count)} of {data.count} adjustments
-                {" · "}Total additions: ₹{Number(data.total_additions).toLocaleString("en-IN")}
-                {" · "}Total deductions: ₹{Number(data.total_deductions).toLocaleString("en-IN")}
+                {t("Showing {from}–{to} of {count} adjustments", { from: (data.page - 1) * data.page_size + 1, to: Math.min(data.page * data.page_size, data.count), count: data.count })}
+                {" · "}{t("Total additions: ₹{amount}", { amount: Number(data.total_additions).toLocaleString("en-IN") })}
+                {" · "}{t("Total deductions: ₹{amount}", { amount: Number(data.total_deductions).toLocaleString("en-IN") })}
               </>
             )}
           </div>
@@ -259,7 +261,7 @@ export default function PayrollAdjustments() {
                 disabled={page <= 1}
                 onClick={() => setPage(p => Math.max(p - 1, 1))}
               >
-                <i className="ti ti-chevron-left" /> Previous
+                <i className="ti ti-chevron-left" /> {t("Previous")}
               </button>
               {getPageNumbers(data.page, data.total_pages).map((p, i) =>
                 p === "…" ? (
@@ -281,7 +283,7 @@ export default function PayrollAdjustments() {
                 disabled={page >= data.total_pages}
                 onClick={() => setPage(p => Math.min(p + 1, data.total_pages))}
               >
-                Next <i className="ti ti-chevron-right" />
+                {t("Next")} <i className="ti ti-chevron-right" />
               </button>
             </div>
           )}
@@ -301,9 +303,9 @@ export default function PayrollAdjustments() {
               await clientApi.post(API.payroll.adjustments, form);
               reloadFromPageOne();
               setShowAdd(false);
-              setSaveMsg("Adjustment added.");
+              setSaveMsg(t("Adjustment added."));
             } catch (err: unknown) {
-              const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to save.";
+              const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? t("Failed to save.");
               setAddErr(msg);
             } finally {
               setSaving(false);
@@ -333,15 +335,16 @@ interface AddModalProps {
 }
 
 function AddAdjustmentModal({ month, saving, error, onClose, onSave }: AddModalProps) {
+  const t = useT();
   const [form, setForm] = useState<AddForm>({ employee_code: "", type: "addition", label: "", amount: "" });
   const [errors, setErrors] = useState<Partial<AddForm>>({});
 
   function validate(): boolean {
     const e: Partial<AddForm> = {};
-    if (!form.employee_code.trim()) e.employee_code = "Employee code is required";
-    if (!form.label.trim())         e.label         = "Label is required";
+    if (!form.employee_code.trim()) e.employee_code = t("Employee code is required");
+    if (!form.label.trim())         e.label         = t("Label is required");
     if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0)
-      e.amount = "Enter a valid positive amount";
+      e.amount = t("Enter a valid positive amount");
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -359,13 +362,13 @@ function AddAdjustmentModal({ month, saving, error, onClose, onSave }: AddModalP
 
   return (
     <Modal
-      title="Add Adjustment"
+      title={t("Add Adjustment")}
       onClose={onClose}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>{t("Cancel")}</button>
           <button className="btn btn-filled" onClick={handleSubmit} disabled={saving}>
-            {saving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</> : <><i className="ti ti-check" /> Add</>}
+            {saving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</> : <><i className="ti ti-check" /> {t("Add")}</>}
           </button>
         </>
       }
@@ -378,31 +381,31 @@ function AddAdjustmentModal({ month, saving, error, onClose, onSave }: AddModalP
       )}
 
       <div className="field-group mb-16">
-        <label className="field-label">Employee Code <span style={{ color: "var(--error)" }}>*</span></label>
-        <input className="field-input" placeholder="e.g. EMP001" value={form.employee_code}
+        <label className="field-label">{t("Employee Code")} <span style={{ color: "var(--error)" }}>*</span></label>
+        <input className="field-input" placeholder={t("e.g. EMP001")} value={form.employee_code}
           onChange={e => { setForm(p => ({ ...p, employee_code: e.target.value })); setErrors(p => ({ ...p, employee_code: undefined })); }} />
         {errors.employee_code && <span className="field-error-msg">{errors.employee_code}</span>}
       </div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Type <span style={{ color: "var(--error)" }}>*</span></label>
+        <label className="field-label">{t("Type")} <span style={{ color: "var(--error)" }}>*</span></label>
         <select className="field-input field-select" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
-          <option value="addition">Addition</option>
-          <option value="deduction">Deduction</option>
-          <option value="arrear">Arrear</option>
+          <option value="addition">{t("Addition")}</option>
+          <option value="deduction">{t("Deduction")}</option>
+          <option value="arrear">{t("Arrear")}</option>
         </select>
       </div>
 
       <div className="field-group mb-16">
-        <label className="field-label">Label <span style={{ color: "var(--error)" }}>*</span></label>
-        <input className="field-input" placeholder="e.g. Festival Bonus, Loan Recovery" value={form.label}
+        <label className="field-label">{t("Label")} <span style={{ color: "var(--error)" }}>*</span></label>
+        <input className="field-input" placeholder={t("e.g. Festival Bonus, Loan Recovery")} value={form.label}
           onChange={e => { setForm(p => ({ ...p, label: e.target.value })); setErrors(p => ({ ...p, label: undefined })); }} />
         {errors.label && <span className="field-error-msg">{errors.label}</span>}
       </div>
 
       <div className="field-group">
-        <label className="field-label">Amount (₹) <span style={{ color: "var(--error)" }}>*</span></label>
-        <input className="field-input" type="number" min="1" placeholder="e.g. 5000" value={form.amount}
+        <label className="field-label">{t("Amount (₹)")} <span style={{ color: "var(--error)" }}>*</span></label>
+        <input className="field-input" type="number" min="1" placeholder={t("e.g. 5000")} value={form.amount}
           onChange={e => { setForm(p => ({ ...p, amount: e.target.value })); setErrors(p => ({ ...p, amount: undefined })); }} />
         {errors.amount && <span className="field-error-msg">{errors.amount}</span>}
       </div>

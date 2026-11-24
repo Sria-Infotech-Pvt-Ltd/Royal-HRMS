@@ -1,6 +1,7 @@
 "use client";
 
 import type { PayrollCycle } from "@/types/payroll";
+import { useT } from "@/hooks/useI18n";
 import { MONTHS_SHORT, STATUS_BADGE, STATUS_LABEL, DAYS_LABEL, getCalendarDates } from "./payrollDashboardShared";
 
 interface PayrollCalendarCardProps {
@@ -27,6 +28,7 @@ export default function PayrollCalendarCard({
   missedMonths, selectedCycle, canResume, prevMonth, nextMonth, onSelectMissedMonth,
   onResumeCycle, onRunPayroll,
 }: PayrollCalendarCardProps) {
+  const t = useT();
   const { firstDay, days } = getCalendarDates(calYear, calMonth);
   const calDates = Array.from({ length: days }, (_, i) => i + 1);
 
@@ -36,16 +38,16 @@ export default function PayrollCalendarCard({
       {/* Header with prev/next navigation */}
       <div className="card-header" style={{ paddingBottom: 8 }}>
         <div className="card-title" style={{ fontSize: 13 }}>
-          <i className="ti ti-calendar-event" /> Payroll Calendar
+          <i className="ti ti-calendar-event" /> {t("Payroll Calendar")}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={prevMonth} aria-label="Previous">
+          <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={prevMonth} aria-label={t("Previous")}>
             <i className="ti ti-chevron-left" />
           </button>
           <span style={{ fontSize: 12, fontWeight: 600, minWidth: 100, textAlign: "center" }}>
             {calMonthName} {calYear}
           </span>
-          <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={nextMonth} aria-label="Next">
+          <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={nextMonth} aria-label={t("Next")}>
             <i className="ti ti-chevron-right" />
           </button>
         </div>
@@ -57,7 +59,7 @@ export default function PayrollCalendarCard({
         {missedMonths.length > 0 && (
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "var(--warn)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-              Missing payroll
+              {t("Missing payroll")}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {missedMonths.map(({ month: m, year: y }) => {
@@ -75,7 +77,7 @@ export default function PayrollCalendarCard({
                       cursor: "pointer",
                     }}
                   >
-                    {MONTHS_SHORT[m]}
+                    {t(MONTHS_SHORT[m])}
                   </button>
                 );
               })}
@@ -114,12 +116,12 @@ export default function PayrollCalendarCard({
         <div style={{ display: "flex", flexDirection: "column", gap: 5, borderTop: "1px solid var(--outline-v)", paddingTop: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
             <div style={{ width: 10, height: 10, borderRadius: 2, background: "var(--primary)" }} />
-            <span>Pay Day — {payDay} {calMonthName}</span>
+            <span>{t("Pay Day — {day} {month}", { day: payDay, month: calMonthName })}</span>
           </div>
           {calIsToday && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
               <div style={{ width: 10, height: 10, borderRadius: 2, border: "2px solid var(--primary)" }} />
-              <span>Today — {today} {calMonthName}</span>
+              <span>{t("Today — {day} {month}", { day: today, month: calMonthName })}</span>
             </div>
           )}
         </div>
@@ -129,9 +131,9 @@ export default function PayrollCalendarCard({
           {selectedCycle ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Payroll status</span>
+                <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("Payroll status")}</span>
                 <span className={STATUS_BADGE[selectedCycle.status] ?? "badge badge-neutral"}>
-                  {STATUS_LABEL[selectedCycle.status] ?? selectedCycle.status}
+                  {STATUS_LABEL[selectedCycle.status] ? t(STATUS_LABEL[selectedCycle.status]) : selectedCycle.status}
                 </span>
               </div>
               {canResume && !["paid","closed"].includes(selectedCycle.status) && (
@@ -140,7 +142,7 @@ export default function PayrollCalendarCard({
                   style={{ width: "100%", justifyContent: "center" }}
                   onClick={() => onResumeCycle(selectedCycle.id, selectedCycle.status, selectedCycle.cycle_start)}
                 >
-                  <i className="ti ti-arrow-right" /> Resume {calMonthName}
+                  <i className="ti ti-arrow-right" /> {t("Resume {month}", { month: calMonthName })}
                 </button>
               )}
             </div>
@@ -148,10 +150,10 @@ export default function PayrollCalendarCard({
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ fontSize: 12, color: calIsPast ? "var(--warn)" : "var(--on-variant)", display: "flex", alignItems: "center", gap: 6 }}>
                 {calIsPast
-                  ? <><i className="ti ti-alert-triangle" style={{ color: "var(--warn)" }} /> No payroll run</>
+                  ? <><i className="ti ti-alert-triangle" style={{ color: "var(--warn)" }} /> {t("No payroll run")}</>
                   : calIsFuture
-                  ? <><i className="ti ti-clock" /> Future month</>
-                  : <><i className="ti ti-player-play" /> Ready to run</>
+                  ? <><i className="ti ti-clock" /> {t("Future month")}</>
+                  : <><i className="ti ti-player-play" /> {t("Ready to run")}</>
                 }
               </div>
               {canResume && !calIsFuture && (
@@ -160,7 +162,7 @@ export default function PayrollCalendarCard({
                   style={{ width: "100%", justifyContent: "center" }}
                   onClick={() => onRunPayroll(calMonthName, String(calYear))}
                 >
-                  <i className="ti ti-player-play" /> Run {calMonthName} Payroll
+                  <i className="ti ti-player-play" /> {t("Run {month} Payroll", { month: calMonthName })}
                 </button>
               )}
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { formatDateTime } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 import type { ApiEmailTemplate } from "../_data";
 
 interface Props {
@@ -13,10 +14,11 @@ interface Props {
 }
 
 export default function VariablesSidebar({ active, variables, newTags, onInsert, isAddMode, template }: Props) {
+  const t = useT();
   return (
     <div className={`et-col-sidebar${active ? " et-tab-active" : ""}`} style={{ overflowY: "auto", background: "var(--bg-low)" }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: "var(--outline)", letterSpacing: "0.08em", textTransform: "uppercase", padding: "14px 14px 10px" }}>
-        Available Tags
+        {t("Available Tags")}
       </div>
 
       {/* Predefined variables */}
@@ -27,7 +29,7 @@ export default function VariablesSidebar({ active, variables, newTags, onInsert,
             return (
               <button key={v} type="button" suppressHydrationWarning
                 onClick={() => onInsert(tag)}
-                title={`Insert ${tag}`}
+                title={t("Insert {tag}", { tag })}
                 style={{ textAlign: "left", padding: "5px 9px", background: "color-mix(in srgb, var(--brand) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 12%, transparent)", borderRadius: 4, fontSize: 11, fontFamily: "ui-monospace, monospace", color: "var(--primary)", cursor: "pointer" }}
                 onMouseEnter={e => (e.currentTarget.style.background = "color-mix(in srgb, var(--brand) 14%, transparent)")}
                 onMouseLeave={e => (e.currentTarget.style.background = "color-mix(in srgb, var(--brand) 6%, transparent)")}>
@@ -42,7 +44,7 @@ export default function VariablesSidebar({ active, variables, newTags, onInsert,
       {newTags.length > 0 && (
         <>
           <div style={{ fontSize: 10, fontWeight: 700, color: "var(--outline)", letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px 14px 6px", borderTop: variables.length ? "1px solid var(--outline-v)" : "none" }}>
-            Detected Tags
+            {t("Detected Tags")}
           </div>
           <div style={{ padding: "0 10px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
             {newTags.map(v => {
@@ -50,7 +52,7 @@ export default function VariablesSidebar({ active, variables, newTags, onInsert,
               return (
                 <button key={v} type="button" suppressHydrationWarning
                   onClick={() => onInsert(tag)}
-                  title={`Insert ${tag}`}
+                  title={t("Insert {tag}", { tag })}
                   style={{ textAlign: "left", padding: "5px 9px", background: "rgba(234,167,0,0.08)", border: "1px solid rgba(234,167,0,0.3)", borderRadius: 4, fontSize: 11, fontFamily: "ui-monospace, monospace", color: "#a06800", cursor: "pointer" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(234,167,0,0.16)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "rgba(234,167,0,0.08)")}>
@@ -64,21 +66,21 @@ export default function VariablesSidebar({ active, variables, newTags, onInsert,
 
       {variables.length === 0 && newTags.length === 0 && (
         <div style={{ padding: "8px 14px 14px", fontSize: 12, color: "var(--on-variant)", lineHeight: 1.5 }}>
-          Type <code style={{ fontSize: 11 }}>{"{VARIABLE}"}</code> in the subject or body to see tags here.
+          {t("Type")} <code style={{ fontSize: 11 }}>{"{VARIABLE}"}</code> {t("in the subject or body to see tags here.")}
         </div>
       )}
 
       {/* Last updated */}
       {!isAddMode && template && (
         <div style={{ borderTop: "1px solid var(--outline-v)", padding: "12px 14px", fontSize: 11, color: "var(--outline)" }}>
-          <div style={{ marginBottom: 2 }}>Last updated</div>
+          <div style={{ marginBottom: 2 }}>{t("Last updated")}</div>
           <div style={{ color: "var(--on-variant)", fontWeight: 500 }}>
             {formatDateTime(template.updated_at)}
           </div>
           {template.is_builtin && (
             <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 5 }}>
               <i className="ti ti-shield-check" style={{ fontSize: 12, color: "var(--success)" }} />
-              <span style={{ color: "var(--success)", fontWeight: 600, fontSize: 11 }}>Built-in template</span>
+              <span style={{ color: "var(--success)", fontWeight: 600, fontSize: 11 }}>{t("Built-in template")}</span>
             </div>
           )}
         </div>

@@ -6,6 +6,7 @@
 // rules (see KIND_SCOPE_NOTES), which is why each line says how it is scoped.
 import { useEffect, useState, type CSSProperties } from "react";
 import { useApprovalOverview } from "@/hooks/useApprovalOverview";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import HrRequestsTab from "./HrRequestsTab";
@@ -52,6 +53,7 @@ function readLayout(): LayoutKey {
 export default function MyApprovalsOverview({
   canApprove, canApproveAttendance, canApproveTimesheets, canSeePersonnel, canApproveFace, canRespondHrHelp = false, openHrRequestsInitially = false, onOpen,
 }: MyApprovalsOverviewProps) {
+  const t = useT();
   const [isMineOnly, setIsMineOnly] = useState(false);
   const [layout, setLayout] = useState<LayoutKey>("cards");
   useEffect(() => { setLayout(readLayout()); }, []);
@@ -71,45 +73,45 @@ export default function MyApprovalsOverview({
 
   const rows: Row[] = [
     ...(canApprove ? overview.team.map(count => ({
-      key: count.kind, label: KIND_LABELS[count.kind], scope: KIND_SCOPE_NOTES[count.kind],
+      key: count.kind, label: t(KIND_LABELS[count.kind]), scope: t(KIND_SCOPE_NOTES[count.kind]),
       pending: count.pending, mine: count.needsMyAction, section: "approvals" as const,
     })) : []),
     ...(canApproveFace ? [{
-      key: "face", label: "Face ID registration",
-      scope: "Employees assigned to you; with no assigned HR, employees on your branch. A full-access user sees all.",
+      key: "face", label: t("Face ID registration"),
+      scope: t("Employees assigned to you; with no assigned HR, employees on your branch. A full-access user sees all."),
       pending: overview.faceVisible, mine: overview.faceAssignedToMe, section: "face_registration" as const,
     }] : []),
     ...(canApproveAttendance ? [{
-      key: "attendance", label: "Attendance approval", scope: "Cycle sign-off for your team or payroll scope. Open the tab to see what is due.",
+      key: "attendance", label: t("Attendance approval"), scope: t("Cycle sign-off for your team or payroll scope. Open the tab to see what is due."),
       pending: null, mine: null, section: "attendance" as const,
     }] : []),
     // The timesheet queue is exactly the sheets this person may decide, so what is waiting is also what is theirs to act on.
     ...(canApproveTimesheets ? [{
-      key: "timesheets", label: "Timesheets", scope: "Weekly timesheets from your direct reports, or assigned to you as approver; HR within their scope.",
+      key: "timesheets", label: t("Timesheets"), scope: t("Weekly timesheets from your direct reports, or assigned to you as approver; HR within their scope."),
       pending: timesheetsWaiting, mine: timesheetsWaiting, section: "timesheets" as const,
     }] : []),
     ...(canSeePersonnel ? [{
-      key: "personnel", label: "Personnel actions", scope: "Promotions, transfers and similar actions at your stage of the chain. Open the tab to see what is due.",
+      key: "personnel", label: t("Personnel actions"), scope: t("Promotions, transfers and similar actions at your stage of the chain. Open the tab to see what is due."),
       pending: null, mine: null, section: "personnel" as const,
     }] : []),
     ...(canRespondHrHelp ? [{
-      key: "profile_corrections", label: "Profile corrections",
-      scope: "Changes employees ask HR to make to their profile. Everyone who answers HR Help tickets, and any full-access user, sees all of them.",
+      key: "profile_corrections", label: t("Profile corrections"),
+      scope: t("Changes employees ask HR to make to their profile. Everyone who answers HR Help tickets, and any full-access user, sees all of them."),
       pending: correctionCount, mine: correctionCount, section: "overview" as const,
       open: () => setIsCorrectionsOpen(open => !open),
     }] : []),
   ];
 
   const shown = isMineOnly ? rows.filter(row => row.mine === null || row.mine > 0) : rows;
-  const actionLabelOf = (row: Row) => (row.key === "profile_corrections" && isCorrectionsOpen ? "Hide" : "Open");
+  const actionLabelOf = (row: Row) => (row.key === "profile_corrections" && isCorrectionsOpen ? t("Hide") : t("Open"));
   const runAction = (row: Row) => (row.open ? row.open() : onOpen(row.section));
   const totalWaiting = rows.reduce((sum, row) => sum + (row.pending ?? 0), 0);
   const totalMine = rows.reduce((sum, row) => sum + (row.mine ?? 0), 0);
   const workflowsWithWork = rows.filter(row => (row.mine ?? 0) > 0).length;
   const summary = [
-    { label: "Waiting in total",     value: totalWaiting,      icon: "ti-hourglass",      accent: "#d97706" },
-    { label: "Needs your action",    value: totalMine,         icon: "ti-bolt",           accent: "var(--brand)" },
-    { label: "Workflows with work",  value: workflowsWithWork, icon: "ti-layout-list",    accent: "#0ea5e9" },
+    { label: t("Waiting in total"),     value: totalWaiting,      icon: "ti-hourglass",      accent: "#d97706" },
+    { label: t("Needs your action"),    value: totalMine,         icon: "ti-bolt",           accent: "var(--brand)" },
+    { label: t("Workflows with work"),  value: workflowsWithWork, icon: "ti-layout-list",    accent: "#0ea5e9" },
   ];
 
   return (
@@ -128,22 +130,22 @@ export default function MyApprovalsOverview({
       )}
 
       <div className="ap-bar">
-        <h2><i className="ti ti-inbox" /> My Approvals</h2>
+        <h2><i className="ti ti-inbox" /> {t("My Approvals")}</h2>
         <div className="ap-tools">
-          <div className="ap-views" role="group" aria-label="Layout">
-            <button type="button" className={layout === "cards" ? "is-on" : ""} aria-pressed={layout === "cards"} onClick={() => chooseLayout("cards")}><i className="ti ti-layout-grid" /> Cards</button>
-            <button type="button" className={layout === "list" ? "is-on" : ""} aria-pressed={layout === "list"} onClick={() => chooseLayout("list")}><i className="ti ti-list" /> List</button>
+          <div className="ap-views" role="group" aria-label={t("Layout")}>
+            <button type="button" className={layout === "cards" ? "is-on" : ""} aria-pressed={layout === "cards"} onClick={() => chooseLayout("cards")}><i className="ti ti-layout-grid" /> {t("Cards")}</button>
+            <button type="button" className={layout === "list" ? "is-on" : ""} aria-pressed={layout === "list"} onClick={() => chooseLayout("list")}><i className="ti ti-list" /> {t("List")}</button>
           </div>
           <label className={`ap-switch${isMineOnly ? " is-on" : ""}`}>
             <input type="checkbox" checked={isMineOnly} onChange={event => setIsMineOnly(event.target.checked)} />
-            Only what I can act on
+            {t("Only what I can act on")}
           </label>
         </div>
       </div>
 
-      {overview.isLoading && <div className="ap-empty">Loading…</div>}
+      {overview.isLoading && <div className="ap-empty">{t("Loading…")}</div>}
       {!overview.isLoading && shown.length === 0 && (
-        <div className="ap-empty"><i className="ti ti-circle-check" />Nothing is waiting for you.</div>
+        <div className="ap-empty"><i className="ti ti-circle-check" />{t("Nothing is waiting for you.")}</div>
       )}
       {!overview.isLoading && shown.length > 0 && layout === "cards" && (
         <div className="ap-grid">
@@ -155,8 +157,8 @@ export default function MyApprovalsOverview({
       {!overview.isLoading && shown.length > 0 && layout === "list" && (
         <>
           {[
-            { title: "Needs your action", items: shown.filter(row => (row.mine ?? 0) > 0) },
-            { title: "Everything else", items: shown.filter(row => (row.mine ?? 0) === 0) },
+            { title: t("Needs your action"), items: shown.filter(row => (row.mine ?? 0) > 0) },
+            { title: t("Everything else"), items: shown.filter(row => (row.mine ?? 0) === 0) },
           ].filter(group => group.items.length > 0).map(group => (
             <section key={group.title} className="ap-group" aria-label={group.title}>
               <h3 className="ap-group-head">{group.title} <span>{group.items.length}</span></h3>
@@ -172,12 +174,11 @@ export default function MyApprovalsOverview({
 
       {canRespondHrHelp && isCorrectionsOpen && (
         <div className="card" style={{ marginTop: 16, padding: 16 }}>
-          <HrRequestsTab title="Profile corrections" topic={PROFILE_CORRECTION_TOPIC} onChanged={openCorrections.refetch} />
+          <HrRequestsTab title={t("Profile corrections")} topic={PROFILE_CORRECTION_TOPIC} onChanged={openCorrections.refetch} />
         </div>
       )}
       <p className="ap-note">
-        Counts show only what the server lets you see. Onboarding approvals are in Review &amp; Onboarding, and bank-change
-        requests are in the employee record; they are not part of this list.
+        {t("Counts show only what the server lets you see. Onboarding approvals are in Review & Onboarding, and bank-change requests are in the employee record; they are not part of this list.")}
       </p>
     </div>
   );

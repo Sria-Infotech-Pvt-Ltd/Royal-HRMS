@@ -2,6 +2,7 @@
 
 // Load what one employee can do and save the extra permissions granted to them personally.
 
+import { tr } from "@/lib/i18n/tr";
 import { useCallback, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -30,7 +31,7 @@ export function usePersonAccess(employeeUuid: string | null) {
       refetch();
       return true;
     } catch (err: unknown) {
-      setSaveError((err as { message?: string })?.message ?? "Could not save.");
+      setSaveError((err as { message?: string })?.message ?? tr("Could not save."));
       return false;
     } finally {
       setIsSaving(false);

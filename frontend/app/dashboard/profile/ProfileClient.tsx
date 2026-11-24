@@ -27,6 +27,7 @@ import SeparationCard from "./_components/SeparationCard";
 import ProfileDocumentsCard from "./ProfileDocumentsCard";
 import ProfileFaceIdCard from "./ProfileFaceIdCard";
 import { formatDate } from "@/lib/formatDate";
+import { useT } from "@/hooks/useI18n";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import {
   type ProfileData, type DocumentItem,
@@ -34,6 +35,7 @@ import {
 } from "./_profileClientData";
 
 export default function ProfileClient({ session }: { session: SessionPayload }) {
+  const t = useT();
   // Gates the camera button below and "Edit my details" — an admin-revocable toggle (default granted), so HR can
   // lock down self-service editing for a role without touching the employees.edit permission that governs editing
   // OTHER people's records.
@@ -81,11 +83,11 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">My Profile</div>
-          <div className="page-sub">The same employee record and layout used by Admin, with self-service permissions.</div>
+          <div className="page-title">{t("My Profile")}</div>
+          <div className="page-sub">{t("The same employee record and layout used by Admin, with self-service permissions.")}</div>
         </div>
         <div className="page-actions">
-          <button className="btn btn-filled" onClick={() => setShowRecord(true)}>Open full employee profile</button>
+          <button className="btn btn-filled" onClick={() => setShowRecord(true)}>{t("Open full employee profile")}</button>
         </div>
       </div>
 
@@ -97,13 +99,13 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
       {savedJustNow && (
         <div className="alert alert-success mb-16">
-          <i className="ti ti-circle-check" /> Your profile was updated.
+          <i className="ti ti-circle-check" /> {t("Your profile was updated.")}
         </div>
       )}
 
       {correctionSubmitted && (
         <div className="alert alert-success mb-16">
-          <i className="ti ti-circle-check" /> Correction request submitted — track it under My Requests.
+          <i className="ti ti-circle-check" /> {t("Correction request submitted — track it under My Requests.")}
         </div>
       )}
 
@@ -116,7 +118,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             type="button"
             onClick={() => setShowPhotoModal(true)}
             suppressHydrationWarning
-            title="Change profile photo"
+            title={t("Change profile photo")}
             style={{
               position: "absolute", bottom: -2, right: -2,
               width: 26, height: 26, borderRadius: "50%",
@@ -124,7 +126,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               display: "flex", alignItems: "center", justifyContent: "center",
               border: "2px solid #fff", cursor: "pointer",
             }}
-           aria-label="Change profile photo">
+           aria-label={t("Change profile photo")}>
             <i className="ti ti-camera" style={{ fontSize: 12 }} />
           </button>
         </div>
@@ -150,7 +152,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             )}
             {joinedDate !== "—" && (
               <span style={{ fontSize: 12, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 4 }}>
-                <i className="ti ti-calendar" style={{ fontSize: 12 }} />Joined {joinedDate}
+                <i className="ti ti-calendar" style={{ fontSize: 12 }} />{t("Joined {date}", { date: joinedDate })}
               </span>
             )}
           </div>
@@ -160,8 +162,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       {/* ── Profile controls ── */}
       <div className="card mb-16">
         <div style={{ padding: "18px 20px 4px" }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>Profile controls</div>
-          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review your official record or request an approved correction.</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{t("Profile controls")}</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>{t("Review your official record or request an approved correction.")}</div>
         </div>
         <div style={{ padding: "12px 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <button
@@ -169,8 +171,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             onClick={() => setShowRecord(true)}
             style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
           >
-            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>View employee record</div>
-            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Personal, employment, pay, statutory, leave and audit details</div>
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>{t("View employee record")}</div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>{t("Personal, employment, pay, statutory, leave and audit details")}</div>
           </button>
           {canEditOwnProfile ? (
             <button
@@ -178,8 +180,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               onClick={() => setShowEdit(true)}
               style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
             >
-              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Edit my details</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update your mobile number, address or emergency contact</div>
+              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>{t("Edit my details")}</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>{t("Update your mobile number, address or emergency contact")}</div>
             </button>
           ) : (
             <button
@@ -187,8 +189,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               onClick={() => setShowCorrection(true)}
               style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
             >
-              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Request profile correction</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Submit a change for HR to review and apply</div>
+              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>{t("Request profile correction")}</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>{t("Submit a change for HR to review and apply")}</div>
             </button>
           )}
         </div>
@@ -197,24 +199,24 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       {/* ── My record at a glance ── */}
       <div className="card mb-16">
         <div style={{ padding: "18px 20px 4px" }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>My record at a glance</div>
-          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review official fields, then open the full record for all sections.</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{t("My record at a glance")}</div>
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>{t("Review official fields, then open the full record for all sections.")}</div>
         </div>
         <div style={{ padding: "4px 20px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 280px))", gap: 14 }}>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYEE ID</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{t("EMPLOYEE ID")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{profile?.employee_id ?? "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>DATE OF BIRTH</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{t("DATE OF BIRTH")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{profile?.profile?.date_of_birth ? formatDate(profile.profile.date_of_birth) : "—"}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>DATE OF JOINING</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{t("DATE OF JOINING")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{joinedDate}</div>
           </div>
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK LOCATION</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{t("WORK LOCATION")}</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{profile?.work_location || "—"}</div>
           </div>
         </div>
@@ -241,7 +243,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       {/* ── Security — true self-service, no approval needed ── */}
       <div className="card mb-16">
         <div className="card-header">
-          <span className="card-title"><i className="ti ti-lock" />Change Password</span>
+          <span className="card-title"><i className="ti ti-lock" />{t("Change Password")}</span>
         </div>
         <div className="card-body" style={{ maxWidth: 500 }}>
           <ChangePasswordForm />
@@ -264,7 +266,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             if (canEditOwnProfile) setShowEdit(true);
             else setShowCorrection(true);
           }}
-          correctionLabel={canEditOwnProfile ? "Edit my details" : "Request profile correction"}
+          correctionLabel={canEditOwnProfile ? t("Edit my details") : t("Request profile correction")}
         />
       )}
 

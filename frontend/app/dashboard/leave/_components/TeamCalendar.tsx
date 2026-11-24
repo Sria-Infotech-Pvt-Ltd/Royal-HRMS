@@ -103,18 +103,18 @@ export default function TeamCalendar() {
         <div className="lv-panel-head">
           <div className="lv-cal-nav">
             <button className="lv-cal-btn" onClick={prev} aria-label={tr("Previous month")}><i className="ti ti-chevron-left" /></button>
-            <span className="lv-cal-title">{MONTH_NAMES[month]} {year}</span>
+            <span className="lv-cal-title">{tr(MONTH_NAMES[month])} {year}</span>
             <button className="lv-cal-btn" onClick={next} aria-label={tr("Next month")}><i className="ti ti-chevron-right" /></button>
             <button className="lv-cal-btn" onClick={() => goTo(now.getFullYear(), now.getMonth())}>{tr("Today")}</button>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <span className="lv-chip" style={{ "--lv-accent": "var(--brand)" } as CSSProperties}><i className="ti ti-users" /> {peopleAway} {tr("away")}</span>
-            <span className="lv-chip" style={{ "--lv-accent": "#0ea5e9" } as CSSProperties}><i className="ti ti-calendar-stats" /> {tr(leaveDays === 1 ? "{count} leave day" : "{count} leave days", { count: leaveDays })}</span>
+            <span className="lv-chip" style={{ "--lv-accent": "#0ea5e9" } as CSSProperties}><i className="ti ti-calendar-stats" /> {leaveDays === 1 ? tr("{count} leave day", { count: leaveDays }) : tr("{count} leave days", { count: leaveDays })}</span>
           </div>
         </div>
 
         <div className="lv-cal-grid">
-          {DAY_NAMES.map(d => <div key={d} className="lv-cal-dow">{d.toUpperCase()}</div>)}
+          {DAY_NAMES.map(d => <div key={d} className="lv-cal-dow">{tr(d).toUpperCase()}</div>)}
         </div>
 
         {loading ? (
@@ -139,7 +139,7 @@ export default function TeamCalendar() {
                   type="button"
                   className={classes}
                   disabled={ev.length === 0}
-                  aria-label={`${day} ${MONTH_NAMES[month]}${ev.length ? `, ${ev.length} on leave` : ""}`}
+                  aria-label={ev.length ? tr("{day} {month}, {count} on leave", { day, month: tr(MONTH_NAMES[month]), count: ev.length }) : `${day} ${tr(MONTH_NAMES[month])}`}
                   onClick={() => setSelected(iso === selected ? null : iso)}
                 >
                   <span className="lv-cal-num">{day}</span>
@@ -185,7 +185,7 @@ export default function TeamCalendar() {
 
       {!loading && allEvents.length === 0 && (
         <div className="lv-panel">
-          <div className="lv-empty"><i className="ti ti-calendar-off" />{tr("No approved leaves for {month} {year}.", { month: MONTH_NAMES[month], year })}</div>
+          <div className="lv-empty"><i className="ti ti-calendar-off" />{tr("No approved leaves for {month} {year}.", { month: tr(MONTH_NAMES[month]), year })}</div>
         </div>
       )}
     </div>

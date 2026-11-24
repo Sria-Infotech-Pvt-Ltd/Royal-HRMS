@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useT } from "@/hooks/useI18n";
 import { API } from "@/lib/api/endpoints";
 import type { EmployeePayslip } from "@/types/payroll";
 
@@ -12,6 +13,7 @@ const fmt = (n: number | string) =>
   `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
 export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
+  const t = useT();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const { data: payslipPage, loading, refetch } =
@@ -30,40 +32,40 @@ export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
       {/* Summary bar */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
         {[
-          { label: "Total Gross",       value: totalGross, color: "var(--primary)", icon: "ti-cash"           },
-          { label: "Total Deductions",  value: totalDed,   color: "var(--error)",   icon: "ti-minus-vertical" },
-          { label: "Total Reimb./Bonus",value: totalReim,  color: "var(--info)",    icon: "ti-receipt"        },
-          { label: "Net Payable",       value: totalNet,   color: "var(--success)", icon: "ti-credit-card"    },
+          { label: t("Total Gross"),       value: totalGross, color: "var(--primary)", icon: "ti-cash"           },
+          { label: t("Total Deductions"),  value: totalDed,   color: "var(--error)",   icon: "ti-minus-vertical" },
+          { label: t("Total Reimb./Bonus"),value: totalReim,  color: "var(--info)",    icon: "ti-receipt"        },
+          { label: t("Net Payable"),       value: totalNet,   color: "var(--success)", icon: "ti-credit-card"    },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <div className="stat-label">{s.label}</div>
             <div className="stat-value" style={{ fontSize: 20, color: s.color }}>
               {loading ? "—" : fmt(s.value)}
             </div>
-            {!loading && <div className="stat-sub">{payslips.length} employees</div>}
+            {!loading && <div className="stat-sub">{t("{count} employees", { count: payslips.length })}</div>}
           </div>
         ))}
       </div>
 
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-calculator" /> Final Payroll Calculation</div>
+          <div className="card-title"><i className="ti ti-calculator" /> {t("Final Payroll Calculation")}</div>
           <button className="btn btn-outline btn-sm" onClick={refetch} disabled={loading}>
             <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"}`} />
-            {loading ? "Loading…" : "Refresh"}
+            {loading ? t("Loading…") : t("Refresh")}
           </button>
         </div>
 
         {loading ? (
           <div style={{ padding: "48px", textAlign: "center", color: "var(--on-variant)" }}>
             <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 32, display: "block", marginBottom: 12 }} />
-            Loading payslips…
+            {t("Loading payslips…")}
           </div>
         ) : payslips.length === 0 ? (
           <div style={{ padding: "48px", textAlign: "center", color: "var(--on-variant)" }}>
             <i className="ti ti-file-off" style={{ fontSize: 36, display: "block", marginBottom: 12 }} />
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>No payslips found</div>
-            <div style={{ fontSize: 13 }}>Ensure employees have CTC configured and the cycle was processed in the previous step.</div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{t("No payslips found")}</div>
+            <div style={{ fontSize: 13 }}>{t("Ensure employees have CTC configured and the cycle was processed in the previous step.")}</div>
           </div>
         ) : (
           <div>
@@ -83,23 +85,23 @@ export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
                       <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{p.department} · {p.branch}</div>
                     </div>
                     <div style={{ textAlign: "right", marginRight: 16 }}>
-                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Gross</div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Gross")}</div>
                       <div style={{ fontWeight: 600 }}>{fmt(p.gross_earnings)}</div>
                     </div>
                     <div style={{ textAlign: "right", marginRight: 16 }}>
-                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Deductions</div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Deductions")}</div>
                       <div style={{ fontWeight: 600, color: "var(--error)" }}>{fmt(p.total_deductions)}</div>
                     </div>
                     {(Number(p.bonus ?? 0) + Number(p.reimbursements ?? 0)) > 0 && (
                       <div style={{ textAlign: "right", marginRight: 16 }}>
-                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Extras</div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Extras")}</div>
                         <div style={{ fontWeight: 600, color: "var(--info)" }}>
                           {fmt(Number(p.bonus ?? 0) + Number(p.reimbursements ?? 0))}
                         </div>
                       </div>
                     )}
                     <div style={{ textAlign: "right", marginRight: 20 }}>
-                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Net Pay</div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Net Pay")}</div>
                       <div style={{ fontWeight: 700, color: "var(--success)", fontSize: 16 }}>{fmt(p.net_pay)}</div>
                     </div>
                     <i className={`ti ${isOpen ? "ti-chevron-up" : "ti-chevron-down"}`} style={{ color: "var(--outline)" }} />
@@ -109,11 +111,11 @@ export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", background: "var(--bg-low)", borderTop: "1px solid var(--outline-v)", padding: "16px 20px" }}>
                       {/* Earnings */}
                       <div style={{ paddingRight: 16 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Earnings</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>{t("Earnings")}</div>
                         {[
-                          ["Basic",           p.basic],
-                          ["HRA",             p.hra],
-                          ["Special Allow.",  p.special_allowance],
+                          [t("Basic"),           p.basic],
+                          [t("HRA"),             p.hra],
+                          [t("Special Allow."),  p.special_allowance],
                         ].map(([k, v]) => (
                           <div key={k as string} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
                             <span style={{ color: "var(--on-variant)" }}>+ {k}</span>
@@ -121,20 +123,20 @@ export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
                           </div>
                         ))}
                         <div style={{ borderTop: "1.5px solid var(--outline-v)", paddingTop: 6, marginTop: 6, display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
-                          <span>Gross</span>
+                          <span>{t("Gross")}</span>
                           <span style={{ color: "var(--primary)" }}>{fmt(p.gross_earnings)}</span>
                         </div>
                       </div>
 
                       {/* Deductions */}
                       <div style={{ padding: "0 16px", borderLeft: "1px solid var(--outline-v)", borderRight: "1px solid var(--outline-v)" }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Deductions</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>{t("Deductions")}</div>
                         {[
-                          ["PF Employee",   p.pf_employee],
-                          ["ESI Employee",  p.esi_employee],
-                          ["Prof. Tax",     p.pt_deduction],
-                          ["LWF",           p.lwf_employee],
-                          ["LOP Deduction", p.lop_deduction],
+                          [t("PF Employee"),   p.pf_employee],
+                          [t("ESI Employee"),  p.esi_employee],
+                          [t("Prof. Tax"),     p.pt_deduction],
+                          [t("LWF"),           p.lwf_employee],
+                          [t("LOP Deduction"), p.lop_deduction],
                         ].map(([k, v]) => Number(v) > 0 && (
                           <div key={k as string} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
                             <span style={{ color: "var(--on-variant)" }}>- {k}</span>
@@ -142,40 +144,40 @@ export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
                           </div>
                         ))}
                         <div style={{ borderTop: "1.5px solid var(--outline-v)", paddingTop: 6, marginTop: 6, display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
-                          <span>Total Deductions</span>
+                          <span>{t("Total Deductions")}</span>
                           <span style={{ color: "var(--error)" }}>{fmt(p.total_deductions)}</span>
                         </div>
                       </div>
 
                       {/* Net */}
                       <div style={{ paddingLeft: 16 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Net Salary</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>{t("Net Salary")}</div>
                         {Number(p.bonus ?? 0) > 0 && (
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
-                            <span style={{ color: "var(--on-variant)" }}>+ Bonus</span>
+                            <span style={{ color: "var(--on-variant)" }}>{t("+ Bonus")}</span>
                             <span style={{ color: "var(--info)" }}>{fmt(p.bonus ?? 0)}</span>
                           </div>
                         )}
                         {Number(p.reimbursements ?? 0) > 0 && (
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
-                            <span style={{ color: "var(--on-variant)" }}>+ Reimbursements</span>
+                            <span style={{ color: "var(--on-variant)" }}>{t("+ Reimbursements")}</span>
                             <span style={{ color: "var(--info)" }}>{fmt(p.reimbursements ?? 0)}</span>
                           </div>
                         )}
                         {Number(p.lop_days) > 0 && (
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
-                            <span style={{ color: "var(--on-variant)" }}>LOP Days</span>
-                            <span style={{ color: "var(--error)" }}>{p.lop_days} days</span>
+                            <span style={{ color: "var(--on-variant)" }}>{t("LOP Days")}</span>
+                            <span style={{ color: "var(--error)" }}>{t("{count} days", { count: p.lop_days })}</span>
                           </div>
                         )}
                         <div style={{ background: "rgba(23,144,90,0.07)", borderRadius: "var(--radius)", padding: "10px 12px", marginTop: 10 }}>
-                          <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 4 }}>Net Pay</div>
+                          <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 4 }}>{t("Net Pay")}</div>
                           <div style={{ fontSize: 22, fontWeight: 800, color: "var(--success)" }}>{fmt(p.net_pay)}</div>
                         </div>
                         {/* Employer costs info */}
                         {(Number(p.pf_employer ?? 0) + Number(p.esi_employer ?? 0)) > 0 && (
                           <div style={{ marginTop: 8, fontSize: 11, color: "var(--on-variant)" }}>
-                            Employer contribution: {fmt(Number(p.pf_employer ?? 0) + Number(p.esi_employer ?? 0))}
+                            {t("Employer contribution: {amount}", { amount: fmt(Number(p.pf_employer ?? 0) + Number(p.esi_employer ?? 0)) })}
                           </div>
                         )}
                       </div>
@@ -188,9 +190,9 @@ export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
         )}
 
         <div style={{ padding: "16px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
+          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> {t("Back")}</button>
           <button className="btn btn-filled" onClick={onNext} disabled={payslips.length === 0 || loading}>
-            Continue <i className="ti ti-arrow-right" />
+            {t("Continue")} <i className="ti ti-arrow-right" />
           </button>
         </div>
       </div>

@@ -5,6 +5,7 @@
 // fields from this device's location, for an admin standing at the office.
 
 import { useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { toCoordinate, useBranchLocationCheck } from "@/hooks/useBranchLocationCheck";
 
 interface Props {
@@ -25,6 +26,7 @@ function mapAddress(lat: number, lon: number): string {
 }
 
 export default function BranchLocationPreview({ latitude, longitude, stateId, cityId, radiusMeters, onUseLocation }: Props) {
+  const t = useT();
   const check = useBranchLocationCheck(latitude, longitude, stateId, cityId);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export default function BranchLocationPreview({ latitude, longitude, stateId, ci
   const canShowMap = lat !== null && lon !== null && check.isValid;
 
   function useMyLocation() {
-    if (!navigator.geolocation) { setLocateError("This browser cannot share its location."); return; }
+    if (!navigator.geolocation) { setLocateError(t("This browser cannot share its location.")); return; }
     setLocating(true);
     setLocateError(null);
     navigator.geolocation.getCurrentPosition(
@@ -42,7 +44,7 @@ export default function BranchLocationPreview({ latitude, longitude, stateId, ci
         setLocating(false);
         onUseLocation(position.coords.latitude.toFixed(DECIMALS), position.coords.longitude.toFixed(DECIMALS));
       },
-      () => { setLocating(false); setLocateError("Could not read this device's location. Allow location access and try again."); },
+      () => { setLocating(false); setLocateError(t("Could not read this device's location. Allow location access and try again.")); },
       { enableHighAccuracy: true, timeout: 15000 },
     );
   }
@@ -51,14 +53,14 @@ export default function BranchLocationPreview({ latitude, longitude, stateId, ci
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <button type="button" className="btn btn-ghost btn-sm" onClick={useMyLocation} disabled={locating}>
-          <i className={`ti ${locating ? "ti-loader-2 animate-spin" : "ti-current-location"}`} /> Use my current location
+          <i className={`ti ${locating ? "ti-loader-2 animate-spin" : "ti-current-location"}`} /> {t("Use my current location")}
         </button>
         {canShowMap && lat !== null && lon !== null && (
           <a href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--primary)" }}>
-            Open in OpenStreetMap <i className="ti ti-external-link" />
+            {t("Open in OpenStreetMap")} <i className="ti ti-external-link" />
           </a>
         )}
-        {check.isChecking && <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Checking…</span>}
+        {check.isChecking && <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Checking…")}</span>}
       </div>
       {locateError && <p className="field-error-msg">{locateError}</p>}
 
@@ -74,7 +76,7 @@ export default function BranchLocationPreview({ latitude, longitude, stateId, ci
       {canShowMap && lat !== null && lon !== null ? (
         <>
           <iframe
-            title="Office location"
+            title={t("Office location")}
             src={mapAddress(lat, lon)}
             style={{ width: "100%", height: 220, border: "1px solid var(--outline-v)", borderRadius: 8 }}
             loading="lazy"
@@ -82,11 +84,11 @@ export default function BranchLocationPreview({ latitude, longitude, stateId, ci
             sandbox="allow-scripts allow-same-origin"
           />
           <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-            The pin is where punches are measured from. Employees must be within {radiusMeters || "the allowed"} m of it.
+            {t("The pin is where punches are measured from. Employees must be within {radius} m of it.", { radius: radiusMeters || t("the allowed") })}
           </div>
         </>
       ) : (
-        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Enter both coordinates to see the office on a map.</div>
+        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{t("Enter both coordinates to see the office on a map.")}</div>
       )}
     </div>
   );

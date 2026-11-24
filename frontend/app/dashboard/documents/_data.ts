@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/formatDate";
+import { tr } from "@/lib/i18n/tr";
 
 // ─── Endpoints ────────────────────────────────────────────────────────────────
 export const DOCUMENTS_BASE   = "/documents/";
@@ -63,9 +64,9 @@ export type DocUploadErrors = Partial<Record<keyof DocUploadForm, string>>;
 
 export function validateUploadForm(form: DocUploadForm): DocUploadErrors {
   const e: DocUploadErrors = {};
-  if (!form.title.trim()) e.title    = "Document name is required";
-  if (!form.category)     e.category = "Category is required";
-  if (!form.file)         e.file     = "Please select a file";
+  if (!form.title.trim()) e.title    = tr("Document name is required");
+  if (!form.category)     e.category = tr("Category is required");
+  if (!form.file)         e.file     = tr("Please select a file");
   return e;
 }
 

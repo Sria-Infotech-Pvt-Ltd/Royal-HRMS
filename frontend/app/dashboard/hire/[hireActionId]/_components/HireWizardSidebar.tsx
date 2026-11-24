@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/hooks/useI18n";
 export type HireStepTagTone = "sensitive" | "info" | "new";
 
 export interface HireStepTag {
@@ -37,13 +38,14 @@ interface Props {
 // needs to be able to jump ahead — e.g. to Documents or Review — without
 // being forced through every step in order first).
 export default function HireWizardSidebar({ steps, currentStep, highestSaved, onStepClick, missingByStep, progressPct }: Props) {
+  const t = useT();
   const totalMissing = Object.values(missingByStep).reduce((n, arr) => n + arr.length, 0);
 
   return (
     <div className="wiz-nav">
       {progressPct !== undefined && (
         <div className="hw-rail-progress">
-          <div><strong>{progressPct}%</strong> of the hire is ready</div>
+          <div><strong>{progressPct}%</strong> {t("of the hire is ready")}</div>
           <div className="hw-progress-bar"><span style={{ width: `${progressPct}%` }} /></div>
         </div>
       )}
@@ -70,7 +72,7 @@ export default function HireWizardSidebar({ steps, currentStep, highestSaved, on
         const isActive    = i === currentStep;
         return (
           <div key={step.label}>
-            {step.group && <div className="navgrp">{step.group}</div>}
+            {step.group && <div className="navgrp">{t(step.group)}</div>}
             <button
               type="button"
               onClick={() => onStepClick(i)}
@@ -81,13 +83,13 @@ export default function HireWizardSidebar({ steps, currentStep, highestSaved, on
               </div>
               <div style={{ minWidth: 0 }}>
                 <div className="t1">
-                  {step.label}
-                  {step.tag && <span className={`tag ${step.tag.tone}`}>{step.tag.label}</span>}
+                  {t(step.label)}
+                  {step.tag && <span className={`tag ${step.tag.tone}`}>{t(step.tag.label)}</span>}
                   {!!requiredBadge && requiredBadge > 0 && (
-                    <span className="step-req" title={`${requiredBadge} required field${requiredBadge === 1 ? "" : "s"} left`}>{requiredBadge}</span>
+                    <span className="step-req" title={requiredBadge === 1 ? t("{count} required field left", { count: requiredBadge }) : t("{count} required fields left", { count: requiredBadge })}>{requiredBadge}</span>
                   )}
                 </div>
-                <div className="t2">{step.sub}</div>
+                <div className="t2">{t(step.sub)}</div>
               </div>
             </button>
           </div>
@@ -96,11 +98,11 @@ export default function HireWizardSidebar({ steps, currentStep, highestSaved, on
 
       {totalMissing > 0 && (
         <div className="hw-missing">
-          <div className="hw-missing-title"><i className="ti ti-alert-circle" /> {totalMissing} field{totalMissing === 1 ? "" : "s"} still required</div>
+          <div className="hw-missing-title"><i className="ti ti-alert-circle" /> {totalMissing === 1 ? t("{count} field still required", { count: totalMissing }) : t("{count} fields still required", { count: totalMissing })}</div>
           {Object.entries(missingByStep).filter(([, fields]) => fields.length > 0).map(([stepIdx, fields]) => (
             <button key={stepIdx} type="button" className="hw-missing-row" onClick={() => onStepClick(Number(stepIdx))}>
-              <span>{steps[Number(stepIdx)]?.label}</span>
-              <small>{fields.slice(0, 3).join(", ")}{fields.length > 3 ? ` +${fields.length - 3} more` : ""}</small>
+              <span>{t(steps[Number(stepIdx)]?.label ?? "")}</span>
+              <small>{fields.slice(0, 3).join(", ")}{fields.length > 3 ? ` ${t("+{count} more", { count: fields.length - 3 })}` : ""}</small>
             </button>
           ))}
         </div>

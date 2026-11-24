@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -197,17 +198,18 @@ export function NumberRow({ label, value, onChange, suffix, step = 1 }: { label:
 }
 
 export function MultiCheckRow({ label, options, selected, onChange }: { label: string; options: string[]; selected: string[]; onChange: (v: string[]) => void }) {
+  const t = useT();
   function toggle(opt: string) {
     onChange(selected.includes(opt) ? selected.filter(o => o !== opt) : [...selected, opt]);
   }
   return (
     <div className="field-group mb-16" style={{ gridColumn: "1 / -1" }}>
       <label className="field-label">
-        {label} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>({selected.length === 0 ? "All" : `${selected.length} selected`})</span>
+        {label} <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>({selected.length === 0 ? t("All") : t("{count} selected", { count: selected.length })})</span>
       </label>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "10px 12px", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", maxHeight: 140, overflowY: "auto" }}>
         {options.length === 0 ? (
-          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>No options available.</span>
+          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{t("No options available.")}</span>
         ) : options.map(opt => (
           <label key={opt} className="module-check">
             <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggle(opt)} />
@@ -235,6 +237,7 @@ function Section({ icon, title, children }: { icon: string; title: string; child
 }
 
 export default function LeavePoliciesTab() {
+  const t = useT();
   const { showToast } = useToast();
   const { data: policies, loading: loadingList, refetch } = useFetch<LeavePolicy[]>(API.leave.policy);
   const [selectedType, setSelectedType] = useState("");
@@ -292,10 +295,10 @@ export default function LeavePoliciesTab() {
     if (!cf) return true;
     const e: typeof cfErrors = {};
     if (cf.can_carry_forward && cf.carry_forward_type === "limited" && (!cf.max_carry_forward_days || cf.max_carry_forward_days < 1)) {
-      e.max_carry_forward_days = "Required when type is Limited";
+      e.max_carry_forward_days = t("Required when type is Limited");
     }
     if (cf.can_carry_forward && cfExpiryMode === "after" && (!cf.carry_forward_expiry_days || cf.carry_forward_expiry_days < 1)) {
-      e.carry_forward_expiry_days = "Enter number of days";
+      e.carry_forward_expiry_days = t("Enter number of days");
     }
     setCfErrors(e);
     return Object.keys(e).length === 0;
@@ -319,21 +322,21 @@ export default function LeavePoliciesTab() {
           carry_forward_expiry_days: cfExpiryMode === "never" ? 0 : cf.carry_forward_expiry_days,
         };
         await clientApi.patch<{ message: string }>(API.leave.policyDetail(selectedType), cfPayload);
-        showToast(res.data.message || "Policy updated.", "success");
+        showToast(res.data.message || t("Policy updated."), "success");
         refetch();
       } catch (cfErr: unknown) {
         const status = (cfErr as { status?: number })?.status;
         const msg    = (cfErr as { message?: string })?.message;
         if (status === 403) {
-          showToast("You don't have permission to edit leave policies.", "error");
+          showToast(t("You don't have permission to edit leave policies."), "error");
         } else {
-          setCfSaveError(msg || "Failed to save carry-forward settings.");
+          setCfSaveError(msg || t("Failed to save carry-forward settings."));
         }
         refetch(); // rules half of the save already succeeded — reflect that
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to save leave policy.", "error");
+      showToast(msg || t("Failed to save leave policy."), "error");
     } finally {
       setSaving(false);
     }
@@ -345,19 +348,17 @@ export default function LeavePoliciesTab() {
         <i className="ti ti-info-circle text-[22px] text-[var(--primary)] flex-shrink-0" />
         <div className="flex-1 min-w-[240px]">
           <div className="text-[13px] font-semibold text-[var(--on-bg)]">
-            Configuring rules for one leave type at a time
+            {t("Configuring rules for one leave type at a time")}
           </div>
           <div className="text-xs text-[var(--on-variant)] mt-0.5">
-            Every section below — Leave Application Rules, Holiday &amp; Week-off Rules, Eligibility Rules,
-            Documentation Rules, Leave Restrictions, and Additional Rules — applies only to the leave type
-            selected here, not to any other leave type.
+            {t("Every section below — Leave Application Rules, Holiday & Week-off Rules, Eligibility Rules, Documentation Rules, Leave Restrictions, and Additional Rules — applies only to the leave type selected here, not to any other leave type.")}
           </div>
         </div>
         <div className="field-group min-w-[260px]">
-          <label className="field-label">Leave Type</label>
+          <label className="field-label">{t("Leave Type")}</label>
           <select className="field-input field-select" value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-            {list.map(t => (
-              <option key={t.leave_type} value={t.leave_type}>{t.leave_type_display}</option>
+            {list.map(item => (
+              <option key={item.leave_type} value={item.leave_type}>{item.leave_type_display}</option>
             ))}
           </select>
         </div>
@@ -365,56 +366,56 @@ export default function LeavePoliciesTab() {
 
       {loadingList || !rules ? (
         <div style={{ padding: "60px 24px", textAlign: "center", color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2" style={{ fontSize: 22, animation: "spin 1s linear infinite" }} /> &nbsp;Loading policy…
+          <i className="ti ti-loader-2" style={{ fontSize: 22, animation: "spin 1s linear infinite" }} /> &nbsp;{t("Loading policy…")}
         </div>
       ) : (
         <>
-          <Section icon="ti-calendar-time" title="Leave Application Rules">
-            <NumberRow label="Minimum Leave Duration" suffix="days" step={0.5} value={rules.minimum_leave_duration} onChange={v => setField("minimum_leave_duration", v)} />
-            <NumberRow label="Maximum Leave Duration" suffix="0 = unlimited" value={rules.maximum_leave_duration} onChange={v => setField("maximum_leave_duration", v)} />
-            <NumberRow label="Maximum Consecutive Days" suffix="0 = unlimited" value={rules.maximum_consecutive_days} onChange={v => setField("maximum_consecutive_days", v)} />
-            <NumberRow label="Minimum Notice Period" suffix="days" value={rules.minimum_notice_period} onChange={v => setField("minimum_notice_period", v)} />
-            <div style={{ gridColumn: "1 / -1" }}><ToggleRow label="Allow Half-Day Leave" checked={rules.allow_half_day} onChange={v => setField("allow_half_day", v)} /></div>
-            <div style={{ gridColumn: "1 / -1" }}><ToggleRow label="Allow Backdated Leave" checked={rules.allow_backdated_leave} onChange={v => setField("allow_backdated_leave", v)} /></div>
+          <Section icon="ti-calendar-time" title={t("Leave Application Rules")}>
+            <NumberRow label={t("Minimum Leave Duration")} suffix={t("days")} step={0.5} value={rules.minimum_leave_duration} onChange={v => setField("minimum_leave_duration", v)} />
+            <NumberRow label={t("Maximum Leave Duration")} suffix={t("0 = unlimited")} value={rules.maximum_leave_duration} onChange={v => setField("maximum_leave_duration", v)} />
+            <NumberRow label={t("Maximum Consecutive Days")} suffix={t("0 = unlimited")} value={rules.maximum_consecutive_days} onChange={v => setField("maximum_consecutive_days", v)} />
+            <NumberRow label={t("Minimum Notice Period")} suffix={t("days")} value={rules.minimum_notice_period} onChange={v => setField("minimum_notice_period", v)} />
+            <div style={{ gridColumn: "1 / -1" }}><ToggleRow label={t("Allow Half-Day Leave")} checked={rules.allow_half_day} onChange={v => setField("allow_half_day", v)} /></div>
+            <div style={{ gridColumn: "1 / -1" }}><ToggleRow label={t("Allow Backdated Leave")} checked={rules.allow_backdated_leave} onChange={v => setField("allow_backdated_leave", v)} /></div>
             {rules.allow_backdated_leave && (
-              <NumberRow label="Maximum Backdated Days" suffix="days" value={rules.maximum_backdated_days} onChange={v => setField("maximum_backdated_days", v)} />
+              <NumberRow label={t("Maximum Backdated Days")} suffix={t("days")} value={rules.maximum_backdated_days} onChange={v => setField("maximum_backdated_days", v)} />
             )}
-            <div style={{ gridColumn: "1 / -1" }}><ToggleRow label="Allow Future Leave" checked={rules.allow_future_leave} onChange={v => setField("allow_future_leave", v)} /></div>
+            <div style={{ gridColumn: "1 / -1" }}><ToggleRow label={t("Allow Future Leave")} checked={rules.allow_future_leave} onChange={v => setField("allow_future_leave", v)} /></div>
             {rules.allow_future_leave && (
-              <NumberRow label="Maximum Future Days" suffix="0 = unlimited" value={rules.maximum_future_days} onChange={v => setField("maximum_future_days", v)} />
+              <NumberRow label={t("Maximum Future Days")} suffix={t("0 = unlimited")} value={rules.maximum_future_days} onChange={v => setField("maximum_future_days", v)} />
             )}
           </Section>
 
-          <Section icon="ti-calendar-star" title="Holiday &amp; Week-off Rules">
-            <ToggleRow label="Sandwich Leave Enabled" checked={rules.sandwich_leave_enabled} onChange={v => setField("sandwich_leave_enabled", v)} />
-            <ToggleRow label="Count Holidays as Leave" checked={rules.count_holidays_as_leave} onChange={v => setField("count_holidays_as_leave", v)} />
-            <ToggleRow label="Count Week-offs as Leave" checked={rules.count_weekoffs_as_leave} onChange={v => setField("count_weekoffs_as_leave", v)} />
+          <Section icon="ti-calendar-star" title={t("Holiday & Week-off Rules")}>
+            <ToggleRow label={t("Sandwich Leave Enabled")} checked={rules.sandwich_leave_enabled} onChange={v => setField("sandwich_leave_enabled", v)} />
+            <ToggleRow label={t("Count Holidays as Leave")} checked={rules.count_holidays_as_leave} onChange={v => setField("count_holidays_as_leave", v)} />
+            <ToggleRow label={t("Count Week-offs as Leave")} checked={rules.count_weekoffs_as_leave} onChange={v => setField("count_weekoffs_as_leave", v)} />
           </Section>
 
           <EligibilitySection rules={rules} setField={setField} />
 
-          <Section icon="ti-file-certificate" title="Documentation Rules">
-            <ToggleRow label="Attachment Required" checked={rules.attachment_required} onChange={v => setField("attachment_required", v)} />
-            <ToggleRow label="Medical Certificate Required" checked={rules.medical_certificate_required} onChange={v => setField("medical_certificate_required", v)} />
+          <Section icon="ti-file-certificate" title={t("Documentation Rules")}>
+            <ToggleRow label={t("Attachment Required")} checked={rules.attachment_required} onChange={v => setField("attachment_required", v)} />
+            <ToggleRow label={t("Medical Certificate Required")} checked={rules.medical_certificate_required} onChange={v => setField("medical_certificate_required", v)} />
             {rules.medical_certificate_required && (
-              <NumberRow label="Certificate Required After" suffix="days" value={rules.medical_certificate_after_days} onChange={v => setField("medical_certificate_after_days", v)} />
+              <NumberRow label={t("Certificate Required After")} suffix={t("days")} value={rules.medical_certificate_after_days} onChange={v => setField("medical_certificate_after_days", v)} />
             )}
           </Section>
 
-          <Section icon="ti-forbid-2" title="Leave Restrictions">
-            <ToggleRow label="Allow Negative Balance" checked={rules.allow_negative_balance} onChange={v => setField("allow_negative_balance", v)} />
-            <ToggleRow label="Convert Insufficient Balance to LOP" checked={rules.convert_to_lop} onChange={v => setField("convert_to_lop", v)} />
-            <div style={{ gridColumn: "1 / -1" }}><ToggleRow label="Allow Leave Cancellation" checked={rules.allow_leave_cancellation} onChange={v => setField("allow_leave_cancellation", v)} /></div>
+          <Section icon="ti-forbid-2" title={t("Leave Restrictions")}>
+            <ToggleRow label={t("Allow Negative Balance")} checked={rules.allow_negative_balance} onChange={v => setField("allow_negative_balance", v)} />
+            <ToggleRow label={t("Convert Insufficient Balance to LOP")} checked={rules.convert_to_lop} onChange={v => setField("convert_to_lop", v)} />
+            <div style={{ gridColumn: "1 / -1" }}><ToggleRow label={t("Allow Leave Cancellation")} checked={rules.allow_leave_cancellation} onChange={v => setField("allow_leave_cancellation", v)} /></div>
             {rules.allow_leave_cancellation && (
-              <NumberRow label="Cancellation Allowed Until" suffix="days before start" value={rules.cancellation_allowed_until} onChange={v => setField("cancellation_allowed_until", v)} />
+              <NumberRow label={t("Cancellation Allowed Until")} suffix={t("days before start")} value={rules.cancellation_allowed_until} onChange={v => setField("cancellation_allowed_until", v)} />
             )}
           </Section>
 
-          <Section icon="ti-adjustments" title="Additional Rules">
-            <ToggleRow label="Allow Leave During Probation" checked={rules.allow_probation_leave} onChange={v => setField("allow_probation_leave", v)} />
-            <ToggleRow label="Allow Leave During Notice Period" checked={rules.allow_notice_period_leave} onChange={v => setField("allow_notice_period_leave", v)} />
-            <ToggleRow label="Allow Leave Extension" checked={rules.allow_leave_extension} onChange={v => setField("allow_leave_extension", v)} />
-            <ToggleRow label="Allow Combining Leave Types" checked={rules.allow_leave_combination} onChange={v => setField("allow_leave_combination", v)} />
+          <Section icon="ti-adjustments" title={t("Additional Rules")}>
+            <ToggleRow label={t("Allow Leave During Probation")} checked={rules.allow_probation_leave} onChange={v => setField("allow_probation_leave", v)} />
+            <ToggleRow label={t("Allow Leave During Notice Period")} checked={rules.allow_notice_period_leave} onChange={v => setField("allow_notice_period_leave", v)} />
+            <ToggleRow label={t("Allow Leave Extension")} checked={rules.allow_leave_extension} onChange={v => setField("allow_leave_extension", v)} />
+            <ToggleRow label={t("Allow Combining Leave Types")} checked={rules.allow_leave_combination} onChange={v => setField("allow_leave_combination", v)} />
           </Section>
 
           {cf && (
@@ -429,9 +430,9 @@ export default function LeavePoliciesTab() {
           )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 4 }}>
-            <button className="btn btn-ghost" onClick={discard} disabled={saving}>Discard Changes</button>
+            <button className="btn btn-ghost" onClick={discard} disabled={saving}>{t("Discard Changes")}</button>
             <button className="btn btn-filled" onClick={save} disabled={saving}>
-              {saving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</> : "Save Policy"}
+              {saving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> {t("Saving…")}</> : t("Save Policy")}
             </button>
           </div>
         </>

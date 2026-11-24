@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { AuditLogEntry, AuditLogsResponse } from "@/types/dashboard";
@@ -38,6 +39,7 @@ function formatTimestamp(raw: string): string {
 }
 
 export default function AuditLogsWidget() {
+  const t = useT();
   const [moduleFilter, setModuleFilter] = useState("All");
   const [logs,         setLogs]         = useState<AuditLogEntry[]>([]);
   const [total,        setTotal]        = useState(0);
@@ -61,9 +63,9 @@ export default function AuditLogsWidget() {
         setLogs(payload.results ?? []);
         setTotal(payload.count ?? 0);
       })
-      .catch(() => setError("Failed to load audit logs."))
+      .catch(() => setError(t("Failed to load audit logs.")))
       .finally(() => setLoading(false));
-  }, [moduleFilter, buildUrl]);
+  }, [moduleFilter, buildUrl, t]);
 
   // Reset to page 1 whenever the module filter changes
   useEffect(() => {
@@ -81,7 +83,7 @@ export default function AuditLogsWidget() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-clipboard-list" /> Audit Logs</div>
+        <div className="card-title"><i className="ti ti-clipboard-list" /> {t("Audit Logs")}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <select
             value={moduleFilter}
@@ -96,10 +98,10 @@ export default function AuditLogsWidget() {
               backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center", backgroundSize: "12px",
             }}
           >
-            {MODULES.map(m => <option key={m} value={m}>{m}</option>)}
+            {MODULES.map(m => <option key={m} value={m}>{t(m)}</option>)}
           </select>
           <a href="/dashboard/settings/audit" className="btn btn-ghost btn-sm">
-            View all <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />
+            {t("View all")} <i className="ti ti-arrow-right" style={{ fontSize: 11, marginLeft: 3 }} />
           </a>
         </div>
       </div>
@@ -108,20 +110,20 @@ export default function AuditLogsWidget() {
         {/* Column headers */}
         <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 90px 80px", gap: 8, padding: "7px 16px", borderBottom: "1px solid var(--bg-high)", background: "var(--bg-low)" }}>
           {["Action", "Subject / Actor", "Module", "Time"].map(h => (
-            <div key={h} style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--on-variant)" }}>{h}</div>
+            <div key={h} style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--on-variant)" }}>{t(h)}</div>
           ))}
         </div>
 
         {loading ? (
           <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
-            <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
+            <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> {t("Loading…")}
           </div>
         ) : error ? (
           <div style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--error)" }}>
             <i className="ti ti-alert-circle" style={{ marginRight: 6 }} />{error}
           </div>
         ) : logs.length === 0 ? (
-          <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>No logs found.</div>
+          <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>{t("No logs found.")}</div>
         ) : (
           logs.map(log => {
             const chip = chipStyle(log.action);
@@ -151,7 +153,7 @@ export default function AuditLogsWidget() {
       {!loading && !error && logs.length > 0 && (
         <div style={{ padding: "10px 16px", borderTop: "1px solid var(--bg-high)", background: "var(--bg-low)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
-            Page {page} of {totalPages} · {total} entries
+            {t("Page {page} of {totalPages} · {total} entries", { page, totalPages, total })}
           </span>
           {totalPages > 1 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -161,7 +163,7 @@ export default function AuditLogsWidget() {
                 suppressHydrationWarning
                 className="btn btn-ghost btn-sm"
               >
-                <i className="ti ti-chevron-left" /> Previous
+                <i className="ti ti-chevron-left" /> {t("Previous")}
               </button>
               <button
                 onClick={() => goToPage(page + 1)}
@@ -169,7 +171,7 @@ export default function AuditLogsWidget() {
                 suppressHydrationWarning
                 className="btn btn-ghost btn-sm"
               >
-                Next <i className="ti ti-chevron-right" />
+                {t("Next")} <i className="ti ti-chevron-right" />
               </button>
             </div>
           )}

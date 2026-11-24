@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useT } from "@/hooks/useI18n";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
@@ -22,6 +23,7 @@ function downloadBase64Csv(base64: string, filename: string) {
 }
 
 export default function ImportModal({ onClose, onImported }: Props) {
+  const t = useT();
   const [file,      setFile]      = useState<File | null>(null);
   const [dragOver,  setDragOver]  = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -42,7 +44,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
       { format },
       `attendance_import_sample.${format}`,
     );
-    if (!res.success) setSampleError(res.message ?? "Failed to download sample file.");
+    if (!res.success) setSampleError(res.message ?? t("Failed to download sample file."));
     setSampleDownloading(null);
   }
 
@@ -54,7 +56,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
   }
 
   async function handleUpload() {
-    if (!file) { setError("Please select a CSV file to import."); return; }
+    if (!file) { setError(t("Please select a CSV file to import.")); return; }
     setUploading(true);
     setError(null);
     try {
@@ -63,7 +65,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
       const response = await clientApi.post<{ data: ImportResult }>(API.attendance.import, formData);
       setResult(response.data?.data ?? null);
     } catch (err: unknown) {
-      const message = (err as { message?: string })?.message ?? "Failed to import attendance file.";
+      const message = (err as { message?: string })?.message ?? t("Failed to import attendance file.");
       setError(message);
     } finally {
       setUploading(false);
@@ -80,7 +82,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
       title={
         <>
           <i className="ti ti-upload" style={{ marginRight: 8, color: "var(--primary)" }} />
-          Import Attendance
+          {t("Import Attendance")}
         </>
       }
       onClose={onClose}
@@ -88,11 +90,11 @@ export default function ImportModal({ onClose, onImported }: Props) {
       footer={
         !result ? (
           <>
-            <button className="btn btn-ghost" onClick={onClose} disabled={uploading}>Cancel</button>
+            <button className="btn btn-ghost" onClick={onClose} disabled={uploading}>{t("Cancel")}</button>
             <button className="btn btn-filled" onClick={handleUpload} disabled={uploading || !file}>
               {uploading
-                ? <><i className="ti ti-loader-2" style={{ marginRight: 6 }} />Uploading…</>
-                : <><i className="ti ti-upload" style={{ marginRight: 6 }} />Upload &amp; Process</>
+                ? <><i className="ti ti-loader-2" style={{ marginRight: 6 }} />{t("Uploading…")}</>
+                : <><i className="ti ti-upload" style={{ marginRight: 6 }} />{t("Upload & Process")}</>
               }
             </button>
           </>
@@ -100,10 +102,10 @@ export default function ImportModal({ onClose, onImported }: Props) {
           <>
             {hasFailed && !isSuccess && (
               <button className="btn btn-ghost" onClick={() => { setResult(null); setFile(null); }}>
-                Import Another File
+                {t("Import Another File")}
               </button>
             )}
-            <button className="btn btn-filled" onClick={() => onImported(result)}>Done</button>
+            <button className="btn btn-filled" onClick={() => onImported(result)}>{t("Done")}</button>
           </>
         )
       }
@@ -113,7 +115,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
               <div className="alert alert-info mb-16">
                 <i className="ti ti-info-circle" />
                 <span>
-                  <strong>Required columns:</strong> employee_id, date, punch_in, punch_out — CSV only, max 5 MB.
+                  <strong>{t("Required columns:")}</strong> {t("employee_id, date, punch_in, punch_out — CSV only, max 5 MB.")}
                   <code style={{ display: "block", marginTop: 6, fontSize: 11 }}>
                     EMP001,2026-07-02,09:05,18:15
                   </code>
@@ -122,10 +124,10 @@ export default function ImportModal({ onClose, onImported }: Props) {
 
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("csv")} disabled={!!sampleDownloading} suppressHydrationWarning>
-                  <i className="ti ti-download" /> {sampleDownloading === "csv" ? "Downloading…" : "Sample CSV"}
+                  <i className="ti ti-download" /> {sampleDownloading === "csv" ? t("Downloading…") : t("Sample CSV")}
                 </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("xlsx")} disabled={!!sampleDownloading} suppressHydrationWarning>
-                  <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? "Downloading…" : "Sample XLSX"}
+                  <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? t("Downloading…") : t("Sample XLSX")}
                 </button>
               </div>
               {sampleError && (
@@ -148,9 +150,9 @@ export default function ImportModal({ onClose, onImported }: Props) {
               >
                 <i className="ti ti-folder-open" />
                 <p style={{ fontWeight: 500, marginBottom: 4 }}>
-                  {file ? file.name : "Click to select file or drag & drop"}
+                  {file ? file.name : t("Click to select file or drag & drop")}
                 </p>
-                <small>CSV — max 5 MB</small>
+                <small>{t("CSV — max 5 MB")}</small>
               </div>
               <input
                 ref={fileInputRef}
@@ -173,10 +175,10 @@ export default function ImportModal({ onClose, onImported }: Props) {
               {/* Stat tiles */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
                 {[
-                  { label: "Total",      value: result.total_records, color: "var(--primary)",    bg: "color-mix(in srgb, var(--brand) 6%, transparent)"  },
-                  { label: "Successful", value: result.successful,    color: "var(--success)",    bg: "rgba(34,197,94,0.08)"  },
-                  { label: "Failed",     value: result.failed,        color: result.failed  > 0 ? "var(--error)"  : "var(--on-variant)", bg: result.failed  > 0 ? "rgba(239,68,68,0.08)"  : "var(--bg-low)" },
-                  { label: "Skipped",    value: result.skipped,       color: result.skipped > 0 ? "var(--warn)"   : "var(--on-variant)", bg: result.skipped > 0 ? "rgba(234,179,8,0.08)"  : "var(--bg-low)" },
+                  { label: t("Total"),      value: result.total_records, color: "var(--primary)",    bg: "color-mix(in srgb, var(--brand) 6%, transparent)"  },
+                  { label: t("Successful"), value: result.successful,    color: "var(--success)",    bg: "rgba(34,197,94,0.08)"  },
+                  { label: t("Failed"),     value: result.failed,        color: result.failed  > 0 ? "var(--error)"  : "var(--on-variant)", bg: result.failed  > 0 ? "rgba(239,68,68,0.08)"  : "var(--bg-low)" },
+                  { label: t("Skipped"),    value: result.skipped,       color: result.skipped > 0 ? "var(--warn)"   : "var(--on-variant)", bg: result.skipped > 0 ? "rgba(234,179,8,0.08)"  : "var(--bg-low)" },
                 ].map(tile => (
                   <div key={tile.label} style={{
                     padding: "10px 8px", borderRadius: 8, textAlign: "center",
@@ -194,7 +196,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
                       <i className="ti ti-alert-circle" style={{ marginRight: 5, color: "var(--error)" }} />
-                      {result.failed} Failed Row{result.failed !== 1 ? "s" : ""}
+                      {result.failed === 1 ? t("{count} Failed Row", { count: result.failed }) : t("{count} Failed Rows", { count: result.failed })}
                     </div>
                     {result.error_report_csv && (
                       <button
@@ -203,7 +205,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
                         suppressHydrationWarning
                       >
                         <i className="ti ti-download" style={{ marginRight: 4 }} />
-                        Download Error Report
+                        {t("Download Error Report")}
                       </button>
                     )}
                   </div>
@@ -212,11 +214,11 @@ export default function ImportModal({ onClose, onImported }: Props) {
                     <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
                       <thead>
                         <tr style={{ background: "var(--bg-low)", position: "sticky", top: 0 }}>
-                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap" }}>Row</th>
-                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap" }}>Employee</th>
-                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap" }}>Date</th>
-                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)" }}>Reason</th>
-                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)" }}>Resolution</th>
+                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap" }}>{t("Row")}</th>
+                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap" }}>{t("Employee")}</th>
+                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap" }}>{t("Date")}</th>
+                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)" }}>{t("Reason")}</th>
+                          <th style={{ textAlign: "left", padding: "7px 12px", fontWeight: 600, color: "var(--on-variant)" }}>{t("Resolution")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -248,7 +250,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
               {(isSuccess || (!hasFailed && !hasSkipped)) && (
                 <div style={{ textAlign: "center", padding: "12px 0 4px" }}>
                   <i className="ti ti-circle-check" style={{ fontSize: 32, color: "var(--success)", display: "block", marginBottom: 6 }} />
-                  <div style={{ fontSize: 13, color: "var(--on-variant)" }}>All records imported successfully.</div>
+                  <div style={{ fontSize: 13, color: "var(--on-variant)" }}>{t("All records imported successfully.")}</div>
                 </div>
               )}
             </>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useT } from "@/hooks/useI18n";
 import type { OrgAttention } from "@/lib/orgStructureStats";
 import type { OrgUnit } from "@/types/orgStructure";
 
@@ -11,29 +12,30 @@ interface Props {
 
 /** Shown on the right while nothing is selected: where the gaps in the structure are, each one a shortcut. */
 export default function OrgOverview({ attention, onSelectUnit }: Props) {
+  const t = useT();
   const { withoutChief, chiefVacant, empty, mostVacant } = attention;
   const isAllGood = withoutChief.length + chiefVacant.length + empty.length + mostVacant.length === 0;
 
   return (
     <div>
-      <div style={{ fontSize: 15, fontWeight: 700 }}>Overview</div>
+      <div style={{ fontSize: 15, fontWeight: 700 }}>{t("Overview")}</div>
       <div style={{ fontSize: 12.5, color: "var(--on-variant)", margin: "2px 0 16px" }}>
-        Select a unit, position or person to see its details, or start with one of these.
+        {t("Select a unit, position or person to see its details, or start with one of these.")}
       </div>
       {isAllGood ? (
-        <div className="alert alert-success"><i className="ti ti-circle-check" /> <div>Every unit has a head and no seats are open.</div></div>
+        <div className="alert alert-success"><i className="ti ti-circle-check" /> <div>{t("Every unit has a head and no seats are open.")}</div></div>
       ) : (
         <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
-          <Group icon="ti-user-question" title="Most open seats" hint="Units with the most vacant positions of their own">
-            {mostVacant.map(({ unit, vacant }) => <Row key={unit.id} unit={unit} note={`${vacant} open`} onSelectUnit={onSelectUnit} />)}
+          <Group icon="ti-user-question" title={t("Most open seats")} hint={t("Units with the most vacant positions of their own")}>
+            {mostVacant.map(({ unit, vacant }) => <Row key={unit.id} unit={unit} note={t("{count} open", { count: vacant })} onSelectUnit={onSelectUnit} />)}
           </Group>
-          <Group icon="ti-crown" title="Head seat vacant" hint="The unit's chief position has nobody in it">
+          <Group icon="ti-crown" title={t("Head seat vacant")} hint={t("The unit's chief position has nobody in it")}>
             {chiefVacant.map(unit => <Row key={unit.id} unit={unit} onSelectUnit={onSelectUnit} />)}
           </Group>
-          <Group icon="ti-alert-triangle" title="No head set" hint="Has positions, but none is marked as chief">
+          <Group icon="ti-alert-triangle" title={t("No head set")} hint={t("Has positions, but none is marked as chief")}>
             {withoutChief.map(unit => <Row key={unit.id} unit={unit} onSelectUnit={onSelectUnit} />)}
           </Group>
-          <Group icon="ti-folder-off" title="Empty units" hint="No positions and no sub-units">
+          <Group icon="ti-folder-off" title={t("Empty units")} hint={t("No positions and no sub-units")}>
             {empty.map(unit => <Row key={unit.id} unit={unit} onSelectUnit={onSelectUnit} />)}
           </Group>
         </div>
@@ -45,6 +47,7 @@ export default function OrgOverview({ attention, onSelectUnit }: Props) {
 const VISIBLE_ROWS = 6;
 
 function Group({ icon, title, hint, children }: { icon: string; title: string; hint: string; children: ReactNode[] }) {
+  const t = useT();
   if (children.length === 0) return null;
   return (
     <div style={{ border: "1px solid var(--outline-v)", borderRadius: 10, overflow: "hidden" }}>
@@ -57,7 +60,7 @@ function Group({ icon, title, hint, children }: { icon: string; title: string; h
       </div>
       <div>{children.slice(0, VISIBLE_ROWS)}</div>
       {children.length > VISIBLE_ROWS && (
-        <div style={{ padding: "6px 12px", fontSize: 11.5, color: "var(--on-variant)" }}>and {children.length - VISIBLE_ROWS} more — use the search to find them</div>
+        <div style={{ padding: "6px 12px", fontSize: 11.5, color: "var(--on-variant)" }}>{t("and {count} more — use the search to find them", { count: children.length - VISIBLE_ROWS })}</div>
       )}
     </div>
   );
