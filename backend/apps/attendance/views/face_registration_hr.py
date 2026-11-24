@@ -42,6 +42,7 @@ from apps.attendance.serializers_face_registration import (
     FaceRosterEmployeeSerializer,
 )
 from apps.attendance.services_face_matching import activate_registration, is_face_verification_mandatory
+from apps.attendance.services_face_policy import exempt_q
 from apps.attendance.services_face_roster import annotate_face_state, apply_face_filter, face_counts
 from apps.attendance.views.face_registration import (
     _FEATURE_DISABLED_MESSAGE,
@@ -82,7 +83,9 @@ class FaceRegistrationEmployeePickerView(APIView):
         # Each person's Face ID state, plus totals over everyone (not narrowed by the search or the filter), so the page can show
         # how far registration has got and who has not completed it.
         annotated = annotate_face_state(queryset)
-        counts = face_counts(annotate_face_state(User.objects.filter(is_active=True)))
+        # The totals leave out the people who are never asked for a Face ID (superusers, System Admins), so the coverage
+        # figure is about the people who actually have to register.
+        counts = face_counts(annotate_face_state(User.objects.filter(is_active=True).exclude(exempt_q())))
         annotated = apply_face_filter(annotated, request.query_params.get('face_status', ''))
 
         page_obj, paginator = paginate(annotated, request)

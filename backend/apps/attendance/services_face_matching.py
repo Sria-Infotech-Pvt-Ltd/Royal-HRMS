@@ -209,6 +209,12 @@ class FaceVerificationService:
             # even for someone who has an approved registration from before.
             return cls._not_required(submitted_embedding)
 
+        from apps.attendance.services_face_policy import is_exempt
+
+        if is_exempt(employee):
+            # A superuser or System Admin is never asked for a face (see services_face_policy.is_exempt).
+            return cls._not_required(submitted_embedding)
+
         registration = cls._resolve_active_registration(employee)
         if registration is None:
             from apps.attendance.services_face_policy import fallback_allows

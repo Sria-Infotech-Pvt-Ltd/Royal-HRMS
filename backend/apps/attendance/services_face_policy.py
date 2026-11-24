@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.attendance.models import AttendanceFaceVerificationRules as Rules
@@ -62,6 +63,27 @@ _HR_NOTES = {
         'You can also register one in person; it is approved immediately.'
     ),
 }
+
+
+EXEMPT_MESSAGE = 'Face ID is not required for your account.'
+
+
+def is_exempt(employee) -> bool:
+    """True for the people the organisation never asks for a Face ID: a superuser, and a System Admin (anyone who holds
+    settings.edit). Both can already switch Face ID off for everyone in Attendance Settings, so asking them to enrol
+    protects nothing, and the approval rule ("nobody reviews their own request") would leave a lone admin's
+    registration waiting forever. Everyone else, HR and managers included, is covered as before."""
+    from core.access import is_full_access
+    from core.permissions import has_perm
+
+    return bool(is_full_access(employee) or has_perm(employee, 'settings.edit', full_access_bypass=False))
+
+
+def exempt_q():
+    """The same people as is_exempt, as a Q over User, for list and count queries."""
+    from core.access import users_with_permission
+
+    return Q(is_superuser=True) | users_with_permission('settings.edit')
 
 
 def _rules() -> Optional[Rules]:
@@ -155,11 +177,11 @@ def instruction_for(state: str, *, fallback_allowed: bool = False, until: Option
 
 def guidance(employee) -> dict:
     """Everything a screen needs to explain Face ID to this employee, consistently."""
-    mandatory = is_mandatory()
-    if not mandatory:
+    exempt = is_exempt(employee)
+    if not is_mandatory() or exempt:
         return {
-            'is_mandatory': False, 'registration_mode': registration_mode(), 'state': STATE_NOT_REGISTERED,
-            'can_self_register': False, 'requires_face_to_punch': False, 'message': '',
+            'is_mandatory': False, 'is_exempt': exempt, 'registration_mode': registration_mode(), 'state': STATE_NOT_REGISTERED,
+            'can_self_register': False, 'requires_face_to_punch': False, 'message': EXEMPT_MESSAGE if exempt else '',
             'fallback_active': False, 'fallback_until': None, 'hr_note': _HR_NOTES[registration_mode()],
         }
     state = employee_state(employee)
@@ -167,6 +189,7 @@ def guidance(employee) -> dict:
     until = fallback_until(employee) if allowed else None
     return {
         'is_mandatory': True,
+        'is_exempt': False,
         'registration_mode': registration_mode(),
         'state': state,
         # Someone with a pending request waits for it rather than submitting another.

@@ -89,6 +89,10 @@ def start_voice_clock_punch(
 
     # The SAME server policy the web punch uses (services_face_policy.guidance) - voice keeps no Face ID rules of its own.
     policy = face_policy_guidance(request.user)
+    if policy.get('is_exempt'):
+        # A superuser / System Admin is not asked for a face: same-turn punch, as when Face ID is switched off.
+        outcome = _executor_for(intent)(request, attendance_mode, latitude=latitude, longitude=longitude)
+        return _payload(intent, confidence, outcome.data, outcome.message, success=outcome.success)
     if not policy['requires_face_to_punch']:
         if policy['fallback_active']:
             # Not approved yet, but the organisation's fallback allows a punch without a face match (as on the web).
