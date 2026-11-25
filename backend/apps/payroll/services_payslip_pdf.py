@@ -136,10 +136,11 @@ def _draw_header(ctx: _Ctx) -> float:
     c.rect(0, PAGE_H - 62 * mm, PAGE_W, 62 * mm, fill=1, stroke=0)
 
     c.setFillColor(colors.white)
-    c.setFont('Helvetica-Bold', 20)
-    c.drawString(MARGIN, PAGE_H - 18 * mm, 'AIRA')
+    # The payslip is the COMPANY's document (the employer's name leads); AIRA, the software that produced it, is named underneath.
+    c.setFont('Helvetica-Bold', 17)
+    c.drawString(MARGIN, PAGE_H - 18 * mm, company_name[:40])
     c.setFont('Helvetica', 8)
-    c.drawString(MARGIN, PAGE_H - 23 * mm, 'ARTIFICIAL INTELLIGENCE RESOURCES ASSISTANCE')
+    c.drawString(MARGIN, PAGE_H - 23 * mm, 'POWERED BY AIRA')
 
     c.setFont('Helvetica-Bold', 13)
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - 18 * mm, 'SALARY STATEMENT')
@@ -147,10 +148,8 @@ def _draw_header(ctx: _Ctx) -> float:
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - 23 * mm, ctx.cycle.cycle_start.strftime('%B %Y'))
 
     c.setFillColor(colors.Color(1, 1, 1, alpha=0.9))
-    c.setFont('Helvetica-Bold', 10)
-    c.drawString(MARGIN, PAGE_H - 34 * mm, company_name.upper())
     c.setFont('Helvetica', 8)
-    c.drawString(MARGIN, PAGE_H - 38.5 * mm, f'{location} | Payroll statement' if location else 'Payroll statement')
+    c.drawString(MARGIN, PAGE_H - 34 * mm, f'{location} | Payroll statement' if location else 'Payroll statement')
 
     return PAGE_H - 62 * mm
 
@@ -344,7 +343,7 @@ def _footer(ctx: _Ctx, y: float):
     generated = ctx.payslip.updated_at.strftime('%d %B %Y') if ctx.payslip.updated_at else ''
     c.drawRightString(PAGE_W - MARGIN, y, support_email)
     y -= 4 * mm
-    c.drawString(MARGIN, y, f'Generated {generated} | AIRA Payroll | Page 1 of 1')
+    c.drawString(MARGIN, y, f'Generated {generated} | Powered by AIRA | Page 1 of 1')
 
 
 def render_payslip_pdf(payslip: EmployeePayslip, ytd: dict | None = None) -> bytes:
