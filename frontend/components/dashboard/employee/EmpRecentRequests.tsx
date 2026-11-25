@@ -81,7 +81,7 @@ export default function EmpRecentRequests() {
         <AssessmentLockedNotice />
       ) : requests.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
-          {t("No requests yet.")} <a href="/dashboard/leave" style={{ color: "var(--primary)" }}>{t("Apply leave")}</a>
+          {t("No requests yet.")} <a href="/dashboard/ess?tab=leave" style={{ color: "var(--primary)" }}>{t("Apply leave")}</a>
         </div>
       ) : (
         <div style={{ padding: "4px 0 8px" }}>
@@ -110,7 +110,7 @@ export default function EmpRecentRequests() {
       )}
 
       <div style={{ padding: "10px 20px", borderTop: "1px solid var(--border)" }}>
-        <a href="/dashboard/my-requests" style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none" }}>
+        <a href="/dashboard/ess?tab=requests" style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none" }}>
           {t("View All Requests")} <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
         </a>
       </div>

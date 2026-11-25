@@ -43,7 +43,7 @@ export default function ExpenseRecentList({ claims, loading, categoryLabel, form
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {/* The page header no longer has a Submit button, so claims already on the list still need a way to start a new one. */}
           {claims.length > 0 && <button className="btn btn-filled btn-sm" type="button" onClick={onNew}><i className="ti ti-plus" /> {t("New expense")}</button>}
-          <a href="/dashboard/my-requests?tab=expense" className="btn btn-ghost btn-sm">{t("View All Expense Claims")} <i className="ti ti-arrow-right" /></a>
+          <a href="/dashboard/ess?tab=requests" className="btn btn-ghost btn-sm">{t("View All Expense Claims")} <i className="ti ti-arrow-right" /></a>
         </div>
       </header>
 

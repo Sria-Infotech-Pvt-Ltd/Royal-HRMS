@@ -1,21 +1,41 @@
 import type { Notification, NotificationModule } from "@/types/notifications";
 
-/** Where each notification module opens when its row is clicked in the bell. */
+/** Where each notification module opens when its row is clicked in the bell, for a notice about the person's OWN request or account.
+ *  Everything self-service opens the employee workspace (My Workspace), the current screens, not the old standalone pages. */
 export const MODULE_ROUTES: Record<NotificationModule, string> = {
-  leave:          "/dashboard/leave",
-  attendance:     "/dashboard/my-attendance",
-  regularization: "/dashboard/my-attendance",
+  leave:          "/dashboard/ess?tab=leave",
+  attendance:     "/dashboard/ess?tab=attendance",
+  regularization: "/dashboard/ess?tab=attendance",
   // The employee workspace's Announcements tab: readable by every employee, unlike the management page.
   announcement:   "/dashboard/ess?tab=announcements",
-  holiday:        "/dashboard/attendance",
-  permission:     "/dashboard/leave",
+  holiday:        "/dashboard/ess?tab=attendance",
+  permission:     "/dashboard/ess?tab=leave",
+  expense:        "/dashboard/ess?tab=expenses",
+  separation:     "/dashboard/separation",
+  documents:      "/dashboard/ess?tab=documents",
+  facial_recognition: "/dashboard/ess?tab=profile",
+  birthday:       "/dashboard",
+  security:       "/dashboard",
   // Employment changes open the employee workspace's Employment tab (status, confirmation, role), not the My Profile page.
   promotion:      "/dashboard/ess?tab=employment",
   confirmation:   "/dashboard/ess?tab=employment",
-  payroll:        "/dashboard/payroll",
+  payroll:        "/dashboard/ess?tab=payslips",
   system:         "/dashboard",
   // Fallback only: a timesheet notice opens its own place (see timesheetRoute below).
   timesheet:      "/dashboard/ess?tab=timesheet",
+};
+
+/** Where a notice that asks the person to ACT as an approver opens: the approvals screens (and the Attendance corrections tab for a
+ *  regularization), never the person's own pages. A module not listed here has no approver screen and uses MODULE_ROUTES. */
+export const APPROVER_ROUTES: Partial<Record<NotificationModule, string>> = {
+  leave:          "/dashboard/approvals?section=approvals",
+  permission:     "/dashboard/approvals?section=approvals",
+  expense:        "/dashboard/approvals?section=approvals",
+  attendance:     "/dashboard/attendance?tab=corrections",
+  regularization: "/dashboard/attendance?tab=corrections",
+  separation:     "/dashboard/separation",
+  facial_recognition: "/dashboard/approvals?section=face_registration",
+  payroll:        "/dashboard/payroll",
 };
 
 /** System notifications that concern one employee carry a `reference_id` saying where to go. */
@@ -37,7 +57,7 @@ function timesheetRoute({ notification_type: type, reference_id: reference }: Pi
 
 /** The page a notification should open. Joining-day notices link to the employee (or to your own profile when it is you);
     every other module keeps its fixed page, and an unknown module falls back to the dashboard. */
-export function notificationRoute(notification: Pick<Notification, "module" | "reference_id"> & Partial<Pick<Notification, "notification_type">>): string {
+export function notificationRoute(notification: Pick<Notification, "module" | "reference_id"> & Partial<Pick<Notification, "notification_type" | "is_for_approver">>): string {
   if (notification.module === "timesheet") return timesheetRoute(notification);
   if (notification.module === "system") {
     const reference = notification.reference_id ?? "";
@@ -53,5 +73,6 @@ export function notificationRoute(notification: Pick<Notification, "module" | "r
     // reference_id is the announcement's id: open that one, not just the list.
     return `${MODULE_ROUTES.announcement}&announcement=${notification.reference_id.trim()}`;
   }
+  if (notification.is_for_approver && APPROVER_ROUTES[notification.module]) return APPROVER_ROUTES[notification.module] as string; // a fixed table entry, checked on the line above
   return MODULE_ROUTES[notification.module] ?? "/dashboard";
 }

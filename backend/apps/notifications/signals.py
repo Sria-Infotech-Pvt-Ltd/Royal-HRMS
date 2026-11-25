@@ -77,7 +77,7 @@ def _category_enabled_user_ids(user_ids: list, category: str) -> list:
 
 def _notify(user, title: str, message: str, notification_type: str,
             module: str, reference_id: str = '', created_by=None,
-            category: str | None = None) -> None:
+            category: str | None = None, for_approver: bool = False) -> None:
     """Create a single Notification row. Swallows all exceptions so a notification
     failure never breaks the business transaction that triggered it."""
     if not user:
@@ -91,6 +91,8 @@ def _notify(user, title: str, message: str, notification_type: str,
             user=user, title=title, message=message,
             notification_type=notification_type, module=module,
             reference_id=reference_id, created_by=created_by,
+            # A notice in the 'approval' category, or one sent on purpose to someone who must act on it, opens the approvals screen.
+            is_for_approver=for_approver or category == 'approval',
         )
         _push_live(notification)
     except Exception:

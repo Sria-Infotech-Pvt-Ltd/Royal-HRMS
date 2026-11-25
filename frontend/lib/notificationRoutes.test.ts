@@ -17,7 +17,7 @@ describe("notificationRoute", () => {
     expect(notificationRoute({ module: "system", reference_id: "whatever" })).toBe("/dashboard")
   })
   it("keeps every other module on its fixed page, ignoring the reference", () => {
-    expect(notificationRoute({ module: "leave", reference_id: "employee:1" })).toBe("/dashboard/leave")
+    expect(notificationRoute({ module: "leave", reference_id: "employee:1" })).toBe("/dashboard/ess?tab=leave")
     expect(notificationRoute({ module: "payroll", reference_id: "" })).toBe(MODULE_ROUTES.payroll)
   })
   it("opens the announcement a notification is about in the employee workspace", () => {
@@ -64,5 +64,34 @@ describe("notificationRoute: timesheet notices", () => {
   })
   it("treats an older notice without a type as the employee's own sheet", () => {
     expect(notificationRoute({ module: "timesheet", reference_id: SHEET })).toBe("/dashboard/ess?tab=timesheet&week=2026-11-09")
+  })
+})
+
+describe("notificationRoute: the current screens, never the old standalone pages", () => {
+  const OLD_PAGES = ["/dashboard/leave", "/dashboard/my-attendance", "/dashboard/my-requests", "/dashboard/my-payslip", "/dashboard/work-from-home"]
+  const MODULES = Object.keys(MODULE_ROUTES) as (keyof typeof MODULE_ROUTES)[]
+
+  it("opens My Workspace for a notice about your own request", () => {
+    expect(notificationRoute({ module: "leave", notification_type: "leave_hr_approved", reference_id: "5" })).toBe("/dashboard/ess?tab=leave")
+    expect(notificationRoute({ module: "regularization", notification_type: "regularization", reference_id: "5" })).toBe("/dashboard/ess?tab=attendance")
+    expect(notificationRoute({ module: "expense", notification_type: "expense_status", reference_id: "5" })).toBe("/dashboard/ess?tab=expenses")
+    expect(notificationRoute({ module: "payroll", reference_id: "" })).toBe("/dashboard/ess?tab=payslips")
+  })
+
+  it("opens the approvals screens for a request that is waiting for the approver (an admin or manager)", () => {
+    const forApprover = { notification_type: "leave_applied", reference_id: "5", is_for_approver: true } as const
+    expect(notificationRoute({ module: "leave", ...forApprover })).toBe("/dashboard/approvals?section=approvals")
+    expect(notificationRoute({ module: "expense", ...forApprover })).toBe("/dashboard/approvals?section=approvals")
+    expect(notificationRoute({ module: "regularization", ...forApprover })).toBe("/dashboard/attendance?tab=corrections")
+    expect(notificationRoute({ module: "facial_recognition", ...forApprover })).toBe("/dashboard/approvals?section=face_registration")
+  })
+
+  it("never sends anyone to an old standalone page, whichever module and whoever the notice is for", () => {
+    for (const moduleName of MODULES) {
+      for (const is_for_approver of [false, true]) {
+        const route = notificationRoute({ module: moduleName, reference_id: "", is_for_approver })
+        expect(OLD_PAGES.some(page => route === page || route.startsWith(page + "?")), `${moduleName} (approver: ${is_for_approver}) -> ${route}`).toBe(false)
+      }
+    }
   })
 })

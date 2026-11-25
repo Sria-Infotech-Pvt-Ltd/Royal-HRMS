@@ -163,6 +163,7 @@ def _fire_alert(employee, consecutive_days: int, notify_whom: str) -> None:
             notification_type='attendance',
             module='attendance',
             reference_id=str(employee.id),
+            is_for_approver=True,   # sent to the manager / HR, who open the Attendance screen
         )
     logger.info(
         'Absence alert fired: employee=%s consecutive_days=%d recipients=%d',

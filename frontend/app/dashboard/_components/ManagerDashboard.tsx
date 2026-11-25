@@ -21,10 +21,10 @@ const QA_META: Record<string, { icon: string; bg: string; color: string }> = {
 // The backend's quick_actions payload (_build_quick_actions in apps/dashboard/views/manager.py)
 // points at routes that don't exist in this frontend — override with the actual page paths.
 const QA_URL_OVERRIDE: Record<string, string> = {
-  apply_leave:  "/dashboard/leave?tab=apply",
-  my_requests:  "/dashboard/my-requests",
+  apply_leave:  "/dashboard/ess?tab=leave",
+  my_requests:  "/dashboard/ess?tab=requests",
   team_members: "/dashboard/employees",
-  my_payslip:   "/dashboard/my-payslip",
+  my_payslip:   "/dashboard/ess?tab=payslips",
   interviews:   "/dashboard/interview-list",
 };
 

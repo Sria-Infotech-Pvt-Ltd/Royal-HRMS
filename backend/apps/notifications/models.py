@@ -67,6 +67,9 @@ class Notification(models.Model):
     module            = models.CharField(max_length=50, choices=MODULE_CHOICES, db_index=True)
     reference_id      = models.CharField(max_length=100, blank=True, default='')
     is_read           = models.BooleanField(default=False, db_index=True)
+    # True when this notice asks the person to ACT as an approver (a request waiting for them), False when it is about their own request or
+    # an announcement. The bell uses it to open the approvals screen instead of the person's own page.
+    is_for_approver   = models.BooleanField(default=False)
     created_by        = models.ForeignKey(
         'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='created_notifications',

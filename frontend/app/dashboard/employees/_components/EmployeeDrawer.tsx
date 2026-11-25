@@ -64,8 +64,8 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
           <span className="spacer" />
           {isSelf && (
             <>
-              <button className="rvbtn" onClick={() => router.push("/dashboard/leave")}>{t("Request leave")}</button>
-              <button className="rvbtn pri" onClick={onRequestCorrection ?? (() => router.push("/dashboard/profile"))}>
+              <button className="rvbtn" onClick={() => router.push("/dashboard/ess?tab=leave")}>{t("Request leave")}</button>
+              <button className="rvbtn pri" onClick={onRequestCorrection ?? (() => router.push("/dashboard/ess?tab=profile"))}>
                 {correctionLabel ?? t("Request profile correction")}
               </button>
             </>

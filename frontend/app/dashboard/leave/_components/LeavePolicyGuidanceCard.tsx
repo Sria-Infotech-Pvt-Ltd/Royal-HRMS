@@ -52,7 +52,7 @@ export default function LeavePolicyGuidanceCard() {
           )}
 
           {pending ? (
-            <a href={`/dashboard/my-requests?tab=leave&request=${pending.id}`} className="lv-link">
+            <a href={`/dashboard/ess?tab=requests&request=${pending.id}`} className="lv-link">
               <span className="lv-icon"><i className="ti ti-progress" /></span>
               <span>{tr("Track {date} request", { date: fmtShortDate(pending.start_date) })}<small>{tr("See who still has to approve it")}</small></span>
             </a>

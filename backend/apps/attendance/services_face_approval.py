@@ -104,7 +104,7 @@ def notify_approvers_of_submission(face_request: FaceRegistrationRequest) -> int
         _notify(
             approver, 'Face ID registration awaiting review',
             f'{name} ({employee.employee_id or "no employee ID"}) submitted a Face ID registration for your approval.',
-            NOTIFICATION_TYPE, NOTIFICATION_MODULE, reference, created_by=employee,
+            NOTIFICATION_TYPE, NOTIFICATION_MODULE, reference, created_by=employee, for_approver=True,
         )
         created += 1
     return created

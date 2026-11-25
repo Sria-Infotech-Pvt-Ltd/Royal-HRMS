@@ -34,7 +34,7 @@ export default function EmpLeaveBalances() {
     <div className="card">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-beach" /> {t("Leave Balances — {year}", { year })}</div>
-        <a href="/dashboard/leave" className="btn btn-ghost btn-sm">{t("Apply Leave")}</a>
+        <a href="/dashboard/ess?tab=leave" className="btn btn-ghost btn-sm">{t("Apply Leave")}</a>
       </div>
 
       {loading ? (
