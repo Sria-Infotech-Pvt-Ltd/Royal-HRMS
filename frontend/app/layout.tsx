@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import "./aira-theme.css";
 import "./ess-theme.css";
@@ -19,21 +18,9 @@ import { ToastProvider } from "@/components/ToastProvider";
 import { DialogProvider } from "@/components/DialogProvider";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import I18nProvider from "@/components/I18nProvider";
-import { SCRIPT_FONT_CLASSES } from "@/lib/scriptFonts";
+import { SCRIPT_FONT_CLASSES, interFont } from "@/lib/scriptFonts";
 
-// style: ["normal", "italic"] combined with 5 weights used to be here for a
-// real italic cut on the highlighted title word (em.hl) — combining multiple
-// weights with multiple styles in one next/font/google call hits a Turbopack
-// resolver bug ("next/font/google queries have exactly one entry") that
-// breaks every page with a 500. Dropped back to normal-only to restore the
-// app; em.hl falls back to a synthesized oblique until italic is reintroduced
-// properly (e.g. a second Inter() call with style: "italic" alone, merged via
-// CSS variables) rather than combined into this one.
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  display: "swap",
-});
+// The fonts live in the project (lib/fonts, see lib/scriptFonts.ts): nothing is downloaded from Google.
 
 export const metadata: Metadata = {
   title: "Aira HRMS",
@@ -58,7 +45,7 @@ export default function RootLayout({
         <link rel="shortcut icon" href="/logo.svg" />
         <link rel="apple-touch-icon" href="/logo-icon.png" />
       </head>
-      <body className={inter.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
+      <body className={interFont.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
         <I18nProvider>
         <ToastProvider>
           <DialogProvider>

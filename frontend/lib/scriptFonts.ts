@@ -1,22 +1,26 @@
-// A font for each script the app can be shown in. Self-hosted by next/font (not a Google Fonts link). preload is off, so a page only
-// downloads the font of the language it is actually shown in; app/language-fonts.css picks it from <html lang>.
-// next/font needs every option written out literally in each call (no spread, no shared constant), so they repeat on purpose. Each asks for the
-// variable-weight file (one request): listing several weights makes Turbopack dev fail with "queries have exactly one entry".
-import {
-  Noto_Sans_Bengali, Noto_Sans_Devanagari, Noto_Sans_Gujarati, Noto_Sans_Gurmukhi, Noto_Sans_Kannada, Noto_Sans_Malayalam,
-  Noto_Naskh_Arabic, Noto_Sans_Oriya, Noto_Sans_Tamil, Noto_Sans_Telugu,
-} from "next/font/google";
+// The fonts of the app, kept in the project (lib/fonts/*.woff2) and served by next/font/local: nothing is downloaded from Google when the
+// app is started or built, so a blocked or slow connection can no longer break the app. They are open-source variable fonts
+// (SIL Open Font License 1.1: Inter, and the Noto families by Google); see lib/fonts/README.md for where they came from.
+// Each script font only has its own script (Latin letters and digits inside the text fall back to Inter, see app/language-fonts.css), and
+// preload is off, so a page only downloads the font of the language it is shown in. next/font needs every option written out literally in
+// each call (no spread, no shared constant), so they repeat on purpose.
+import localFont from "next/font/local";
 
-const devanagari = Noto_Sans_Devanagari({ display: "swap", preload: false, subsets: ["devanagari"], variable: "--font-devanagari" });
-const bengali = Noto_Sans_Bengali({ display: "swap", preload: false, subsets: ["bengali"], variable: "--font-bengali" });
-const telugu = Noto_Sans_Telugu({ display: "swap", preload: false, subsets: ["telugu"], variable: "--font-telugu" });
-const tamil = Noto_Sans_Tamil({ display: "swap", preload: false, subsets: ["tamil"], variable: "--font-tamil" });
-const gujarati = Noto_Sans_Gujarati({ display: "swap", preload: false, subsets: ["gujarati"], variable: "--font-gujarati" });
-const kannada = Noto_Sans_Kannada({ display: "swap", preload: false, subsets: ["kannada"], variable: "--font-kannada" });
-const odia = Noto_Sans_Oriya({ display: "swap", preload: false, subsets: ["oriya"], variable: "--font-odia" });
-const malayalam = Noto_Sans_Malayalam({ display: "swap", preload: false, subsets: ["malayalam"], variable: "--font-malayalam" });
-const gurmukhi = Noto_Sans_Gurmukhi({ display: "swap", preload: false, subsets: ["gurmukhi"], variable: "--font-gurmukhi" });
-const arabic = Noto_Naskh_Arabic({ display: "swap", preload: false, subsets: ["arabic"], variable: "--font-arabic" });
+/** The main font of the whole app. Its className goes on <body>. */
+export const interFont = localFont({
+  src: "./fonts/inter-latin.woff2", weight: "100 900", display: "swap",
+});
+
+const devanagari = localFont({ src: "./fonts/noto-sans-devanagari-devanagari.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-devanagari" });
+const bengali = localFont({ src: "./fonts/noto-sans-bengali-bengali.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-bengali" });
+const telugu = localFont({ src: "./fonts/noto-sans-telugu-telugu.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-telugu" });
+const tamil = localFont({ src: "./fonts/noto-sans-tamil-tamil.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-tamil" });
+const gujarati = localFont({ src: "./fonts/noto-sans-gujarati-gujarati.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-gujarati" });
+const kannada = localFont({ src: "./fonts/noto-sans-kannada-kannada.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-kannada" });
+const odia = localFont({ src: "./fonts/noto-sans-oriya-oriya.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-odia" });
+const malayalam = localFont({ src: "./fonts/noto-sans-malayalam-malayalam.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-malayalam" });
+const gurmukhi = localFont({ src: "./fonts/noto-sans-gurmukhi-gurmukhi.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-gurmukhi" });
+const arabic = localFont({ src: "./fonts/noto-naskh-arabic-arabic.woff2", weight: "100 900", display: "swap", preload: false, variable: "--font-arabic" });
 
 /** Put these class names on <html>: they define the --font-* variables that language-fonts.css uses. */
 export const SCRIPT_FONT_CLASSES = [devanagari, bengali, telugu, tamil, gujarati, kannada, odia, malayalam, gurmukhi, arabic]
