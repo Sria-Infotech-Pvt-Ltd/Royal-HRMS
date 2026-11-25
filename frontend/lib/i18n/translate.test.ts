@@ -47,12 +47,15 @@ describe("language files", () => {
   });
 
   it("never has an empty wording, and keeps the same {placeholders} as the English text", () => {
+    // Collected and checked once: with ~88,000 wordings, one expect() per entry takes longer than the test timeout.
+    const problems: string[] = [];
     for (const code of codes) {
       for (const [english, wording] of Object.entries(MESSAGES[code])) {
-        expect(wording.trim(), `${code}: "${english}"`).not.toBe("");
-        expect(placeholders(wording), `${code}: "${english}"`).toEqual(placeholders(english));
+        if (wording.trim() === "") problems.push(`${code}: "${english}" is empty`);
+        else if (placeholders(wording).join(",") !== placeholders(english).join(",")) problems.push(`${code}: "${english}" has different {placeholders}`);
       }
     }
+    expect(problems).toEqual([]);
   });
 
   it("translates every navigation page and section name", () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import PoweredBy from "@/components/PoweredBy";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -252,6 +253,8 @@ export default function LoginPage() {
             </p>
 
             <LoginLanguageSwitch />
+
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 14 }}><PoweredBy /></div>
 
           </div>
         </div>

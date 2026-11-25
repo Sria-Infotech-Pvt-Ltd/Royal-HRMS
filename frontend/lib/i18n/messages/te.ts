@@ -7400,4 +7400,6 @@ export const TELUGU: Readonly<Record<string, string>> = {
   "you@company.com": "you@company.com",
   "{label}: {count}": "{label}: {count}",
   "?": "?",
+  // Branding
+  "Powered by {brand}": "{brand} ద్వారా నడుస్తోంది",
 };

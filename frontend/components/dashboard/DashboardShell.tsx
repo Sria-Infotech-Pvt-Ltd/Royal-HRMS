@@ -12,6 +12,7 @@ import {
   withHomeLinks, withTeamLink, workspaceNav, type NavItem,
 } from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
+import BrandMark from "@/components/BrandMark";
 import GlobalSearch from "@/components/dashboard/GlobalSearch";
 import ThemePicker from "@/components/dashboard/ThemePicker";
 import LanguagePicker from "@/components/dashboard/LanguagePicker";
@@ -129,16 +130,7 @@ export default function DashboardShell({
       {/* ══════════════════ TOP NAV ══════════════════ */}
       <header className="topnav flex-wrap md:flex-nowrap">
         {/* Brand */}
-        <div className="brandmark">
-          <span className="sq">
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
-              <path d="M12 3 21 8v8l-9 5-9-5V8z" />
-            </svg>
-          </span>
-          <div className="brandcopy">
-            <strong>AIRA</strong>
-          </div>
-        </div>
+        <BrandMark />
 
         {/* Page links grouped into dropdowns. On the workspace (ESS) only the modules extra permissions add are shown. */}
         {topBar.length > 0

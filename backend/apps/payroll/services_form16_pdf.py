@@ -80,10 +80,11 @@ def _draw_header(ctx: _Ctx) -> float:
     c.rect(0, PAGE_H - 50 * mm, PAGE_W, 50 * mm, fill=1, stroke=0)
 
     c.setFillColor(colors.white)
-    c.setFont('Helvetica-Bold', 20)
-    c.drawString(MARGIN, PAGE_H - 18 * mm, 'AIRA')
+    # The statement is the COMPANY's document (the employer's name leads); AIRA, the software that produced it, is named underneath.
+    c.setFont('Helvetica-Bold', 17)
+    c.drawString(MARGIN, PAGE_H - 18 * mm, company_name[:40])
     c.setFont('Helvetica', 8)
-    c.drawString(MARGIN, PAGE_H - 23 * mm, 'ARTIFICIAL INTELLIGENCE RESOURCES ASSISTANCE')
+    c.drawString(MARGIN, PAGE_H - 23 * mm, 'POWERED BY AIRA')
 
     c.setFont('Helvetica-Bold', 13)
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - 18 * mm, 'ANNUAL TAX STATEMENT (FORM 16)')
@@ -91,11 +92,9 @@ def _draw_header(ctx: _Ctx) -> float:
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - 23 * mm, f'Financial Year {ctx.fy_label}')
 
     c.setFillColor(colors.Color(1, 1, 1, alpha=0.9))
-    c.setFont('Helvetica-Bold', 10)
-    c.drawString(MARGIN, PAGE_H - 34 * mm, company_name.upper())
     c.setFont('Helvetica', 7.5)
     c.drawString(
-        MARGIN, PAGE_H - 38.5 * mm,
+        MARGIN, PAGE_H - 34 * mm,
         'Summary of salary paid and tax deducted at source — not a statutory TRACES-issued certificate.',
     )
 
@@ -234,7 +233,7 @@ def _footer(ctx: _Ctx, y: float):
     c.setFont('Helvetica', 7.5)
     c.drawString(MARGIN, y, 'This is a system-generated annual tax summary from recorded payroll figures,')
     y -= 4 * mm
-    c.drawString(MARGIN, y, 'not a TRACES-issued Form 16 certificate. Generated securely from AIRA ESS.')
+    c.drawString(MARGIN, y, 'not a TRACES-issued Form 16 certificate. Generated securely by employee self-service (AIRA).')
     y -= 8 * mm
 
     c.setStrokeColor(LINE)

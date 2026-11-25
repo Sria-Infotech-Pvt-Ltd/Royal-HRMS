@@ -16,14 +16,14 @@ export default function DashboardFooter() {
     <footer className="site-footer">
       <div className="footer-inner">
         <div className="footer-brand">
-          {/* The same AIRA mark as the top-left of the app: the product's logo, not the company's. */}
+          {/* The AIRA mark: the footer says which software this is ("Powered by AIRA"); the top-left corner carries the company's logo. */}
           <span className="footer-logo" aria-hidden="true">
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
               <path d="M12 3 21 8v8l-9 5-9-5V8z" />
             </svg>
           </span>
           <span>
-            <b>{t("AIRA HR Operations")}</b>
+            <b>{t("Powered by {brand}", { brand: "AIRA" })}</b>
             <small>{t("Artificial Intelligence Resources Assistance")}</small>
           </span>
         </div>

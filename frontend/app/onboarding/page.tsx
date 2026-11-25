@@ -9,6 +9,7 @@ import { useHrContact } from "@/hooks/useHrContact";
 import { useT } from "@/hooks/useI18n";
 import { tr } from "@/lib/i18n/tr";
 import HrContactNote from "@/components/HrContactNote";
+import BrandLogo from "@/components/BrandLogo";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 import type { FaceIdGuidance, FaceIdMode } from "@/types/faceId";
@@ -1034,8 +1035,7 @@ export default function OnboardingPage() {
     <div style={WIZARD_CARD_STYLE}>
       <div className="modal-head" style={{ flex: "none" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-icon.png" alt="Aira HRMS" style={{ height: 34, width: "auto", objectFit: "contain" }} />
+          <BrandLogo height={34} />
           <div>
             <h2 style={{ fontSize: 18 }}>{t("Complete your profile")}</h2>
             <p>{t("Fill in your details to get started. Your information is kept secure.")}</p>

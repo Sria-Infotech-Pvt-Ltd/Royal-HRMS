@@ -7400,4 +7400,6 @@ export const GUJARATI: Readonly<Record<string, string>> = {
   "you@company.com": "you@company.com",
   "{label}: {count}": "{label}: {count}",
   "?": "?",
+  // Branding
+  "Powered by {brand}": "{brand} દ્વારા સંચાલિત",
 };
