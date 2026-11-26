@@ -25,7 +25,10 @@ import ManageJobTemplatesModal from "./ManageJobTemplatesModal";
 import { confirmDialog } from "@/components/DialogProvider";
 
 export interface EmployeeOption {
+  /** The employee code (e.g. 10000002), shown to people. */
   id: string;
+  /** The database id: what the placement API expects as `employee`. */
+  uuid: string;
   full_name: string;
   employee_id: string;
 }

@@ -6785,3 +6785,10 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
 - Not done: Perform Action > Org Assignment still only changes manager/work location (no position/unit change there).
 - Build note: `next build --webpack` in a junctioned copy fails on `app/dashboard/my-payslip/page.tsx` (props on a page, pre-existing since
   2026-11-24, webpack-only type check). The normal Turbopack `npm run build` passed on that file in earlier pushes.
+
+- Org Structure > Assign holder sent the employee CODE as `employee`; the placement API looks people up by database id, so every
+  assignment from that screen returned 404 "Employee not found". It now sends `uuid` (AssignHolderModal.test.tsx).
+- LOCAL DB WARNING (2026-11-26): the folder `Desktop/Aira Hrms - Client` (same branch, UNCOMMITTED hrms migrations 0060_remove_budgeting_project_sync
+  + 0061_projects) ran `migrate` on the shared local `hrms_dev` at 14:06 IST. Since then hrms_project_assignments / _events have that copy's
+  shape, so this folder's Work Status page 500s (employee_code column) and Celery's reconcile job failed (sync-log table dropped; I recreated
+  hrms_project_sync_logs empty). Two code versions must not share one database: give one copy its own DB.

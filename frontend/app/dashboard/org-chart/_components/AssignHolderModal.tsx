@@ -84,7 +84,7 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
           value={employeeId}
           onChange={v => { setEmployeeId(v); setFieldError(null); }}
           placeholder={t("Select an employee…")}
-          options={employees.map(e => ({ value: e.id, label: `${e.full_name} (${e.employee_id})` }))}
+          options={employees.map(e => ({ value: e.uuid, label: `${e.full_name} (${e.employee_id})` }))}
         />
         {fieldError && <p className="field-error-msg">{fieldError}</p>}
       </div>
