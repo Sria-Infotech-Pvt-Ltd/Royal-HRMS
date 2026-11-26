@@ -6745,3 +6745,28 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
 
 **Branding: company vs product (2026-11-25).** AIRA is the PRODUCT (the software); Sria Infotech is the COMPANY that uses it (white label). Rule, in `lib/brand.ts`: where a person sees their own company it shows the COMPANY's name/logo (Settings > Company Info, public endpoint `/company/public-branding/`); where the screen says which software it is, it shows AIRA ("Powered by AIRA"). No company logo uploaded: the AIRA mark. Done: `hooks/useBranding.ts` (one cached public request) + `components/BrandMark.tsx` (top-left corner of the app: company logo, AIRA mark as fallback, hidden placeholder while loading so nothing flashes) + `components/BrandLogo.tsx` (onboarding header) + `components/PoweredBy.tsx` ("Powered by AIRA" with the AIRA mark: login page bottom; the footer now says "Powered by AIRA"). Browser tab/favicon/phone icon stay AIRA (`public/logo-icon.png` is the AIRA hexagon-A mark). Emails, employment letters and the email preview already use the company logo/name (fallback "Aira HRMS"). The Form 16 PDF now leads with the company's name and says "POWERED BY AIRA" (it used to print AIRA as the title). New text "Powered by {brand}" is in all 12 languages. `lib/i18n/translate.test.ts` placeholder check now collects problems and asserts once (one `expect` per entry timed out at 5 s with ~88,000 wordings). The payslip PDF (`services_payslip_pdf.py`) got the same fix as Form 16: the company's name leads the header, "POWERED BY AIRA" is underneath, and the footer says "Powered by AIRA" (it used to print AIRA as the title and "AIRA Payroll" in the footer). Both PDFs now also draw the company's logo (`apps/payroll/services_pdf_branding.py`: `draw_company_logo` on a small white badge at the top-left of the header, `draw_company_title` shrinks/cuts a long company name so it never runs into the right-hand title). The logo is read from `Company.logo` through the storage API, max 5 MB; a missing file, an unreadable image or an unsupported format (SVG) leaves the logo out with a logged warning and the statement is produced as before: a PDF must never fail because of a logo. Tests: `apps/payroll/tests_pdf_company_logo.py` (10, no database). Not changed: mobile app icon; a full payslip with real payroll figures was not rendered here, only the header.
 
+---
+
+## STOP POINT 2026-11-26 (user said "update teamcontext.md and stop")
+
+**Everything below is on `origin/New-AI` (last push `e33016c8`); nothing is running (no dev server, no test servers, no temp files in the repo).** The QA program stop point (2026-11-24) is further up; this block covers the work after it.
+
+**Done and pushed since the QA stop point** (details in the sections above):
+1. Themes (6 looks + own colours) and 13 interface languages; every screen text is translatable and translated (12 languages x 7,388 entries); fonts kept in the project (`lib/fonts`).
+2. Face ID not asked of a superuser / System Admin; "View as employee" shows the viewed employee's bar and search; an admin's corrected clock-in clears a wrong "Late".
+3. Notifications and shortcuts open My Workspace / Approvals instead of the old standalone pages (`Notification.is_for_approver`).
+4. Branding: company logo for the workspace, "Powered by AIRA"; company name + logo on the payslip and Form 16 PDFs.
+5. Deploy script: one deploy at a time, `npm ci` retry.
+
+**Deploy checklist for the next push** (runs automatically): migrations `accounts/0228` (theme), `notifications/0014` (is_for_approver) apply by themselves; if the frontend step fails with `ENOTEMPTY`, run `rm -rf /srv/apps/aira/repo/frontend/node_modules` on the server and re-run the deploy. The `deploy.sh` lock and retry were never exercised on the server: check the first deploy log.
+
+**Open items / owner decisions (nothing is blocked):**
+1. **Translations are machine-drafted**: native speakers must review payroll / HR / legal wording in the 12 languages before wide release.
+2. Still English by design or gap: server data (names, branch names, API statuses, HR-written text), dates and month names, server error messages, e-mail templates and PDFs (apart from the headers), the Profile page's server-driven labels.
+3. Right-to-left (Urdu) is right for the shell and tables, not audited page by page (modals, charts).
+4. Not changed: mobile app icon; Reports > Leave Analytics and the HR queue "Expense Claims" still open the standalone HR management pages; a full payslip with real payroll figures was not rendered (only the headers).
+5. Items from the QA program still waiting for an owner decision are listed in its section above (`/admin/` exposure, five employee-readable settings routes, 147 unused backend routes, dynamic Family/Assets/Education/Experience/PAN fields, forgot-password SMTP-failure answer, CLAUDE.md response shape vs code, the skipped migration test, 2 date-dependent leave tests, 6 announcements email tests of another session).
+6. Dev-machine notes: never run `next dev` and `next build` (or two builds) in the same `frontend` folder at the same time (`.next` collision, `ENOENT ... _buildManifest.js.tmp`); the project is under OneDrive, which can lock files in `.next`. Local DB needs `python manage.py migrate` after pulling (0228, 0014). `InterviewHeader.tsx` shows as modified in `git status` only because of a line-ending artifact (no real difference).
+
+**To continue ("continue"):** read this block, then the QA RESUME GUIDE above; start with the deploy log of the latest push, then the open items in the order of the owner's priority.
+
