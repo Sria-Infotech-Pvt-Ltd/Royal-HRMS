@@ -24,6 +24,7 @@ from reportlab.pdfgen import canvas as pdfcanvas
 
 from apps.accounts.models import Company
 from apps.payroll.models import EmployeePayslip
+from apps.payroll.services_pdf_branding import draw_company_logo, draw_company_title
 
 PAGE_W, PAGE_H = A4
 MARGIN = 15 * mm
@@ -81,10 +82,11 @@ def _draw_header(ctx: _Ctx) -> float:
 
     c.setFillColor(colors.white)
     # The statement is the COMPANY's document (the employer's name leads); AIRA, the software that produced it, is named underneath.
-    c.setFont('Helvetica-Bold', 17)
-    c.drawString(MARGIN, PAGE_H - 18 * mm, company_name[:40])
+    # The company's logo (Settings > Company Info) sits on a small white badge at the left; the name moves to its right. No logo: as before.
+    text_left = MARGIN + draw_company_logo(c, company, MARGIN, PAGE_H - 10 * mm)
+    draw_company_title(c, company_name, text_left, PAGE_H - 18 * mm, PAGE_W - MARGIN - c.stringWidth('ANNUAL TAX STATEMENT (FORM 16)', 'Helvetica-Bold', 13) - 6 * mm)
     c.setFont('Helvetica', 8)
-    c.drawString(MARGIN, PAGE_H - 23 * mm, 'POWERED BY AIRA')
+    c.drawString(text_left, PAGE_H - 23 * mm, 'POWERED BY AIRA')
 
     c.setFont('Helvetica-Bold', 13)
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - 18 * mm, 'ANNUAL TAX STATEMENT (FORM 16)')
