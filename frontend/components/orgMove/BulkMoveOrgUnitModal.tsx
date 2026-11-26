@@ -13,13 +13,18 @@ import { useBulkMoveOrgUnit, type BulkMoveSkipped } from "@/hooks/useBulkMoveOrg
 import { useT } from "@/hooks/useI18n";
 import BulkMoveOrgUnitRows from "./BulkMoveOrgUnitRows";
 
-interface BulkMoveOrgUnitModalProps { onClose: () => void; onDone: () => void }
+interface BulkMoveOrgUnitModalProps {
+  onClose: () => void;
+  onDone: () => void;
+  /** Opened from an org unit in Organization Management: that unit is pre-selected as "Move from". */
+  initialFromUnitId?: string;
+}
 
-export default function BulkMoveOrgUnitModal({ onClose, onDone }: BulkMoveOrgUnitModalProps) {
+export default function BulkMoveOrgUnitModal({ onClose, onDone, initialFromUnitId }: BulkMoveOrgUnitModalProps) {
   const t = useT();
   const { showToast } = useToast();
   const { fieldErrors, handleError, clearAll } = useApiErrors();
-  const move = useBulkMoveOrgUnit();
+  const move = useBulkMoveOrgUnit(initialFromUnitId);
   const [isSaving, setIsSaving] = useState(false);
   const [skipped, setSkipped] = useState<BulkMoveSkipped[]>([]);
   const readyCount = move.chosenPeople.length - move.unmatchedCount;

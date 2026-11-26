@@ -7420,4 +7420,5 @@ export const BENGALI: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} জন কর্মচারী সরানো হয়েছে।",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "নির্বাচিত {count} জন কর্মচারীর জন্য কোনো খালি পদ নেই: আগে সংগঠন কাঠামোতে পদ যোগ করুন।",
   "{count} vacant position(s) in the target org unit.": "লক্ষ্য সংগঠন ইউনিটে {count}টি খালি পদ।",
+  "Move employees": "কর্মচারীদের সরান",
 };

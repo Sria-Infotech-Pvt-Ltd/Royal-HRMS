@@ -7420,4 +7420,5 @@ export const URDU: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} ملازمین منتقل کیے گئے۔",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "منتخب {count} ملازمین کے لیے کوئی خالی عہدہ نہیں بچا: پہلے تنظیمی ڈھانچے میں عہدے شامل کریں۔",
   "{count} vacant position(s) in the target org unit.": "ہدف تنظیمی اکائی میں {count} خالی عہدے۔",
+  "Move employees": "ملازمین منتقل کریں",
 };

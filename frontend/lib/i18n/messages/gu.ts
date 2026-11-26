@@ -7420,4 +7420,5 @@ export const GUJARATI: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} કર્મચારીઓ ખસેડાયા.",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "પસંદ કરેલા {count} કર્મચારીઓ માટે કોઈ ખાલી પદ બાકી નથી: પહેલા સંગઠન માળખામાં પદ ઉમેરો.",
   "{count} vacant position(s) in the target org unit.": "લક્ષ્ય સંગઠન એકમમાં {count} ખાલી પદ.",
+  "Move employees": "કર્મચારીઓને ખસેડો",
 };

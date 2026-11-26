@@ -6792,3 +6792,11 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
   + 0061_projects) ran `migrate` on the shared local `hrms_dev` at 14:06 IST. Since then hrms_project_assignments / _events have that copy's
   shape, so this folder's Work Status page 500s (employee_code column) and Celery's reconcile job failed (sync-log table dropped; I recreated
   hrms_project_sync_logs empty). Two code versions must not share one database: give one copy its own DB.
+
+- RESOLVED same day: on the user's decision `hrms_dev` belongs to THIS folder (`Aira Hrms`); the user will give `Aira Hrms - Client` its own
+  database. The Client copy's 4 migrations were reversed with its own code (`migrate hrms 0059`, `attendance 0056`, `notifications 0014`), so
+  hrms_dev now matches this folder exactly (no extra/missing migrations, every table's columns match). One test row lost from that copy's
+  new hrms_projects table ("Royal Hrms"), saved first to the session scratchpad as hrms_projects_backup.json.
+  Tip: run manage.py with the venv (`backend/H/Scripts/python.exe`): the global Python has Django 6.0.4 + a newer simplejwt (token_blacklist 0013).
+- Organization Management now has "Move employees" too (page header, and on a unit's "Positions in this unit" when it has holders, which
+  pre-selects that unit as Move from). Needs employees.edit. The modal moved to `components/orgMove/` and is shared with the Employees page.

@@ -7420,4 +7420,5 @@ export const PUNJABI: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} ਕਰਮਚਾਰੀ ਤਬਦੀਲ ਕੀਤੇ ਗਏ।",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "ਚੁਣੇ ਗਏ {count} ਕਰਮਚਾਰੀਆਂ ਲਈ ਕੋਈ ਖਾਲੀ ਅਹੁਦਾ ਨਹੀਂ ਬਚਿਆ: ਪਹਿਲਾਂ ਸੰਗਠਨ ਢਾਂਚੇ ਵਿੱਚ ਅਹੁਦੇ ਜੋੜੋ।",
   "{count} vacant position(s) in the target org unit.": "ਟੀਚਾ ਸੰਗਠਨ ਇਕਾਈ ਵਿੱਚ {count} ਖਾਲੀ ਅਹੁਦੇ।",
+  "Move employees": "ਕਰਮਚਾਰੀ ਤਬਦੀਲ ਕਰੋ",
 };

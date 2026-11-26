@@ -7420,4 +7420,5 @@ export const ODIA: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} କର୍ମଚାରୀ ସ୍ଥାନାନ୍ତରିତ ହେଲେ।",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "ବଛାଯାଇଥିବା {count} କର୍ମଚାରୀଙ୍କ ପାଇଁ ଖାଲି ପଦ ବାକି ନାହିଁ: ପ୍ରଥମେ ସଂଗଠନ ଗଠନରେ ପଦ ଯୋଡନ୍ତୁ।",
   "{count} vacant position(s) in the target org unit.": "ଲକ୍ଷ୍ୟ ସଂଗଠନ ୟୁନିଟ୍‌ରେ {count}ଟି ଖାଲି ପଦ।",
+  "Move employees": "କର୍ମଚାରୀଙ୍କୁ ସ୍ଥାନାନ୍ତର କରନ୍ତୁ",
 };

@@ -22,6 +22,7 @@ import EndPlacementModal from "./EndPlacementModal";
 import DeactivatePositionModal from "./DeactivatePositionModal";
 import PositionPermissionsModal from "./PositionPermissionsModal";
 import ManageJobTemplatesModal from "./ManageJobTemplatesModal";
+import BulkMoveOrgUnitModal from "@/components/orgMove/BulkMoveOrgUnitModal";
 import { confirmDialog } from "@/components/DialogProvider";
 
 export interface EmployeeOption {
@@ -53,6 +54,10 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
   const canEdit = useAnyPermission("org_structure.create", "org_structure.edit", "org_structure.delete");
   const canDelete = usePermission("org_structure.delete");
   const canManagePermissions = usePermission("settings.edit");
+  // Moving people between units changes their employee record, so it needs employees.edit (the same check the server makes).
+  const canMoveEmployees = usePermission("employees.edit");
+  // null = closed; "" = open with no "Move from" preset; a unit id = opened from that unit.
+  const [moveFromUnitId, setMoveFromUnitId] = useState<string | null>(null);
 
   const [units,     setUnits]     = useState<OrgUnit[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -212,11 +217,16 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
           <div className="page-title">{t("Organization Management")}</div>
           <div className="page-sub">{t("Org units, the positions inside them, and who holds each seat. Modeled on positions, so structure exists before anyone is hired.")}</div>
         </div>
-        {(canEdit || onBack) && (
+        {(canEdit || canMoveEmployees || onBack) && (
           <div className="page-actions">
             {canEdit && (
               <button className="btn btn-ghost" onClick={() => setManageJobsOpen(true)}>
                 <i className="ti ti-briefcase" /> {t("Manage job templates")}
+              </button>
+            )}
+            {canMoveEmployees && (
+              <button className="btn btn-ghost" onClick={() => setMoveFromUnitId("")}>
+                <i className="ti ti-arrows-exchange" /> {t("Move employees")}
               </button>
             )}
             {canEdit && (
@@ -420,6 +430,7 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
               selected={selected} units={units} positions={positions} jobs={jobs} branches={branches} canEdit={canEdit}
               placementHistory={placementHistory} placementHistoryLoading={placementHistoryLoading}
               onSelect={setSelected}
+              onMoveEmployees={canMoveEmployees ? unitId => setMoveFromUnitId(unitId) : undefined}
               onAddSubUnit={unitId => setAddUnitParent(unitId)}
               onDeleteUnit={async unitId => {
                 beginFieldSave();
@@ -538,6 +549,9 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
           onClose={() => setAddPositionUnit(null)}
           onCreated={position => { setAddPositionUnit(null); setSelected({ type: "position", id: position.id }); load(); }}
         />
+      )}
+      {moveFromUnitId !== null && (
+        <BulkMoveOrgUnitModal initialFromUnitId={moveFromUnitId} onClose={() => setMoveFromUnitId(null)} onDone={() => { load(); }} />
       )}
       {assignPositionId !== null && (
         <AssignHolderModal

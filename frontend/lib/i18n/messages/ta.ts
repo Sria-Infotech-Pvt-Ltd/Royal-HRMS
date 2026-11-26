@@ -7420,4 +7420,5 @@ export const TAMIL: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} ஊழியர்கள் மாற்றப்பட்டனர்.",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "தேர்ந்தெடுத்த {count} ஊழியர்களுக்கு காலியான பதவி இல்லை: முதலில் நிறுவன அமைப்பில் பதவிகளைச் சேர்க்கவும்.",
   "{count} vacant position(s) in the target org unit.": "இலக்கு நிறுவன அலகில் {count} காலியான பதவிகள்.",
+  "Move employees": "ஊழியர்களை மாற்று",
 };

@@ -7420,4 +7420,5 @@ export const TELUGU: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} ఉద్యోగులు తరలించబడ్డారు.",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "ఎంచుకున్న {count} ఉద్యోగులకు ఖాళీ పదవి లేదు: ముందుగా సంస్థ నిర్మాణంలో పదవులు జోడించండి.",
   "{count} vacant position(s) in the target org unit.": "లక్ష్య సంస్థ యూనిట్‌లో {count} ఖాళీ పదవులు.",
+  "Move employees": "ఉద్యోగులను తరలించండి",
 };

@@ -7420,4 +7420,5 @@ export const KANNADA: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} ಉದ್ಯೋಗಿಗಳನ್ನು ಸ್ಥಳಾಂತರಿಸಲಾಗಿದೆ.",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "ಆಯ್ಕೆ ಮಾಡಿದ {count} ಉದ್ಯೋಗಿಗಳಿಗೆ ಖಾಲಿ ಹುದ್ದೆ ಉಳಿದಿಲ್ಲ: ಮೊದಲು ಸಂಸ್ಥೆ ರಚನೆಯಲ್ಲಿ ಹುದ್ದೆಗಳನ್ನು ಸೇರಿಸಿ.",
   "{count} vacant position(s) in the target org unit.": "ಗುರಿ ಸಂಸ್ಥೆ ಘಟಕದಲ್ಲಿ {count} ಖಾಲಿ ಹುದ್ದೆಗಳು.",
+  "Move employees": "ಉದ್ಯೋಗಿಗಳನ್ನು ಸ್ಥಳಾಂತರಿಸಿ",
 };

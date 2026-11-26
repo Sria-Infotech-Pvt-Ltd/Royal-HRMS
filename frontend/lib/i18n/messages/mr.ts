@@ -7420,4 +7420,5 @@ export const MARATHI: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} कर्मचारी हलवले.",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "निवडलेल्या {count} कर्मचाऱ्यांसाठी रिक्त पद उरले नाही: आधी संघटना रचनेत पदे जोडा.",
   "{count} vacant position(s) in the target org unit.": "लक्ष्य संघटना एककात {count} रिक्त पदे.",
+  "Move employees": "कर्मचारी हलवा",
 };

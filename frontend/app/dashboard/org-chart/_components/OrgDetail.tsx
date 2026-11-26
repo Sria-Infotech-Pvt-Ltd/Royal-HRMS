@@ -33,6 +33,8 @@ interface Props {
   onUnitField: (unitId: string, field: string, value: string | boolean | null) => void;
   onPositionField: (positionId: string, field: string, value: string | boolean | null) => void;
   onToggleChief: (position: Position) => void;
+  /** Opens "Move employees" with this unit as "Move from"; absent when the viewer cannot edit employees. */
+  onMoveEmployees?: (unitId: string) => void;
 }
 
 const STATUS_BADGE: Record<Placement["status"], { label: string; color: string; bg: string }> = {
@@ -122,7 +124,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 
 export default function OrgDetail({
   selected, units, positions, jobs, branches, canEdit, placementHistory, placementHistoryLoading, onSelect,
-  onAddSubUnit, onDeleteUnit, onAddPosition, onAssign, onVacate, onDeactivate, canManagePermissions, onPermissions, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
+  onAddSubUnit, onDeleteUnit, onAddPosition, onAssign, onVacate, onDeactivate, canManagePermissions, onPermissions, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief, onMoveEmployees,
 }: Props) {
   const t = useT();
   if (!selected) {
@@ -235,6 +237,11 @@ export default function OrgDetail({
         <SectionTitle>
           {t("Positions in this unit")}
           {canEdit && <button className="linkbtn" onClick={() => onAddPosition(unit.id)} style={{ background: "var(--primary-c, color-mix(in srgb, var(--brand) 10%, transparent))", color: "var(--primary)", border: "1px solid color-mix(in srgb, var(--brand) 20%, transparent)", borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-plus" style={{ fontSize: 11 }} /> {t("Add position")}</button>}
+          {onMoveEmployees && poss.some(position => position.holder) && (
+            <button className="linkbtn" onClick={() => onMoveEmployees(unit.id)} style={{ background: "transparent", color: "var(--primary)", border: "1px solid color-mix(in srgb, var(--brand) 20%, transparent)", borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", marginLeft: 6 }}>
+              <i className="ti ti-arrows-exchange" style={{ fontSize: 11 }} /> {t("Move employees")}
+            </button>
+          )}
         </SectionTitle>
         {poss.length === 0 && <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>{t("No positions yet in this unit.")}</div>}
         {poss.map(p => <PositionRow key={p.id} p={p} onSelect={() => onSelect({ type: "position", id: p.id })} onAssign={() => onAssign(p.id)} />)}

@@ -13,7 +13,7 @@ import type { Employee, EmployeeStatusFilter } from "./_data";
 import { apiToEmployee, type ApiEmployee } from "./[id]/_apiMapping";
 import EmployeeDirectoryHeader from "./_components/EmployeeDirectoryHeader";
 import BulkAssignManagerModal from "./_components/BulkAssignManagerModal";
-import BulkMoveOrgUnitModal from "./_components/BulkMoveOrgUnitModal";
+import BulkMoveOrgUnitModal from "@/components/orgMove/BulkMoveOrgUnitModal";
 import EmployeeStatCards from "./_components/EmployeeStatCards";
 import EmployeeToolbar from "./_components/EmployeeToolbar";
 import JoiningDateAlert from "@/components/employees/JoiningDateAlert";

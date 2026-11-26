@@ -7420,4 +7420,5 @@ export const HINDI: Readonly<Record<string, string>> = {
   "{count} employee(s) moved.": "{count} कर्मचारी स्थानांतरित किए गए।",
   "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "{count} चुने गए कर्मचारियों के लिए कोई रिक्त पद नहीं बचा: पहले संगठन संरचना में पद जोड़ें।",
   "{count} vacant position(s) in the target org unit.": "लक्ष्य संगठन इकाई में {count} रिक्त पद।",
+  "Move employees": "कर्मचारियों को स्थानांतरित करें",
 };

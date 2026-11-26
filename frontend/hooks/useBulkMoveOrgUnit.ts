@@ -17,10 +17,10 @@ export interface BulkMoveResult { moved: { employee_id: string; org_unit: string
 
 const EMPLOYEE_LIST_URL = `${API.employees.list}?page_size=200`;
 
-export function useBulkMoveOrgUnit() {
+export function useBulkMoveOrgUnit(initialFromUnitId = "") {
   const { data: employeePage, loading: isLoadingEmployees, refetch } = useFetch<{ results: ApiEmployee[] }>(EMPLOYEE_LIST_URL);
   const { units, positionsForUnit, loading: isLoadingUnits } = useOrgUnitsAndPositions();
-  const [fromUnitId, setFromUnitId] = useState("");
+  const [fromUnitId, setFromUnitId] = useState(initialFromUnitId);
   const [toUnitId, setToUnitId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [seatOverrides, setSeatOverrides] = useState<Record<string, string>>({});
