@@ -6800,3 +6800,11 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
   Tip: run manage.py with the venv (`backend/H/Scripts/python.exe`): the global Python has Django 6.0.4 + a newer simplejwt (token_blacklist 0013).
 - Organization Management now has "Move employees" too (page header, and on a unit's "Positions in this unit" when it has holders, which
   pre-selects that unit as Move from). Needs employees.edit. The modal moved to `components/orgMove/` and is shared with the Employees page.
+
+- "Move employees" redesigned (user asked for a more advanced, less boxy UI): a transfer board in `components/orgMove/`.
+  Top strip: Current org unit (filter) <-> swap <-> New org unit (options show vacancy counts), effective date, reason (datalist presets).
+  Left pane: people (search, tri-state select-all, row shows where the person goes). Right pane: the target unit's vacant positions as
+  slots with a fill meter; chosen people fill them by title automatically, drag a person onto a slot to place/swap (`placeOnSeat` freezes
+  everyone else), a slot picker does the same without a mouse, x removes. Footer summary + "Review move" -> before/after review -> result.
+  Styles in `orgMove.module.css` (theme tokens only; checked light, dark and 390px phone on a throwaway preview). Tests:
+  `components/orgMove/BulkMoveOrgUnitModal.test.tsx` (3, incl. drag-swap). Labels translated to all 12 languages (machine-drafted).

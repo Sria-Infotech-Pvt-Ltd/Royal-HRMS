@@ -1,0 +1,96 @@
+/* "Move employees" transfer board: a controls strip, two panes (people on the left, the target unit's vacant positions on
+ * the right) and a summary bar. Light lines instead of boxes; colours come from the theme tokens so every look and dark
+ * mode work unchanged. */
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 170px minmax(0, 1.2fr);
+  gap: 10px;
+  align-items: end;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-2);
+}
+.swap {
+  width: 40px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 17px; cursor: pointer;
+}
+.swap:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
+.swap:disabled { opacity: .4; cursor: default; }
+
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.pane + .pane { border-left: 1px solid var(--line-soft); }
+.paneHead { padding: 14px 20px 10px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line-soft); }
+.paneTitle { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.paneTitle h4 { font-size: 14px; font-weight: 800; color: var(--ink); margin: 0; }
+.paneTitle span { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.paneBody { flex: 1; min-height: 0; overflow-y: auto; }
+
+.search {
+  display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 11px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--surface); color: var(--faint);
+}
+.search input { border: 0; outline: none; background: none; color: var(--ink); font-size: 12.5px; width: 100%; }
+.search:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
+
+.person {
+  display: flex; align-items: center; gap: 11px; padding: 9px 20px; border-bottom: 1px solid var(--line-soft);
+  cursor: pointer; border-left: 3px solid transparent; transition: background .12s;
+}
+.person:hover { background: var(--sunken); }
+.person.chosen { background: var(--brand-tint); border-left-color: var(--brand); }
+.person[draggable="true"] { cursor: grab; }
+.personText { min-width: 0; flex: 1; }
+.personText b { display: block; font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.personText small { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goesTo { font-size: 11px; font-weight: 700; color: var(--brand-ink); white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.unitTag { font-size: 11px; color: var(--faint); white-space: nowrap; }
+
+.meter { display: flex; gap: 3px; height: 6px; }
+.meter i { flex: 1; border-radius: 99px; background: var(--line); }
+.meter i.on { background: var(--brand); }
+.meter i.full { background: var(--ok); }
+
+.seat { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line-soft); min-height: 58px; transition: background .12s; }
+.seat.over { background: var(--brand-tint); box-shadow: inset 3px 0 0 var(--brand); }
+.seatIcon { width: 30px; height: 30px; border-radius: 9px; background: var(--sunken); color: var(--faint); display: flex; align-items: center; justify-content: center; flex: none; }
+.seat.filled .seatIcon { background: var(--ok-bg); color: var(--ok); }
+.seatText { min-width: 0; flex: 1; }
+.seatText b { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.seatText small { display: block; font-size: 11px; color: var(--faint); }
+.occupant { display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 3px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); max-width: 55%; cursor: grab; }
+.occupant span { font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.occupant button { border: 0; background: none; color: var(--faint); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.occupant button:hover { background: var(--sunken); color: var(--crit); }
+.dropHint { font-size: 11.5px; color: var(--faint); border: 1.5px dashed var(--line); border-radius: 99px; padding: 5px 12px; white-space: nowrap; }
+.fillSelect { height: 32px; border: 1.5px dashed var(--line); border-radius: 99px; background: var(--surface); color: var(--muted); font-size: 11.5px; padding: 0 10px; max-width: 55%; }
+
+.waiting { padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: var(--warn-bg); border-bottom: 1px solid var(--line-soft); }
+.waiting > b { font-size: 11.5px; color: var(--warn); margin-right: 4px; }
+
+.emptyPane { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 24px; text-align: center; color: var(--muted); font-size: 12.5px; }
+.emptyPane i { font-size: 34px; color: var(--faint); }
+
+.summary { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.summary b { color: var(--ink); }
+.dot { width: 4px; height: 4px; border-radius: 50%; background: var(--line); }
+
+@media (max-width: 900px) {
+  /* two fields per row; the swap button needs the two unit boxes side by side, so it goes */
+  .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 16px; }
+  .swap { display: none; }
+  .board { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .pane + .pane { border-left: 0; border-top: 1px solid var(--line-soft); }
+  .paneBody { overflow: visible; }
+  .paneHead, .person, .seat, .waiting { padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 560px) {
+  .controls { grid-template-columns: minmax(0, 1fr); }
+  .goesTo { display: none; }
+}

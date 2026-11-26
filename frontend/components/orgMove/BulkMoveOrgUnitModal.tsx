@@ -1,43 +1,51 @@
 "use client";
 
-// HR moves several employees to another org unit at once. An employee's org unit follows their position, so each person is
-// matched to a vacant seat in the target unit (pre-filled, editable). The server ends each old placement, so the old seats
-// show as vacant from the effective date, and it skips (with a reason) anyone it cannot move.
+// "Move employees": a transfer board. Pick the From and To units at the top; choose people on the left; the target unit's
+// vacant positions on the right fill automatically (same title first) and can be rearranged by drag and drop. A review
+// screen shows every before -> after, and nothing is saved until it is confirmed. An employee's org unit follows their
+// position, so the server ends each old placement (that position shows vacant from the effective date) and skips, with a
+// reason, anyone it cannot move.
 
 import { useState } from "react";
 import Modal from "@/components/Modal";
-import FieldError from "@/components/shared/FieldError";
 import { useToast } from "@/components/ToastProvider";
 import { useApiErrors } from "@/hooks/useApiErrors";
-import { useBulkMoveOrgUnit, type BulkMoveSkipped } from "@/hooks/useBulkMoveOrgUnit";
+import { useBulkMoveOrgUnit, type BulkMoveResult } from "@/hooks/useBulkMoveOrgUnit";
 import { useT } from "@/hooks/useI18n";
-import BulkMoveOrgUnitRows from "./BulkMoveOrgUnitRows";
+import MoveControlsBar from "./MoveControlsBar";
+import MovePeoplePane from "./MovePeoplePane";
+import MoveResultView from "./MoveResultView";
+import MoveReviewStep, { formatMoveDate } from "./MoveReviewStep";
+import MoveSeatsPane from "./MoveSeatsPane";
+import styles from "./orgMove.module.css";
 
 interface BulkMoveOrgUnitModalProps {
   onClose: () => void;
   onDone: () => void;
-  /** Opened from an org unit in Organization Management: that unit is pre-selected as "Move from". */
+  /** Opened from an org unit in Organization Management: that unit is pre-selected as From. */
   initialFromUnitId?: string;
 }
 
 export default function BulkMoveOrgUnitModal({ onClose, onDone, initialFromUnitId }: BulkMoveOrgUnitModalProps) {
   const t = useT();
   const { showToast } = useToast();
-  const { fieldErrors, handleError, clearAll } = useApiErrors();
+  const { handleError } = useApiErrors();
   const move = useBulkMoveOrgUnit(initialFromUnitId);
+  const [isReviewing, setIsReviewing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [skipped, setSkipped] = useState<BulkMoveSkipped[]>([]);
-  const readyCount = move.chosenPeople.length - move.unmatchedCount;
+  const [result, setResult] = useState<BulkMoveResult | null>(null);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const waitingCount = move.chosenPeople.length - move.matchedCount;
+  const canReview = move.matchedCount > 0 && Boolean(move.toUnitId) && !move.isPastDate;
 
-  async function submit() {
-    clearAll();
+  async function confirm() {
     setIsSaving(true);
     try {
-      const result = await move.submit();
-      showToast(t("{count} employee(s) moved.", { count: result.moved.length }), "success");
-      setSkipped(result.skipped);
+      setNames(Object.fromEntries(move.chosenPeople.map(person => [person.employee_id, person.full_name])));
+      const outcome = await move.submit();
+      setResult(outcome);
+      showToast(t("{count} employee(s) moved.", { count: outcome.moved.length }), outcome.skipped.length ? "info" : "success");
       onDone();
-      if (result.skipped.length === 0) onClose();
     } catch (err: unknown) {
       handleError(err, t("Could not move the employees."));
     } finally {
@@ -45,65 +53,61 @@ export default function BulkMoveOrgUnitModal({ onClose, onDone, initialFromUnitI
     }
   }
 
+  const title = (
+    <div>
+      <div className="text-[18px] font-bold">{t("Move")} <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{t("employees")}</span></div>
+      <div className="text-[12px] mt-0.5" style={{ color: "var(--on-variant)", fontWeight: 400 }}>{t("Choose people on the left; drag them onto a vacant position on the right, or let them fill in by title.")}</div>
+    </div>
+  );
+
+  const summary = (
+    <div className={styles.summary}>
+      <span><b>{move.matchedCount}</b> {t("moving")}</span>
+      {move.toUnitId && <><i className={styles.dot} /><span>{t("to {unit}", { unit: move.unitName(move.toUnitId) })}</span></>}
+      {waitingCount > 0 && <><i className={styles.dot} /><span style={{ color: "var(--warn)", fontWeight: 600 }}>{t("{count} without a position", { count: waitingCount })}</span></>}
+      <i className={styles.dot} />
+      <span style={move.isPastDate ? { color: "var(--crit)", fontWeight: 600 } : undefined}>
+        {move.isPastDate ? t("Choose today or a later date.") : t("from {date}", { date: formatMoveDate(move.effectiveDate) })}
+      </span>
+    </div>
+  );
+
+  const footer = result ? (
+    <div className="flex items-center gap-3 w-full justify-end"><button className="btn btn-filled" type="button" onClick={onClose}>{t("Done")}</button></div>
+  ) : (
+    <div className="flex items-center gap-3 w-full" style={{ flexWrap: "wrap" }}>
+      <div style={{ flex: 1, minWidth: 220 }}>{summary}</div>
+      <button className="btn btn-ghost" type="button" onClick={isReviewing ? () => setIsReviewing(false) : onClose} disabled={isSaving}>
+        {isReviewing ? t("Back") : t("Cancel")}
+      </button>
+      {isReviewing ? (
+        <button className="btn btn-filled" type="button" onClick={confirm} disabled={isSaving || !canReview}>
+          {isSaving ? t("Moving…") : t("Move {count} employee(s)", { count: move.matchedCount })}
+        </button>
+      ) : (
+        <button className="btn btn-filled" type="button" onClick={() => setIsReviewing(true)} disabled={!canReview}>
+          {t("Review move")} <i className="ti ti-arrow-right" />
+        </button>
+      )}
+    </div>
+  );
+
   return (
-    <Modal
-      title={<div className="text-[18px] font-bold">{t("Move to another")} <span style={{ color: "var(--primary)", fontStyle: "italic" }}>{t("org unit")}</span></div>}
-      onClose={onClose}
-      maxWidth={760}
-      footer={
+    <Modal title={title} onClose={onClose} size="lg" maxWidth={1180} scrollBody closeDisabled={isSaving}
+      bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: "min(640px, 72vh)" }} footer={footer}>
+      {result ? (
+        <div style={{ overflowY: "auto" }}><MoveResultView result={result} nameOf={code => names[code] ?? code} /></div>
+      ) : isReviewing ? (
+        <div style={{ overflowY: "auto" }}><MoveReviewStep move={move} /></div>
+      ) : (
         <>
-          <button className="btn btn-ghost" type="button" onClick={onClose} disabled={isSaving}>{t("Close")}</button>
-          <button className="btn btn-filled" type="button" onClick={submit} disabled={isSaving || readyCount === 0 || !move.toUnitId}>
-            {isSaving ? t("Moving…") : t("Move {count} employee(s)", { count: readyCount })}
-          </button>
+          <MoveControlsBar move={move} />
+          <div className={styles.board}>
+            <MovePeoplePane move={move} />
+            <MoveSeatsPane move={move} />
+          </div>
         </>
-      }
-    >
-      <div style={{ display: "grid", gap: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-          <div className="f">
-            <label htmlFor="move-from">{t("Move from")}</label>
-            <select id="move-from" className="finput" value={move.fromUnitId} onChange={event => move.chooseFromUnit(event.target.value)}>
-              <option value="">{t("All org units")}</option>
-              {move.activeUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-            </select>
-          </div>
-          <div className="f">
-            <label htmlFor="move-to">{t("Move to")}</label>
-            <select id="move-to" className="finput" value={move.toUnitId} onChange={event => move.chooseToUnit(event.target.value)}>
-              <option value="">{t("Select an org unit")}</option>
-              {move.activeUnits.filter(unit => unit.id !== move.fromUnitId).map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-            </select>
-          </div>
-          <div className="f">
-            <label htmlFor="move-date">{t("Effective date")}</label>
-            <input id="move-date" type="date" className="finput" value={move.effectiveDate} onChange={event => move.setEffectiveDate(event.target.value)} />
-            <FieldError message={fieldErrors.effective_date} />
-          </div>
-        </div>
-
-        <div className="f">
-          <label htmlFor="move-reason">{t("Reason")}</label>
-          <input id="move-reason" className="finput" maxLength={500} value={move.reason} onChange={event => move.setReason(event.target.value)} placeholder={t("e.g. Team restructure")} />
-        </div>
-
-        {move.toUnitId && (
-          <p className="hint">
-            {t("{count} vacant position(s) in the target org unit.", { count: move.vacantSeats.length })}{" "}
-            {move.unmatchedCount > 0 && t("{count} selected employee(s) have no vacant position left: add positions in Org Structure first.", { count: move.unmatchedCount })}
-          </p>
-        )}
-
-        <FieldError message={fieldErrors.moves} />
-        <BulkMoveOrgUnitRows move={move} />
-
-        {skipped.length > 0 && (
-          <div className="alert alert-warning" role="status">
-            <i className="ti ti-alert-triangle" />
-            <div>{t("{count} could not be changed:", { count: skipped.length })} {skipped.map(item => `${item.employee_id} (${item.reason})`).join("; ")}</div>
-          </div>
-        )}
-      </div>
+      )}
     </Modal>
   );
 }
