@@ -6808,3 +6808,8 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
   everyone else), a slot picker does the same without a mouse, x removes. Footer summary + "Review move" -> before/after review -> result.
   Styles in `orgMove.module.css` (theme tokens only; checked light, dark and 390px phone on a throwaway preview). Tests:
   `components/orgMove/BulkMoveOrgUnitModal.test.tsx` (3, incl. drag-swap). Labels translated to all 12 languages (machine-drafted).
+
+- Org chart showed only initials for position holders: the positions API never sent a photo. PositionSerializer now has
+  `holder_photo_url` (request passed in the list/detail context for absolute URLs); `org-chart/_components/HolderAvatar.tsx` shows the
+  photo (initials when none or when the image fails) in the units chart, reporting chart, tree and unit/position panel.
+  Test: `tests_position_holder_photo.py`.

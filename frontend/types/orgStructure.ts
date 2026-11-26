@@ -62,6 +62,8 @@ export interface Position {
   holder_name:         string | null;
   holder_employee_id:  string | null;
   holder_since:        string | null;
+  /** The holder's uploaded profile photo, or null (no holder, or no photo). */
+  holder_photo_url?:   string | null;
   // The next upcoming (future-dated) placement on this seat, if any —
   // doesn't affect who the current holder is.
   scheduled:           PositionScheduled | null;

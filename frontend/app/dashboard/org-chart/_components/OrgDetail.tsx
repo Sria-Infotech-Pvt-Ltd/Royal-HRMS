@@ -7,6 +7,7 @@ import ToggleSwitch from "@/components/ToggleSwitch";
 import SearchableSelect from "@/components/SearchableSelect";
 import { confirmDialog } from "@/components/DialogProvider";
 import { useT } from "@/hooks/useI18n";
+import HolderAvatar from "./HolderAvatar";
 
 interface Props {
   selected: Selected;
@@ -43,19 +44,16 @@ const STATUS_BADGE: Record<Placement["status"], { label: string; color: string; 
   ended:     { label: "Ended",     color: "var(--on-variant)", bg: "var(--bg-low)" },
 };
 
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
-}
-
-function Avatar({ name, size = 30 }: { name: string; size?: number }) {
+function Avatar({ name, photoUrl, size = 30 }: { name: string; photoUrl?: string | null; size?: number }) {
   return (
-    <div style={{
-      width: size, height: size, borderRadius: "50%", flexShrink: 0,
-      background: "var(--primary)", color: "#fff", fontSize: size * 0.36, fontWeight: 650,
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }}>
-      {initials(name)}
-    </div>
+    <HolderAvatar
+      name={name} photoUrl={photoUrl}
+      style={{
+        width: size, height: size, borderRadius: "50%", flexShrink: 0,
+        background: "var(--primary)", color: "#fff", fontSize: size * 0.36, fontWeight: 650,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    />
   );
 }
 
@@ -107,7 +105,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
       </div>
       {p.holder_name ? (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 550 }}>
-          <Avatar name={p.holder_name} size={20} /> {p.holder_name}
+          <Avatar name={p.holder_name} photoUrl={p.holder_photo_url} size={20} /> {p.holder_name}
         </span>
       ) : (
         <span style={{ fontSize: 12, color: "var(--warn)", fontStyle: "italic" }}>{t("Vacant")}</span>
@@ -188,7 +186,7 @@ export default function OrgDetail({
           />
         ) : chief.holder_name ? (
           <HeadBox
-            icon={<Avatar name={chief.holder_name} size={30} />}
+            icon={<Avatar name={chief.holder_name} photoUrl={chief.holder_photo_url} size={30} />}
             role={`${t("Head of unit")} · ${chief.title}${chief.holder_since ? ` · ${t("since {date}", { date: chief.holder_since })}` : ""}`}
             name={chief.holder_name} vacant={false}
             action={<button className="btn btn-ghost btn-sm" onClick={() => onSelect({ type: "position", id: chief.id })}>{t("Open position")}</button>}
@@ -308,7 +306,7 @@ export default function OrgDetail({
         <SectionTitle>{t("Holder")}</SectionTitle>
         {p.holder_name ? (
           <HeadBox
-            icon={<Avatar name={p.holder_name} size={30} />}
+            icon={<Avatar name={p.holder_name} photoUrl={p.holder_photo_url} size={30} />}
             role={p.holder_since ? t("Current holder · since {date}", { date: p.holder_since }) : t("Current holder")}
             name={p.holder_name} vacant={false}
             action={canEdit && (

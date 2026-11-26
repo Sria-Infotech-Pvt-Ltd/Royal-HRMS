@@ -5,6 +5,7 @@ import type { OrgUnit, Position } from "@/types/orgStructure";
 import type { Selected } from "./OrgStructureClient";
 import type { UnitRollup } from "@/lib/orgStructureStats";
 import { useT } from "@/hooks/useI18n";
+import HolderAvatar from "./HolderAvatar";
 
 export type SeatFilter = "all" | "vacant" | "filled";
 /** "Expand all" / "Collapse all": a new id is a new command, so pressing the same button twice still works. */
@@ -20,10 +21,6 @@ interface Props {
   rollups: Map<string, UnitRollup>;
   seatFilter: SeatFilter;
   command: TreeCommand | null;
-}
-
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
 /** The name with the searched text picked out. */
@@ -168,7 +165,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
             onClick={() => p.holder && onSelect({ type: "person", id: p.holder })}
           >
             <span className="orgnode-caret" />
-            <span className="orgnode-glyph" style={{ background: "var(--success-c)", color: "var(--success)" }}>{initials(p.holder_name ?? "?")}</span>
+            <HolderAvatar className="orgnode-glyph" name={p.holder_name} photoUrl={p.holder_photo_url} style={{ background: "var(--success-c)", color: "var(--success)" }} />
             <span className="orgnode-name">{highlight(p.holder_name ?? "", q)}</span>
           </div>
         )}

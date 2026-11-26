@@ -515,7 +515,7 @@ class PositionListCreateView(APIView):
             paginator, page_obj,
             PositionSerializer(
                 page_obj.object_list, many=True,
-                context={'as_of': as_of, 'chief_by_unit': chief_by_unit},
+                context={'as_of': as_of, 'chief_by_unit': chief_by_unit, 'request': request},
             ).data,
         ))
 
@@ -556,7 +556,7 @@ class PositionDetailView(APIView):
         position = self._get(pk)
         if not position:
             return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
-        return success('Position retrieved.', data=PositionSerializer(position, context={'as_of': as_of}).data)
+        return success('Position retrieved.', data=PositionSerializer(position, context={'as_of': as_of, 'request': request}).data)
 
     def put(self, request, pk):
         if not _has_perm(request.user, 'org_structure.edit'):

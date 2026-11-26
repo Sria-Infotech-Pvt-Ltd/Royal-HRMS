@@ -2,10 +2,10 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import type { Position } from "@/types/orgStructure";
-import { initialsOf } from "@/lib/orgStructureStats";
 import { useChartBranches } from "@/hooks/useChartBranches";
 import { useT } from "@/hooks/useI18n";
 import OrgChartFrame from "./OrgChartFrame";
+import HolderAvatar from "./HolderAvatar";
 
 interface Props {
   positions: Position[];
@@ -82,7 +82,7 @@ export default function OrgReportingChart({ positions, selectedPositionId, onSel
             onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectPosition(position.id); } }}>
             <div className="oc-name" title={position.title}>{position.title}{position.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", marginLeft: 5 }} title={t("Head of unit")} />}</div>
             <div className="oc-head">
-              <span className={`oc-avatar${position.holder_name ? "" : " oc-avatar-vacant"}`}>{position.holder_name ? initialsOf(position.holder_name) : "?"}</span>
+              <HolderAvatar className={`oc-avatar${position.holder_name ? "" : " oc-avatar-vacant"}`} name={position.holder_name} photoUrl={position.holder_photo_url} />
               {position.holder_name ?? <span className="oc-warn">{t("Vacant")}</span>}
             </div>
             <div className="oc-sub" style={{ marginTop: 4 }} title={position.org_unit_name}>{position.org_unit_name}</div>

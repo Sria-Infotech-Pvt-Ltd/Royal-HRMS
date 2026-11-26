@@ -2,10 +2,11 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import type { OrgUnit, Position } from "@/types/orgStructure";
-import { initialsOf, type UnitRollup } from "@/lib/orgStructureStats";
+import type { UnitRollup } from "@/lib/orgStructureStats";
 import { useChartBranches } from "@/hooks/useChartBranches";
 import { useT } from "@/hooks/useI18n";
 import OrgChartFrame from "./OrgChartFrame";
+import HolderAvatar from "./HolderAvatar";
 
 interface Props {
   units: OrgUnit[];
@@ -104,7 +105,7 @@ function UnitBox({ unit, rollup, seats, showSeats, selected, state, childCount, 
   const openSeats = total - filled;
   const percent = total === 0 ? 0 : Math.round((filled / total) * 100);
   const chief = rollup?.chief ?? null;
-  const holders = seats.filter(seat => seat.holder_name).map(seat => seat.holder_name ?? "");
+  const holders = seats.filter(seat => seat.holder_name);
   const health = total === 0 ? "" : percent >= 80 ? "oc-ok" : percent >= 40 ? "oc-mid" : "oc-low";
   const classes = ["oc-box", health, selected ? "oc-box-sel" : "", state === "hit" ? "oc-box-hit" : "", state === "dim" ? "oc-dim" : ""].filter(Boolean).join(" ");
   return (
@@ -122,7 +123,7 @@ function UnitBox({ unit, rollup, seats, showSeats, selected, state, childCount, 
           <span>{t("{filled}/{total} filled", { filled, total })}{openSeats > 0 && <span className="oc-warn"> · {t("{count} open", { count: openSeats })}</span>}</span>
           {!showSeats && (
             <span className="oc-avatars">
-              {holders.slice(0, MAX_AVATARS).map(name => <span key={name} className="oc-avatar" title={name}>{initialsOf(name)}</span>)}
+              {holders.slice(0, MAX_AVATARS).map(seat => <HolderAvatar key={seat.id} className="oc-avatar" name={seat.holder_name} photoUrl={seat.holder_photo_url} />)}
               {holders.length > MAX_AVATARS && <span className="oc-avatar oc-more">+{holders.length - MAX_AVATARS}</span>}
             </span>
           )}
@@ -131,7 +132,7 @@ function UnitBox({ unit, rollup, seats, showSeats, selected, state, childCount, 
           <div className="oc-seats">
             {seats.slice(0, MAX_SEATS_SHOWN).map(seat => (
               <div key={seat.id} className="oc-seat" title={seat.holder_name ? `${seat.title} — ${seat.holder_name}` : `${seat.title} — ${t("vacant")}`}>
-                <span className={`oc-avatar${seat.holder_name ? "" : " oc-avatar-vacant"}`}>{seat.holder_name ? initialsOf(seat.holder_name) : "?"}</span>
+                <HolderAvatar className={`oc-avatar${seat.holder_name ? "" : " oc-avatar-vacant"}`} name={seat.holder_name} photoUrl={seat.holder_photo_url} />
                 <span className="oc-seat-title">{seat.title}</span>
                 {seat.is_chief && <i className="ti ti-crown" />}
               </div>

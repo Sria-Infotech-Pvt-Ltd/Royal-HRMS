@@ -446,6 +446,8 @@ class PositionSerializer(serializers.ModelSerializer):
     holder_name         = serializers.SerializerMethodField()
     holder_employee_id  = serializers.SerializerMethodField()
     holder_since        = serializers.SerializerMethodField()
+    # The holder's profile photo, so the org chart can show a face instead of initials (null when none is uploaded).
+    holder_photo_url    = serializers.SerializerMethodField()
     scheduled           = serializers.SerializerMethodField()
     reports_to          = serializers.SerializerMethodField()
 
@@ -454,14 +456,14 @@ class PositionSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'org_unit', 'org_unit_name', 'job_template', 'job_template_name',
             'title', 'grade', 'is_chief', 'is_active',
-            'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'scheduled',
+            'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'holder_photo_url', 'scheduled',
             'branch', 'branch_name', 'can_manage_team', 'can_manage_branch',
             'reports_to', 'created_at', 'updated_at',
         )
         read_only_fields = (
             'can_manage_team', 'can_manage_branch',
             'id', 'org_unit_name', 'job_template_name', 'is_active',
-            'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'scheduled',
+            'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'holder_photo_url', 'scheduled',
             'branch_name', 'reports_to', 'created_at', 'updated_at',
         )
 
@@ -509,6 +511,14 @@ class PositionSerializer(serializers.ModelSerializer):
     def get_holder_since(self, obj: Position):
         p = self._current_placement(obj)
         return p.effective_from if p else None
+
+    def get_holder_photo_url(self, obj: Position) -> str | None:
+        p = self._current_placement(obj)
+        if p is None or not p.employee.profile_photo:
+            return None
+        request = self.context.get('request')
+        url = p.employee.profile_photo.url
+        return request.build_absolute_uri(url) if request else url
 
     def get_scheduled(self, obj: Position) -> dict | None:
         as_of = self._as_of()
