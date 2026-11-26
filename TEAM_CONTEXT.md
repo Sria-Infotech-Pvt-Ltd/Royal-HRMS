@@ -6819,3 +6819,11 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
   tsc, eslint, and `next build` (Turbopack) in a separate copy with its own node_modules (the user's dev server was running in frontend/).
   No migrations in this push. Still open: whether managers should get a Reporting Manager (owner decision); Perform Action > Org
   Assignment still cannot change unit/position; the "Aira Hrms - Client" copy must get its own database before it runs migrate again.
+
+- Employee list "Draft" badge (= the viewer has an Edit Record draft for that person; NOT the Drafts button, which lists hire drafts)
+  stuck after saving. Causes: (1) a draft saved with "Save as draft" in the same session was never deleted by a later successful save
+  (only the draft found on opening was); (2) the list never refreshed after Edit Record. Fix: EditRecordModal always DELETEs the draft
+  after an all-sections-OK save (idempotent on the server) and calls the new `onChanged` (EmployeeDrawer -> employees page refetchAll),
+  also after Save as draft. A failed save (e.g. the old manager 400) still keeps the draft on purpose. Live 09000037 (Vignesh): if the
+  badge remains after deploy, Edit full record -> Discard draft, or Resume + Save. No component test covers this flow (modal too heavy
+  to mount); verify by hand after deploy.
