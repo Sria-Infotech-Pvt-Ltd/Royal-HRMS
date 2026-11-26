@@ -6827,3 +6827,26 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
   also after Save as draft. A failed save (e.g. the old manager 400) still keeps the draft on purpose. Live 09000037 (Vignesh): if the
   badge remains after deploy, Edit full record -> Discard draft, or Resume + Save. No component test covers this flow (modal too heavy
   to mount); verify by hand after deploy.
+
+## STOP POINT 2026-11-26 (evening) - user said "update teamcontext.md and stop"
+Everything below is pushed to origin/New-AI (last push b101bb84). Nothing running (no preview servers, no temp test files).
+Done today after the morning stop point:
+- Manager Edit Record save 400 ("Managers do not have a reporting manager") fixed; blank/unchanged value no longer refused.
+- Move employees to another org unit (bulk): transfer board in components/orgMove, opened from Employees ("Move org unit") and
+  Organization Management (header + per unit). Server: POST /employees/bulk-move-org-unit/ (vacant seats only, old seat turns vacant).
+- Org Structure Assign holder sent the employee code -> 404; now sends the uuid.
+- Org chart shows holder profile photos (PositionSerializer.holder_photo_url + HolderAvatar).
+- Employee list "Draft" badge stuck after saving: fixed (always clear the draft after a full save; list refreshes).
+- Local DB: hrms_dev belongs to this folder; the Client copy's migrations 0060/0061 etc. were reversed. The user will give
+  "Aira Hrms - Client" its own database (must happen before that copy runs migrate again).
+To check first on "continue":
+1. The deploy logs of f9c43b11 and b101bb84 (first runs of the deploy.sh flock lock too).
+2. Live 09000037 (Vignesh): badge gone after reload? If not, Edit full record -> Discard draft; if a save errors, get the message.
+Open (owner decisions / not built):
+- Should managers get a Reporting Manager (today they use Reporting Approver)?
+- Perform Action > Org Assignment cannot change unit/position (use Move employees).
+- Machine-drafted translations (incl. today's move-board labels) need native review.
+- GitHub says the repo moved to github.com/Sria-Infotech-Pvt-Ltd/Royal-HRMS; `origin` still uses the old URL (works via redirect).
+- frontend/app/dashboard/interview-list/InterviewHeader.tsx shows modified: line endings only, not ours, left uncommitted.
+Dev notes: the user's dev server runs in frontend/ - build in a separate copy (scratchpad febuild has its own node_modules; Turbopack
+rejects a junctioned node_modules). Run manage.py with backend/H/Scripts/python.exe (global Python has Django 6).
