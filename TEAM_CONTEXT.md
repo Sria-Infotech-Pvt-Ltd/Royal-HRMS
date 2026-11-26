@@ -6857,3 +6857,7 @@ rejects a junctioned node_modules). Run manage.py with backend/H/Scripts/python.
   Position does not send the flag and behaves as before). Request path (manager with employees.raise_action): org_assignment payload
   may carry `position`; vacancy checked at raise AND again at apply (via the same flag); authority check unchanged. Shared helper
   `services_placement.occupied_seat_refusal`. Tests: `tests_org_assignment_move.py` (4) + lib/orgMove.test.ts unitMoveOptions.
+
+- PUSHED 2026-11-26 (night): Org assignment move (6c39dc5c). Checks: backend tests (org assignment, personnel actions, assignment
+  guards), related vitest suites incl. translations, tsc, eslint, Turbopack `next build` in the separate copy. No migrations.
+  Verify by hand on the live site: Perform Action > Org assignment with a vacant position (HR), and a manager-raised one approved by HR.
