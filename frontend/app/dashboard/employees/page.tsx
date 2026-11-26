@@ -202,7 +202,7 @@ function EmployeesPageInner() {
       )}
 
       {drawerEmployee && (
-        <EmployeeDrawer employee={drawerEmployee} onClose={() => setDrawerEmployee(null)} />
+        <EmployeeDrawer employee={drawerEmployee} onClose={() => setDrawerEmployee(null)} onChanged={emp.refetchAll} />
       )}
     </div>
   );

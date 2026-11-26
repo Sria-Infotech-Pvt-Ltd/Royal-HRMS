@@ -12,6 +12,8 @@ import { usePermission } from "@/hooks/usePermission";
 interface Props {
   employee: Employee;
   onClose:  () => void;
+  /** Called after Edit full record saves (or saves a draft), so the list behind refreshes. */
+  onChanged?: () => void;
   /** "self" hides the admin-only "Edit full record"/reveal-sensitive controls — used by the ESS "Open full employee profile" view. */
   mode?: "admin" | "self";
   /** Self mode only: routes to the profile-correction request flow (ESS "My Profile" → edit form). Falls back to /dashboard/profile when omitted. */
@@ -21,7 +23,7 @@ interface Props {
   correctionLabel?: string;
 }
 
-export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRequestCorrection, correctionLabel }: Props) {
+export default function EmployeeDrawer({ employee, onClose, onChanged, mode = "admin", onRequestCorrection, correctionLabel }: Props) {
   const t = useT();
   const router = useRouter();
   const isAdmin = mode === "admin";
@@ -78,7 +80,7 @@ export default function EmployeeDrawer({ employee, onClose, mode = "admin", onRe
         </div>
       </div>
 
-      {editOpen && <EditRecordModal employee={employee} onClose={() => setEditOpen(false)} />}
+      {editOpen && <EditRecordModal employee={employee} onClose={() => setEditOpen(false)} onChanged={onChanged} />}
     </div>
   );
 }

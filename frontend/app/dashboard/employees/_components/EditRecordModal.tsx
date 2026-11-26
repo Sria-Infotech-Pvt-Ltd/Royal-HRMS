@@ -231,7 +231,14 @@ interface ApiEditDraft {
   updated_at: string;
 }
 
-export default function EditRecordModal({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+interface EditRecordModalProps {
+  employee: Employee;
+  onClose: () => void;
+  /** Called after a save or a saved draft, so the list behind can refresh (its "Draft" badge, names, positions). */
+  onChanged?: () => void;
+}
+
+export default function EditRecordModal({ employee, onClose, onChanged }: EditRecordModalProps) {
   const t = useT();
   const { showToast } = useToast();
   // The shared Modal component doesn't lock body scroll on its own — with
@@ -409,6 +416,7 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       // The current edits are now safely persisted as a draft — closing
       // right after this is safe, so this counts as a new "known saved" point.
       setBaselineTick(tick => tick + 1);
+      onChanged?.();
       if (closeAfter) onClose();
     } catch {
       showToast(t("Failed to save draft. Please try again."), "error");
@@ -875,8 +883,12 @@ export default function EditRecordModal({ employee, onClose }: { employee: Emplo
       if (allOk) {
         setBaselineTick(tick => tick + 1);
         showToast(t("Changes saved."), "success");
-        // The changes just went live — any draft for this employee+admin is now stale, resumed or not.
-        if (pendingDraft) { clientApi.delete(API.employees.editDraft(employee.id)).catch(() => {}); setPendingDraft(null); }
+        // The changes just went live, so any draft for this employee + admin is now stale: the one found on opening, resumed
+        // or not, AND one saved with "Save as draft" earlier in this same session (that one was never in pendingDraft, which
+        // is why the list kept showing "Draft" after a successful save). Deleting when there is none is harmless.
+        await clientApi.delete(API.employees.editDraft(employee.id)).catch(() => {});
+        setPendingDraft(null);
+        onChanged?.();
         if (closeAfter) onClose();
       }
     } catch (err: unknown) {
