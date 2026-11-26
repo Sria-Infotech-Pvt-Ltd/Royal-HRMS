@@ -6813,3 +6813,9 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
   `holder_photo_url` (request passed in the list/detail context for absolute URLs); `org-chart/_components/HolderAvatar.tsx` shows the
   photo (initials when none or when the image fails) in the units chart, reporting chart, tree and unit/position panel.
   Test: `tests_position_holder_photo.py`.
+
+- PUSHED 2026-11-26 (afternoon): manager save fix, bulk Move employees (Employees page + Organization Management, transfer board),
+  Assign holder id fix, holder photos on the org chart. Checks before push: backend tests for the touched areas, related vitest suites,
+  tsc, eslint, and `next build` (Turbopack) in a separate copy with its own node_modules (the user's dev server was running in frontend/).
+  No migrations in this push. Still open: whether managers should get a Reporting Manager (owner decision); Perform Action > Org
+  Assignment still cannot change unit/position; the "Aira Hrms - Client" copy must get its own database before it runs migrate again.
