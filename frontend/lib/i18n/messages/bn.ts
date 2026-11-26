@@ -7469,4 +7469,9 @@ export const BENGALI: Readonly<Record<string, string>> = {
   "New org unit": "নতুন সংগঠন ইউনিট",
   "Choose the new org unit at the top. Its vacant positions appear here.": "ওপরে নতুন সংগঠন ইউনিট বেছে নিন। এর খালি পদগুলি এখানে দেখা যাবে।",
   "Current org unit": "বর্তমান সাংগঠনিক ইউনিট",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "আগে সংগঠন ইউনিট বেছে নিন",
+  "Select a vacant position": "একটি খালি পদ বেছে নিন",
+  "Select a vacant position in the new org unit.": "নতুন সংগঠন ইউনিটে একটি খালি পদ বেছে নিন।",
+  "Choose a new position, reporting manager or work location.": "নতুন পদ, রিপোর্টিং ম্যানেজার বা কাজের স্থান বেছে নিন।",
 };

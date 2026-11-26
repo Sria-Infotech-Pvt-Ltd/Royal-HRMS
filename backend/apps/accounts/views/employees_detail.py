@@ -125,7 +125,7 @@ from apps.accounts.services_contact_change import (
     notify_login_email_changed,
     require_login_email_confirmation,
 )
-from apps.accounts.services_placement import assign_position, sync_from_position
+from apps.accounts.services_placement import assign_position, occupied_seat_refusal, sync_from_position
 from apps.accounts.services_work_location import follow_branch_change
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
@@ -278,6 +278,17 @@ class EmployeeDetailView(APIView):
             refusal = assignment_refusal(request.user, employee, position_obj)
             if refusal:
                 return error(refusal.message, http_status=refusal.status)
+            # Org Assignment moves someone into a seat in another unit without pushing anyone out: it sends this flag, and a
+            # seat held by someone else on the effective date is refused before anything is saved. (Edit Record's
+            # "Reassign Position" leaves it off and may still replace the holder, as before.)
+            if str(data.get('position_must_be_vacant') or '').lower() in ('true', '1'):
+                try:
+                    seat_date = datetime.strptime(str(data.get('effective_date') or '').strip(), '%Y-%m-%d').date()
+                except ValueError:
+                    seat_date = None   # blank or malformed: checked for today (a malformed date is refused further down)
+                vacancy_refusal = occupied_seat_refusal(employee, position_obj, seat_date)
+                if vacancy_refusal:
+                    return error(vacancy_refusal, data={'position': vacancy_refusal})
 
         # Mobile and personal email are HR-correctable after hire (a typo at hire had no other fix). The caller already
         # holds employees.edit; same validation as the hire wizard plus uniqueness, every change audit-logged below.

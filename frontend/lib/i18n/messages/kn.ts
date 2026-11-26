@@ -7469,4 +7469,9 @@ export const KANNADA: Readonly<Record<string, string>> = {
   "New org unit": "ಹೊಸ ಸಂಸ್ಥೆ ಘಟಕ",
   "Choose the new org unit at the top. Its vacant positions appear here.": "ಮೇಲೆ ಹೊಸ ಸಂಸ್ಥೆ ಘಟಕವನ್ನು ಆಯ್ಕೆಮಾಡಿ. ಅದರ ಖಾಲಿ ಹುದ್ದೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
   "Current org unit": "ಪ್ರಸ್ತುತ ಸಂಸ್ಥೆ ಘಟಕ",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "ಮೊದಲು ಸಂಸ್ಥೆ ಘಟಕವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+  "Select a vacant position": "ಖಾಲಿ ಹುದ್ದೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+  "Select a vacant position in the new org unit.": "ಹೊಸ ಸಂಸ್ಥೆ ಘಟಕದಲ್ಲಿ ಖಾಲಿ ಹುದ್ದೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
+  "Choose a new position, reporting manager or work location.": "ಹೊಸ ಹುದ್ದೆ, ವರದಿ ಮಾಡುವ ವ್ಯವಸ್ಥಾಪಕ ಅಥವಾ ಕೆಲಸದ ಸ್ಥಳವನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
 };

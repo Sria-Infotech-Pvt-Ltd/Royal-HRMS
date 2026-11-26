@@ -28,3 +28,16 @@ export function todayIsoDate(now: Date = new Date()): string {
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
 }
+
+export interface UnitLike { id: string; name: string; is_active: boolean }
+export interface SeatLike { org_unit: string; is_active: boolean; holder: string | null }
+
+/** Org units a person could be moved into (not the one they are in), each labelled with its vacant-position count;
+ *  units with a vacancy come first. Used by Perform Action > Org assignment. */
+export function unitMoveOptions(units: UnitLike[], seats: SeatLike[], currentUnitId: string): { value: string; label: string; vacant: number }[] {
+  return units
+    .filter(unit => unit.is_active && unit.id !== currentUnitId)
+    .map(unit => ({ unit, vacant: seats.filter(seat => seat.org_unit === unit.id && seat.is_active && !seat.holder).length }))
+    .sort((left, right) => Number(right.vacant > 0) - Number(left.vacant > 0) || left.unit.name.localeCompare(right.unit.name))
+    .map(({ unit, vacant }) => ({ value: unit.id, label: unit.name, vacant }));
+}

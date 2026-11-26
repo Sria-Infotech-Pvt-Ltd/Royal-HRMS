@@ -34,6 +34,15 @@ def current_placement(position: 'Position', as_of=None) -> 'Placement | None':
     )
 
 
+def occupied_seat_refusal(employee: 'User', position: 'Position', as_of=None) -> str | None:
+    """Why `employee` cannot be moved into `position` on `as_of` (default today) without pushing someone out, or None when
+    the seat is free then (or already theirs). Used where a move must never displace the current holder."""
+    holder = current_placement(position, as_of)
+    if holder is None or holder.employee_id == employee.pk:
+        return None
+    return f'"{position.title}" is held by {holder.employee.full_name or holder.employee.employee_id}. Choose a vacant position.'
+
+
 def org_unit_names_for(employee_ids) -> dict:
     """{employee pk: name of the org unit they sit in today}, for many employees in ONE query.
 

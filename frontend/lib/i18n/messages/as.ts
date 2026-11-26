@@ -7469,4 +7469,9 @@ export const ASSAMESE: Readonly<Record<string, string>> = {
   "New org unit": "নতুন সংগঠন একক",
   "Choose the new org unit at the top. Its vacant positions appear here.": "ওপৰত নতুন সংগঠন একক বাছনি কৰক। ইয়াৰ খালী পদবোৰ ইয়াত দেখা যাব।",
   "Current org unit": "বৰ্তমানৰ সংগঠন ইউনিট",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "প্ৰথমে সংগঠন একক বাছনি কৰক",
+  "Select a vacant position": "এটা খালী পদ বাছনি কৰক",
+  "Select a vacant position in the new org unit.": "নতুন সংগঠন এককত এটা খালী পদ বাছনি কৰক।",
+  "Choose a new position, reporting manager or work location.": "নতুন পদ, ৰিপ'ৰ্টিং মেনেজাৰ বা কৰ্মস্থান বাছনি কৰক।",
 };

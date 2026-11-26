@@ -7469,4 +7469,9 @@ export const TELUGU: Readonly<Record<string, string>> = {
   "New org unit": "కొత్త సంస్థ యూనిట్",
   "Choose the new org unit at the top. Its vacant positions appear here.": "పైన కొత్త సంస్థ యూనిట్‌ను ఎంచుకోండి. దాని ఖాళీ పదవులు ఇక్కడ కనిపిస్తాయి.",
   "Current org unit": "ప్రస్తుత ఆర్గ్ యూనిట్",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "ముందుగా సంస్థ యూనిట్‌ను ఎంచుకోండి",
+  "Select a vacant position": "ఖాళీ పదవిని ఎంచుకోండి",
+  "Select a vacant position in the new org unit.": "కొత్త సంస్థ యూనిట్‌లో ఖాళీ పదవిని ఎంచుకోండి.",
+  "Choose a new position, reporting manager or work location.": "కొత్త పదవి, రిపోర్టింగ్ మేనేజర్ లేదా పని ప్రదేశాన్ని ఎంచుకోండి.",
 };

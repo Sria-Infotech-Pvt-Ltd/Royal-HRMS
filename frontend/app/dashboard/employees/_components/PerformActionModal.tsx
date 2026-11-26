@@ -33,6 +33,7 @@ import {
 } from "./PerformActionFields/ActionFieldSections";
 import ActionSummarySections, { EmployeeDetailsCard } from "./PerformActionFields/ActionSummarySections";
 import DateInput from "@/components/shared/DateInput";
+import { unitMoveOptions } from "@/lib/orgMove";
 
 interface SeparationTypeOption {
   value: string; label: string; reason_applicable: boolean; notice_period_applicable: boolean;
@@ -68,6 +69,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
   const [annualCtc, setAnnualCtc] = useState("");
   const [managerId, setManagerId] = useState("");
   const [workLocation, setWorkLocation] = useState("");
+  const [moveUnitId, setMoveUnitId] = useState("");
   const [separationType, setSeparationType] = useState("");
   const [lastWorkingDay, setLastWorkingDay] = useState("");
   const [separationConfirmed, setSeparationConfirmed] = useState(false);
@@ -86,7 +88,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
 
   const { data: detail } = useFetch<EmployeeDetailSnapshot>(API.employees.detail(employee.code));
   const { data: history } = useFetch<ActionHistoryRow[]>(API.employees.actionHistory(employee.code));
-  const { units, positionsForUnit } = useOrgUnitsAndPositions();
+  const { units, positions, positionsForUnit } = useOrgUnitsAndPositions();
   const { data: managers } = useFetch<ManagerOption[]>(
     employee.location ? `${API.employees.managerList}?branch=${encodeURIComponent(employee.location)}` : null
   );
@@ -102,6 +104,13 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
     if (!detailOrgUnitId) return [];
     return positionsForUnit(detailOrgUnitId, false).map(p => ({ value: p.id, label: p.title }));
   }, [detailOrgUnitId, positionsForUnit]);
+
+  // Org assignment: another unit and one of its VACANT positions (the server refuses a seat someone else holds).
+  const moveUnitOptions = useMemo(() => unitMoveOptions(units, positions, detailOrgUnitId), [units, positions, detailOrgUnitId]);
+  const movePositionOptions: FieldOption[] = useMemo(
+    () => (moveUnitId ? positions.filter(p => p.org_unit === moveUnitId && p.is_active && !p.holder).map(p => ({ value: p.id, label: p.grade ? `${p.title} · ${p.grade}` : p.title })) : []),
+    [moveUnitId, positions],
+  );
 
   const managerOptions: FieldOption[] = useMemo(
     () => (managers ?? [])
@@ -124,7 +133,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
   // Reset the fields that only apply to the previously selected action type
   // whenever the action type itself changes.
   useEffect(() => {
-    setReason(""); setPositionId(""); setAnnualCtc(""); setManagerId("");
+    setReason(""); setPositionId(""); setAnnualCtc(""); setManagerId(""); setMoveUnitId("");
     setWorkLocation(""); setSeparationType(""); setLastWorkingDay("");
     setSeparationConfirmed(false); setErr("");
   }, [actionType]);
@@ -134,7 +143,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
 
   // ── BEFORE → AFTER + "not changed" field list, built per action type ──
   const changedFieldKeys: string[] = actionType === "promotion" ? ["position"]
-    : actionType === "org_assignment" ? ["reporting_manager", "work_location"]
+    : actionType === "org_assignment" ? ["reporting_manager", "work_location", ...(moveUnitId ? ["org_unit", "position"] : [])]
     : actionType === "pay_change" ? ["annual_ctc"]
     : actionType === "confirmation" ? ["employment_status"]
     : actionType === "separation" ? ["employment_status", "last_working_day"]
@@ -148,6 +157,12 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
       if (annualCtc) rows.push({ key: "annual_ctc", label: tr("Annual CTC"), before: "—", after: `₹${Number(annualCtc).toLocaleString("en-IN")}` });
     }
     if (actionType === "org_assignment") {
+      if (moveUnitId) {
+        const unit = moveUnitOptions.find(option => option.value === moveUnitId);
+        const seat = movePositionOptions.find(option => option.value === positionId);
+        rows.push({ key: "org_unit", label: tr("Org unit"), before: employee.orgUnitName || employee.department || "—", after: unit ? unit.label : null });
+        rows.push({ key: "position", label: tr("Position"), before: employee.designation || "—", after: seat ? seat.label : null });
+      }
       const selectedMgr = managerOptions.find(m => m.value === managerId);
       rows.push({ key: "reporting_manager", label: tr("Reporting manager"), before: reportingManagerDisplay(currentManagerName, employee.noManagerByDesign), after: selectedMgr ? selectedMgr.label : null });
       rows.push({ key: "work_location", label: tr("Work location"), before: detail?.work_location || "—", after: workLocation ? workLocation : null });
@@ -164,7 +179,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
       rows.push({ key: "last_working_day", label: tr("Last working day"), before: tr("Not set"), after: lastWorkingDay ? DATE_FMT(lastWorkingDay) : null });
     }
     return rows;
-  }, [actionType, positionId, positionOptions, annualCtc, managerId, managerOptions, workLocation, detail, employee, currentStatusLabel, lastWorkingDay, effectiveFrom, currentManagerName]);
+  }, [actionType, positionId, positionOptions, annualCtc, managerId, managerOptions, workLocation, detail, employee, currentStatusLabel, lastWorkingDay, effectiveFrom, currentManagerName, moveUnitId, moveUnitOptions, movePositionOptions]);
 
   const orgUnitLabel = employee.orgUnitName
     ? (employee.orgUnitParentName ? `${employee.orgUnitName} › ${employee.orgUnitParentName}` : employee.orgUnitName)
@@ -178,7 +193,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
     { key: "reporting_manager", label: t("Reporting manager"), value: reportingManagerDisplay(currentManagerName, employee.noManagerByDesign) },
     { key: "employment_status", label: t("Status"), value: t(directoryStatus) },
     { key: "record_range", label: t("Current record"), value: currentRecord ? `${DATE_FMT(currentRecord.effective_from)} → ${DATE_FMT(currentRecord.effective_to)}` : "—" },
-  ].filter(r => r.key === "record_range" || r.key === "position" || !changedFieldKeys.includes(r.key)).map(r => ({ label: r.label, value: r.value }));
+  ].filter(r => r.key === "record_range" || (r.key === "position" && actionType !== "org_assignment") || !changedFieldKeys.includes(r.key)).map(r => ({ label: r.label, value: r.value }));
 
   const route = actionType ? approvalRouteFor(actionType, currentManagerName, false, raisesRequest) : "";
   const reversibility = actionType ? reversibilityNote(actionType) : null;
@@ -188,6 +203,8 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
     if (!reason && actionType !== "separation") return t("Select a reason.");
     if (!effectiveFrom) return t("Effective from is required.");
     if (actionType === "promotion" && !positionId) return t("Select a position.");
+    if (actionType === "org_assignment" && moveUnitId && !positionId) return t("Select a vacant position in the new org unit.");
+    if (actionType === "org_assignment" && !positionId && !managerId && !workLocation) return t("Choose a new position, reporting manager or work location.");
     if (actionType === "pay_change" && !annualCtc) return t("Annual CTC is required.");
     if (actionType === "confirmation" && currentStatusLabel === "Confirmed") return t("This employee is already confirmed.");
     if (actionType === "separation") {
@@ -228,6 +245,7 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
         const payload: Record<string, string> = { effective_date: effectiveFrom, reason };
         if (managerId) payload.reporting_manager_id = managerId;
         if (workLocation) payload.work_location = workLocation;
+        if (positionId) { payload.position = positionId; payload.position_must_be_vacant = "true"; }
         await clientApi.put(API.employees.detail(employee.code), payload);
       } else if (actionType === "pay_change" && detail) {
         await clientApi.post(API.payroll.employeeSalary, {
@@ -320,7 +338,10 @@ export default function PerformActionModal({ employee, onClose, onApplied, initi
               <PromotionFields positionId={positionId} setPositionId={setPositionId} positionOptions={positionOptions} annualCtc={annualCtc} setAnnualCtc={setAnnualCtc} />
             )}
             {actionType === "org_assignment" && (
-              <OrgAssignmentFields managerId={managerId} setManagerId={setManagerId} managerOptions={managerOptions} workLocation={workLocation} setWorkLocation={setWorkLocation} />
+              <OrgAssignmentFields
+                managerId={managerId} setManagerId={setManagerId} managerOptions={managerOptions} workLocation={workLocation} setWorkLocation={setWorkLocation}
+                move={{ unitId: moveUnitId, setUnitId: setMoveUnitId, unitOptions: moveUnitOptions, positionId, setPositionId, positionOptions: movePositionOptions }}
+              />
             )}
             {actionType === "pay_change" && (
               <PayChangeFields annualCtc={annualCtc} setAnnualCtc={setAnnualCtc} />

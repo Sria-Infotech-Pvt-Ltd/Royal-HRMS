@@ -7469,4 +7469,9 @@ export const TAMIL: Readonly<Record<string, string>> = {
   "New org unit": "புதிய நிறுவன அலகு",
   "Choose the new org unit at the top. Its vacant positions appear here.": "மேலே புதிய நிறுவன அலகைத் தேர்ந்தெடுக்கவும். அதன் காலியான பதவிகள் இங்கே தோன்றும்.",
   "Current org unit": "தற்போதைய நிறுவனப் பிரிவு",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "முதலில் நிறுவன அலகைத் தேர்ந்தெடுக்கவும்",
+  "Select a vacant position": "காலியான பதவியைத் தேர்ந்தெடுக்கவும்",
+  "Select a vacant position in the new org unit.": "புதிய நிறுவன அலகில் ஒரு காலியான பதவியைத் தேர்ந்தெடுக்கவும்.",
+  "Choose a new position, reporting manager or work location.": "புதிய பதவி, அறிக்கை மேலாளர் அல்லது பணியிடத்தைத் தேர்ந்தெடுக்கவும்.",
 };

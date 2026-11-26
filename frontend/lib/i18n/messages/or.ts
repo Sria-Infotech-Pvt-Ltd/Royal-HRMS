@@ -7469,4 +7469,9 @@ export const ODIA: Readonly<Record<string, string>> = {
   "New org unit": "ନୂଆ ସଂଗଠନ ୟୁନିଟ୍",
   "Choose the new org unit at the top. Its vacant positions appear here.": "ଉପରେ ନୂଆ ସଂଗଠନ ୟୁନିଟ୍ ବାଛନ୍ତୁ। ଏହାର ଖାଲି ପଦଗୁଡ଼ିକ ଏଠାରେ ଦେଖାଯିବ।",
   "Current org unit": "ବର୍ତ୍ତମାନର ସଂଗଠନ ଏକକ",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "ପ୍ରଥମେ ସଂଗଠନ ୟୁନିଟ୍ ବାଛନ୍ତୁ",
+  "Select a vacant position": "ଏକ ଖାଲି ପଦ ବାଛନ୍ତୁ",
+  "Select a vacant position in the new org unit.": "ନୂଆ ସଂଗଠନ ୟୁନିଟ୍‌ରେ ଏକ ଖାଲି ପଦ ବାଛନ୍ତୁ।",
+  "Choose a new position, reporting manager or work location.": "ନୂଆ ପଦ, ରିପୋର୍ଟିଂ ମ୍ୟାନେଜର କିମ୍ବା କାର୍ଯ୍ୟସ୍ଥଳ ବାଛନ୍ତୁ।",
 };

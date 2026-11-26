@@ -71,13 +71,34 @@ export function PromotionFields({ positionId, setPositionId, positionOptions, an
   );
 }
 
-export function OrgAssignmentFields({ managerId, setManagerId, managerOptions, workLocation, setWorkLocation }: {
+export interface OrgMoveChoice {
+  unitId: string; setUnitId: (v: string) => void; unitOptions: (FieldOption & { vacant: number })[];
+  positionId: string; setPositionId: (v: string) => void; positionOptions: FieldOption[];
+}
+
+export function OrgAssignmentFields({ managerId, setManagerId, managerOptions, workLocation, setWorkLocation, move }: {
   managerId: string; setManagerId: (v: string) => void; managerOptions: FieldOption[];
   workLocation: string; setWorkLocation: (v: string) => void;
+  /** Moving to another org unit: the unit follows the position, so pick the unit, then one of its vacant positions. */
+  move: OrgMoveChoice;
 }) {
   const t = useT();
   return (
     <div className="g2">
+      <div className="f">
+        <label>{t("New org unit")} <span className="text-muted" style={{ fontWeight: 400 }}>{t("(optional)")}</span></label>
+        <SearchableSelect
+          value={move.unitId} onChange={value => { move.setUnitId(value); move.setPositionId(""); }} inputClassName="finput" placeholder={t("Keep current")}
+          options={move.unitOptions.map(option => ({ value: option.value, label: `${option.label} · ${t("{count} vacant", { count: option.vacant })}` }))}
+        />
+      </div>
+      <div className="f">
+        <label>{t("New position")} {move.unitId && <span className="req">*</span>}</label>
+        <select className="finput" value={move.positionId} onChange={event => move.setPositionId(event.target.value)} disabled={!move.unitId || move.positionOptions.length === 0}>
+          <option value="">{!move.unitId ? t("Choose the org unit first") : move.positionOptions.length === 0 ? t("No vacant positions here") : t("Select a vacant position")}</option>
+          {move.positionOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </div>
       <div className="f">
         <label>{t("Reporting manager")} <span className="text-muted" style={{ fontWeight: 400 }}>{t("(optional)")}</span></label>
         <SearchableSelect value={managerId} onChange={setManagerId} inputClassName="finput" placeholder={t("Keep current")} options={managerOptions} />

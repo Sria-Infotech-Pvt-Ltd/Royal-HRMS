@@ -157,8 +157,16 @@ def _clean_payload(action_type: str, data: dict, employee: User) -> tuple[dict, 
     elif action_type == PAR.TYPE_ORG_ASSIGNMENT:
         manager_id = str(data.get('reporting_manager_id') or '').strip()
         work_location = str(data.get('work_location') or '').strip()
-        if not manager_id and not work_location:
-            raise ActionRequestError('Choose a new reporting manager or a new work location.')
+        position_id = str(data.get('position') or '').strip()
+        if not manager_id and not work_location and not position_id:
+            raise ActionRequestError('Choose a new position, reporting manager or work location.')
+        if position_id:
+            # A move to another org unit: the unit follows the position, which must be vacant (nobody is pushed out).
+            position = Position.objects.filter(pk=position_id, is_active=True).select_related('org_unit').first()
+            if position is None:
+                raise ActionRequestError('Select a valid, active position.')
+            payload['position'] = str(position.id)
+            before['position'] = _seat_label(employee)
         if manager_id:
             manager = User.objects.filter(pk=manager_id, is_active=True).first()
             if manager is None or manager.id == employee.id:
@@ -222,6 +230,22 @@ def _check_position_authority(actor: User, employee: User, position_id) -> None:
         raise ActionRequestError(refusal.message, refusal.status)
 
 
+def _seat_label(employee: User) -> str:
+    """The employee's current position and org unit, for the request's "before" column."""
+    from .models import Placement
+
+    placement = Placement.objects.filter(employee=employee, effective_to__isnull=True).select_related('position__org_unit').first()
+    return f'{placement.position.title} ({placement.position.org_unit.name})' if placement else '—'
+
+
+def _require_vacant_seat(employee: User, position_id: str, as_of) -> None:
+    from .services_placement import occupied_seat_refusal
+
+    refusal = occupied_seat_refusal(employee, Position.objects.get(pk=position_id), as_of)
+    if refusal:
+        raise ActionRequestError(refusal)
+
+
 def raise_request(raiser: User, employee: User, data: dict) -> PAR:
     action_type = str(data.get('action_type') or '').strip()
     if action_type not in dict(PAR.TYPE_CHOICES):
@@ -237,6 +261,8 @@ def raise_request(raiser: User, employee: User, data: dict) -> PAR:
         raise ActionRequestError('Select one of the recognised reasons for this action.')
     effective_from = _parse_date(data.get('effective_from'))
     payload, before = _clean_payload(action_type, data, employee)
+    if action_type == PAR.TYPE_ORG_ASSIGNMENT and payload.get('position'):
+        _require_vacant_seat(employee, payload['position'], effective_from)
     if payload.get('position'):
         _check_position_authority(raiser, employee, payload['position'])
     if PAR.objects.filter(employee=employee, action_type=action_type, status=PAR.STATUS_PENDING).exists():
@@ -351,6 +377,9 @@ def _apply(req: PAR) -> None:
                          'pay change')
         elif req.action_type == PAR.TYPE_ORG_ASSIGNMENT:
             body = {'effective_date': effective, 'reason': req.reason}
+            if payload.get('position'):
+                # Still must be vacant when it is applied: someone may have been placed there while the request waited.
+                body.update(position=payload['position'], position_must_be_vacant=True)
             if payload.get('reporting_manager_id'):
                 body['reporting_manager_id'] = payload['reporting_manager_id']
             if payload.get('work_location'):

@@ -7469,4 +7469,9 @@ export const MARATHI: Readonly<Record<string, string>> = {
   "New org unit": "नवीन संघटना एकक",
   "Choose the new org unit at the top. Its vacant positions appear here.": "वर नवीन संघटना एकक निवडा. त्याची रिक्त पदे येथे दिसतील.",
   "Current org unit": "सध्याचा संस्था घटक",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "आधी संघटना एकक निवडा",
+  "Select a vacant position": "रिक्त पद निवडा",
+  "Select a vacant position in the new org unit.": "नवीन संघटना एककातील रिक्त पद निवडा.",
+  "Choose a new position, reporting manager or work location.": "नवीन पद, रिपोर्टिंग मॅनेजर किंवा कामाचे ठिकाण निवडा.",
 };

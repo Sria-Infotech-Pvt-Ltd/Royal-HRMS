@@ -6850,3 +6850,10 @@ Open (owner decisions / not built):
 - frontend/app/dashboard/interview-list/InterviewHeader.tsx shows modified: line endings only, not ours, left uncommitted.
 Dev notes: the user's dev server runs in frontend/ - build in a separate copy (scratchpad febuild has its own node_modules; Turbopack
 rejects a junctioned node_modules). Run manage.py with backend/H/Scripts/python.exe (global Python has Django 6).
+
+- Perform Action > Org assignment can now move ONE person to another org unit: optional "New org unit" (with vacancy counts) +
+  "New position" (vacant seats only). Direct path (employees.edit): PUT employee with position + `position_must_be_vacant=true`;
+  the edit endpoint then refuses a seat someone else holds on the effective date, before saving anything (Edit Record's Reassign
+  Position does not send the flag and behaves as before). Request path (manager with employees.raise_action): org_assignment payload
+  may carry `position`; vacancy checked at raise AND again at apply (via the same flag); authority check unchanged. Shared helper
+  `services_placement.occupied_seat_refusal`. Tests: `tests_org_assignment_move.py` (4) + lib/orgMove.test.ts unitMoveOptions.

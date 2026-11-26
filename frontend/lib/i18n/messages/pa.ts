@@ -7469,4 +7469,9 @@ export const PUNJABI: Readonly<Record<string, string>> = {
   "New org unit": "ਨਵੀਂ ਸੰਗਠਨ ਇਕਾਈ",
   "Choose the new org unit at the top. Its vacant positions appear here.": "ਉੱਪਰ ਨਵੀਂ ਸੰਗਠਨ ਇਕਾਈ ਚੁਣੋ। ਇਸਦੇ ਖਾਲੀ ਅਹੁਦੇ ਇੱਥੇ ਦਿਸਣਗੇ।",
   "Current org unit": "ਮੌਜੂਦਾ ਸੰਗਠਨ ਇਕਾਈ",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "ਪਹਿਲਾਂ ਸੰਗਠਨ ਇਕਾਈ ਚੁਣੋ",
+  "Select a vacant position": "ਖਾਲੀ ਅਹੁਦਾ ਚੁਣੋ",
+  "Select a vacant position in the new org unit.": "ਨਵੀਂ ਸੰਗਠਨ ਇਕਾਈ ਵਿੱਚ ਖਾਲੀ ਅਹੁਦਾ ਚੁਣੋ।",
+  "Choose a new position, reporting manager or work location.": "ਨਵਾਂ ਅਹੁਦਾ, ਰਿਪੋਰਟਿੰਗ ਮੈਨੇਜਰ ਜਾਂ ਕੰਮ ਦੀ ਥਾਂ ਚੁਣੋ।",
 };

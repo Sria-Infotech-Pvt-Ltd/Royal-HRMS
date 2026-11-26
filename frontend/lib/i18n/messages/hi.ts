@@ -7469,4 +7469,9 @@ export const HINDI: Readonly<Record<string, string>> = {
   "New org unit": "नई संगठन इकाई",
   "Choose the new org unit at the top. Its vacant positions appear here.": "ऊपर नई संगठन इकाई चुनें। उसके रिक्त पद यहाँ दिखेंगे।",
   "Current org unit": "वर्तमान संगठन इकाई",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "पहले संगठन इकाई चुनें",
+  "Select a vacant position": "रिक्त पद चुनें",
+  "Select a vacant position in the new org unit.": "नई संगठन इकाई में एक रिक्त पद चुनें।",
+  "Choose a new position, reporting manager or work location.": "नया पद, रिपोर्टिंग मैनेजर या कार्य स्थान चुनें।",
 };

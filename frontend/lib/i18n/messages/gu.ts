@@ -7469,4 +7469,9 @@ export const GUJARATI: Readonly<Record<string, string>> = {
   "New org unit": "નવું સંગઠન એકમ",
   "Choose the new org unit at the top. Its vacant positions appear here.": "ઉપર નવું સંગઠન એકમ પસંદ કરો. તેના ખાલી પદ અહીં દેખાશે.",
   "Current org unit": "હાલનું સંસ્થા એકમ",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "પહેલા સંગઠન એકમ પસંદ કરો",
+  "Select a vacant position": "ખાલી પદ પસંદ કરો",
+  "Select a vacant position in the new org unit.": "નવા સંગઠન એકમમાં ખાલી પદ પસંદ કરો.",
+  "Choose a new position, reporting manager or work location.": "નવું પદ, રિપોર્ટિંગ મેનેજર અથવા કાર્યસ્થળ પસંદ કરો.",
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { suggestSeats, todayIsoDate } from "./orgMove";
+import { suggestSeats, todayIsoDate, unitMoveOptions } from "./orgMove";
 
 describe("suggestSeats", () => {
   const seats = [{ id: "s1", title: "Developer" }, { id: "s2", title: "Analyst" }, { id: "s3", title: "Tester" }];
@@ -27,5 +27,21 @@ describe("suggestSeats", () => {
 describe("todayIsoDate", () => {
   it("is a YYYY-MM-DD date", () => {
     expect(todayIsoDate(new Date(2026, 10, 26, 23, 30))).toBe("2026-11-26");
+  });
+});
+
+describe("unitMoveOptions", () => {
+  it("leaves out the current and inactive units, counts vacancies and lists units with room first", () => {
+    const units = [
+      { id: "a", name: "Alpha", is_active: true }, { id: "b", name: "Beta", is_active: true },
+      { id: "c", name: "Current", is_active: true }, { id: "d", name: "Dormant", is_active: false },
+    ];
+    const seats = [
+      { org_unit: "b", is_active: true, holder: null }, { org_unit: "b", is_active: true, holder: "x" },
+      { org_unit: "a", is_active: true, holder: "y" }, { org_unit: "b", is_active: false, holder: null },
+    ];
+    expect(unitMoveOptions(units, seats, "c")).toEqual([
+      { value: "b", label: "Beta", vacant: 1 }, { value: "a", label: "Alpha", vacant: 0 },
+    ]);
   });
 });

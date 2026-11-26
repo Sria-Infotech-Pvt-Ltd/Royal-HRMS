@@ -7469,4 +7469,9 @@ export const URDU: Readonly<Record<string, string>> = {
   "New org unit": "نئی تنظیمی اکائی",
   "Choose the new org unit at the top. Its vacant positions appear here.": "اوپر نئی تنظیمی اکائی منتخب کریں۔ اس کے خالی عہدے یہاں نظر آئیں گے۔",
   "Current org unit": "موجودہ ادارہ جاتی یونٹ",
+  // Org assignment: move to another unit
+  "Choose the org unit first": "پہلے تنظیمی اکائی منتخب کریں",
+  "Select a vacant position": "خالی عہدہ منتخب کریں",
+  "Select a vacant position in the new org unit.": "نئی تنظیمی اکائی میں خالی عہدہ منتخب کریں۔",
+  "Choose a new position, reporting manager or work location.": "نیا عہدہ، رپورٹنگ مینیجر یا کام کی جگہ منتخب کریں۔",
 };
