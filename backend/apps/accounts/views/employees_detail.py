@@ -518,9 +518,14 @@ class EmployeeDetailView(APIView):
                 update_fields.append('hr')
 
         # Manual reporting manager assignment (overrides auto-assign; blocked for managers)
-        if 'reporting_manager_id' in data:
-            if can_manage_team(employee):
+        # The edit form sends the whole record, so a manager's save carries reporting_manager_id as blank (or unchanged): that is not an
+        # attempt to give a manager a reporting manager, so only a NEW non-blank choice is refused (same rule as the hire wizard).
+        is_manager_record = can_manage_team(employee)
+        if 'reporting_manager_id' in data and is_manager_record:
+            rm_sent = data.get('reporting_manager_id')
+            if rm_sent and str(rm_sent) != str(employee.reporting_manager_id or ''):
                 return error('Managers do not have a reporting manager.')
+        if 'reporting_manager_id' in data and not is_manager_record:
             rm_val = data.get('reporting_manager_id')
             if rm_val:
                 try:

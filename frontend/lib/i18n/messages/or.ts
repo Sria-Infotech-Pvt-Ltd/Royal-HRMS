@@ -7402,4 +7402,22 @@ export const ODIA: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} ଦ୍ୱାରା ଚାଳିତ",
+  // Move employees to another org unit
+  "All org units": "ସମସ୍ତ ସଂଗଠନ ୟୁନିଟ୍",
+  "Could not move the employees.": "କର୍ମଚାରୀମାନଙ୍କୁ ସ୍ଥାନାନ୍ତର କରାଯାଇପାରିଲା ନାହିଁ।",
+  "Employees ({count})": "କର୍ମଚାରୀ ({count})",
+  "Move from": "ଏଠାରୁ",
+  "Move org unit": "ସଂଗଠନ ୟୁନିଟ୍ ବଦଳାନ୍ତୁ",
+  "Move to": "ଏଠାକୁ",
+  "Move to another": "ଅନ୍ୟ",
+  "Move {count} employee(s)": "{count} କର୍ମଚାରୀଙ୍କୁ ସ୍ଥାନାନ୍ତର କରନ୍ତୁ",
+  "Moving…": "ସ୍ଥାନାନ୍ତର ହେଉଛି…",
+  "New position for {name}": "{name}ଙ୍କ ନୂଆ ପଦ",
+  "No active employees in this org unit.": "ଏହି ସଂଗଠନ ୟୁନିଟ୍‌ରେ କୌଣସି ସକ୍ରିୟ କର୍ମଚାରୀ ନାହାଁନ୍ତି।",
+  "No vacant position": "କୌଣସି ଖାଲି ପଦ ନାହିଁ",
+  "e.g. Team restructure": "ଯେପରି ଦଳ ପୁନର୍ଗଠନ",
+  "org unit": "ସଂଗଠନ ୟୁନିଟ୍‌କୁ ସ୍ଥାନାନ୍ତର କରନ୍ତୁ",
+  "{count} employee(s) moved.": "{count} କର୍ମଚାରୀ ସ୍ଥାନାନ୍ତରିତ ହେଲେ।",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "ବଛାଯାଇଥିବା {count} କର୍ମଚାରୀଙ୍କ ପାଇଁ ଖାଲି ପଦ ବାକି ନାହିଁ: ପ୍ରଥମେ ସଂଗଠନ ଗଠନରେ ପଦ ଯୋଡନ୍ତୁ।",
+  "{count} vacant position(s) in the target org unit.": "ଲକ୍ଷ୍ୟ ସଂଗଠନ ୟୁନିଟ୍‌ରେ {count}ଟି ଖାଲି ପଦ।",
 };

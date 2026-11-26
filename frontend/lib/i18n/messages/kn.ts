@@ -7402,4 +7402,22 @@ export const KANNADA: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} ನಿಂದ ಚಾಲಿತ",
+  // Move employees to another org unit
+  "All org units": "ಎಲ್ಲಾ ಸಂಸ್ಥೆ ಘಟಕಗಳು",
+  "Could not move the employees.": "ಉದ್ಯೋಗಿಗಳನ್ನು ಸ್ಥಳಾಂತರಿಸಲು ಆಗಲಿಲ್ಲ.",
+  "Employees ({count})": "ಉದ್ಯೋಗಿಗಳು ({count})",
+  "Move from": "ಇಲ್ಲಿಂದ",
+  "Move org unit": "ಸಂಸ್ಥೆ ಘಟಕ ಬದಲಿಸಿ",
+  "Move to": "ಇಲ್ಲಿಗೆ",
+  "Move to another": "ಇನ್ನೊಂದು",
+  "Move {count} employee(s)": "{count} ಉದ್ಯೋಗಿಗಳನ್ನು ಸ್ಥಳಾಂತರಿಸಿ",
+  "Moving…": "ಸ್ಥಳಾಂತರಿಸಲಾಗುತ್ತಿದೆ…",
+  "New position for {name}": "{name} ಅವರ ಹೊಸ ಹುದ್ದೆ",
+  "No active employees in this org unit.": "ಈ ಸಂಸ್ಥೆ ಘಟಕದಲ್ಲಿ ಸಕ್ರಿಯ ಉದ್ಯೋಗಿಗಳಿಲ್ಲ.",
+  "No vacant position": "ಖಾಲಿ ಹುದ್ದೆ ಇಲ್ಲ",
+  "e.g. Team restructure": "ಉದಾ. ತಂಡ ಪುನರ್ರಚನೆ",
+  "org unit": "ಸಂಸ್ಥೆ ಘಟಕಕ್ಕೆ ಸ್ಥಳಾಂತರಿಸಿ",
+  "{count} employee(s) moved.": "{count} ಉದ್ಯೋಗಿಗಳನ್ನು ಸ್ಥಳಾಂತರಿಸಲಾಗಿದೆ.",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "ಆಯ್ಕೆ ಮಾಡಿದ {count} ಉದ್ಯೋಗಿಗಳಿಗೆ ಖಾಲಿ ಹುದ್ದೆ ಉಳಿದಿಲ್ಲ: ಮೊದಲು ಸಂಸ್ಥೆ ರಚನೆಯಲ್ಲಿ ಹುದ್ದೆಗಳನ್ನು ಸೇರಿಸಿ.",
+  "{count} vacant position(s) in the target org unit.": "ಗುರಿ ಸಂಸ್ಥೆ ಘಟಕದಲ್ಲಿ {count} ಖಾಲಿ ಹುದ್ದೆಗಳು.",
 };

@@ -7402,4 +7402,22 @@ export const ASSAMESE: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand}ৰ দ্বাৰা চালিত",
+  // Move employees to another org unit
+  "All org units": "সকলো সংগঠন একক",
+  "Could not move the employees.": "কৰ্মচাৰীসকলক স্থানান্তৰ কৰিব পৰা নগ'ল।",
+  "Employees ({count})": "কৰ্মচাৰী ({count})",
+  "Move from": "ইয়াৰ পৰা",
+  "Move org unit": "সংগঠন একক সলনি কৰক",
+  "Move to": "ইয়ালৈ",
+  "Move to another": "আন এটা",
+  "Move {count} employee(s)": "{count} জন কৰ্মচাৰী স্থানান্তৰ কৰক",
+  "Moving…": "স্থানান্তৰ হৈছে…",
+  "New position for {name}": "{name}ৰ নতুন পদ",
+  "No active employees in this org unit.": "এই সংগঠন এককত কোনো সক্ৰিয় কৰ্মচাৰী নাই।",
+  "No vacant position": "কোনো খালী পদ নাই",
+  "e.g. Team restructure": "যেনে দল পুনৰ্গঠন",
+  "org unit": "সংগঠন এককলৈ স্থানান্তৰ কৰক",
+  "{count} employee(s) moved.": "{count} জন কৰ্মচাৰী স্থানান্তৰ কৰা হ'ল।",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "বাছনি কৰা {count} জন কৰ্মচাৰীৰ বাবে কোনো খালী পদ বাকী নাই: প্ৰথমে সংগঠন গাঁথনিত পদ যোগ কৰক।",
+  "{count} vacant position(s) in the target org unit.": "লক্ষ্য সংগঠন এককত {count}টা খালী পদ।",
 };

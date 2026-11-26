@@ -7402,4 +7402,22 @@ export const URDU: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} کے ذریعے چلتا ہے",
+  // Move employees to another org unit
+  "All org units": "تمام تنظیمی اکائیاں",
+  "Could not move the employees.": "ملازمین کو منتقل نہیں کیا جا سکا۔",
+  "Employees ({count})": "ملازمین ({count})",
+  "Move from": "یہاں سے",
+  "Move org unit": "تنظیمی اکائی بدلیں",
+  "Move to": "یہاں تک",
+  "Move to another": "دوسری",
+  "Move {count} employee(s)": "{count} ملازمین منتقل کریں",
+  "Moving…": "منتقل ہو رہا ہے…",
+  "New position for {name}": "{name} کا نیا عہدہ",
+  "No active employees in this org unit.": "اس تنظیمی اکائی میں کوئی فعال ملازم نہیں۔",
+  "No vacant position": "کوئی خالی عہدہ نہیں",
+  "e.g. Team restructure": "مثلاً ٹیم کی تنظیمِ نو",
+  "org unit": "تنظیمی اکائی میں منتقل کریں",
+  "{count} employee(s) moved.": "{count} ملازمین منتقل کیے گئے۔",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "منتخب {count} ملازمین کے لیے کوئی خالی عہدہ نہیں بچا: پہلے تنظیمی ڈھانچے میں عہدے شامل کریں۔",
+  "{count} vacant position(s) in the target org unit.": "ہدف تنظیمی اکائی میں {count} خالی عہدے۔",
 };

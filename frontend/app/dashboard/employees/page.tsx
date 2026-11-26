@@ -13,6 +13,7 @@ import type { Employee, EmployeeStatusFilter } from "./_data";
 import { apiToEmployee, type ApiEmployee } from "./[id]/_apiMapping";
 import EmployeeDirectoryHeader from "./_components/EmployeeDirectoryHeader";
 import BulkAssignManagerModal from "./_components/BulkAssignManagerModal";
+import BulkMoveOrgUnitModal from "./_components/BulkMoveOrgUnitModal";
 import EmployeeStatCards from "./_components/EmployeeStatCards";
 import EmployeeToolbar from "./_components/EmployeeToolbar";
 import JoiningDateAlert from "@/components/employees/JoiningDateAlert";
@@ -62,6 +63,7 @@ function EmployeesPageInner() {
   const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [showAssignManagers, setShowAssignManagers] = useState(false);
+  const [showMoveOrgUnit, setShowMoveOrgUnit] = useState(false);
   const [showAiAssist, setShowAiAssist] = useState(false);
   const [drawerEmployee, setDrawerEmployee] = useState<Employee | null>(null);
 
@@ -108,6 +110,7 @@ function EmployeesPageInner() {
         onHireEmployee={() => setShowModal(true)}
         canAssignManagers={canEdit}
         onAssignManagers={() => setShowAssignManagers(true)}
+        onMoveOrgUnit={() => setShowMoveOrgUnit(true)}
       />
 
       {/* Section spacing comes from .emp-fit's gap (directory-theme.css) — the stats, banner and panel are
@@ -188,6 +191,10 @@ function EmployeesPageInner() {
 
       {showAssignManagers && (
         <BulkAssignManagerModal onClose={() => setShowAssignManagers(false)} onDone={emp.refetchAll} />
+      )}
+
+      {showMoveOrgUnit && (
+        <BulkMoveOrgUnitModal onClose={() => setShowMoveOrgUnit(false)} onDone={emp.refetchAll} />
       )}
 
       {showImport && (

@@ -7402,4 +7402,22 @@ export const GUJARATI: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} દ્વારા સંચાલિત",
+  // Move employees to another org unit
+  "All org units": "બધા સંગઠન એકમો",
+  "Could not move the employees.": "કર્મચારીઓને ખસેડી શકાયા નહીં.",
+  "Employees ({count})": "કર્મચારીઓ ({count})",
+  "Move from": "અહીંથી",
+  "Move org unit": "સંગઠન એકમ બદલો",
+  "Move to": "અહીં",
+  "Move to another": "બીજા",
+  "Move {count} employee(s)": "{count} કર્મચારીઓને ખસેડો",
+  "Moving…": "ખસેડી રહ્યા છીએ…",
+  "New position for {name}": "{name} નું નવું પદ",
+  "No active employees in this org unit.": "આ સંગઠન એકમમાં કોઈ સક્રિય કર્મચારી નથી.",
+  "No vacant position": "કોઈ ખાલી પદ નથી",
+  "e.g. Team restructure": "દા.ત. ટીમ પુનર્ગઠન",
+  "org unit": "સંગઠન એકમમાં ખસેડો",
+  "{count} employee(s) moved.": "{count} કર્મચારીઓ ખસેડાયા.",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "પસંદ કરેલા {count} કર્મચારીઓ માટે કોઈ ખાલી પદ બાકી નથી: પહેલા સંગઠન માળખામાં પદ ઉમેરો.",
+  "{count} vacant position(s) in the target org unit.": "લક્ષ્ય સંગઠન એકમમાં {count} ખાલી પદ.",
 };

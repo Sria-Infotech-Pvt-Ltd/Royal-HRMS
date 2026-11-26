@@ -7402,4 +7402,22 @@ export const BENGALI: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} দ্বারা চালিত",
+  // Move employees to another org unit
+  "All org units": "সব সংগঠন ইউনিট",
+  "Could not move the employees.": "কর্মচারীদের সরানো গেল না।",
+  "Employees ({count})": "কর্মচারী ({count})",
+  "Move from": "যেখান থেকে",
+  "Move org unit": "সংগঠন ইউনিট বদলান",
+  "Move to": "যেখানে",
+  "Move to another": "অন্য",
+  "Move {count} employee(s)": "{count} জন কর্মচারী সরান",
+  "Moving…": "সরানো হচ্ছে…",
+  "New position for {name}": "{name}-এর নতুন পদ",
+  "No active employees in this org unit.": "এই সংগঠন ইউনিটে কোনো সক্রিয় কর্মচারী নেই।",
+  "No vacant position": "কোনো খালি পদ নেই",
+  "e.g. Team restructure": "যেমন দল পুনর্গঠন",
+  "org unit": "সংগঠন ইউনিটে সরান",
+  "{count} employee(s) moved.": "{count} জন কর্মচারী সরানো হয়েছে।",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "নির্বাচিত {count} জন কর্মচারীর জন্য কোনো খালি পদ নেই: আগে সংগঠন কাঠামোতে পদ যোগ করুন।",
+  "{count} vacant position(s) in the target org unit.": "লক্ষ্য সংগঠন ইউনিটে {count}টি খালি পদ।",
 };

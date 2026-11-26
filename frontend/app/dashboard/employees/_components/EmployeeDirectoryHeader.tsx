@@ -18,10 +18,12 @@ interface Props {
   /** employees.edit: opens the bulk "Assign managers" action. */
   canAssignManagers?: boolean;
   onAssignManagers?: () => void;
+  /** employees.edit: opens the bulk "Move org unit" action. */
+  onMoveOrgUnit?: () => void;
 }
 
 export default function EmployeeDirectoryHeader({
-  totalHeadcount, canCreate, canUseAiAssist, canExport, exporting, onResumeDraft, onOpenAiAssist, onExport, onHireEmployee, canAssignManagers, onAssignManagers,
+  totalHeadcount, canCreate, canUseAiAssist, canExport, exporting, onResumeDraft, onOpenAiAssist, onExport, onHireEmployee, canAssignManagers, onAssignManagers, onMoveOrgUnit,
 }: Props) {
   const t = useT();
   return (
@@ -54,6 +56,11 @@ export default function EmployeeDirectoryHeader({
           {canAssignManagers && onAssignManagers && (
             <button className="btn btn-ghost" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={onAssignManagers} suppressHydrationWarning>
               <i className="ti ti-users-group" style={{ fontSize: 15 }} /> {t("Assign managers")}
+            </button>
+          )}
+          {canAssignManagers && onMoveOrgUnit && (
+            <button className="btn btn-ghost" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={onMoveOrgUnit} suppressHydrationWarning>
+              <i className="ti ti-arrows-exchange" style={{ fontSize: 15 }} /> {t("Move org unit")}
             </button>
           )}
           {canCreate && (

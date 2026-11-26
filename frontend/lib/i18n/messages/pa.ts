@@ -7402,4 +7402,22 @@ export const PUNJABI: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} ਦੁਆਰਾ ਸੰਚਾਲਿਤ",
+  // Move employees to another org unit
+  "All org units": "ਸਾਰੀਆਂ ਸੰਗਠਨ ਇਕਾਈਆਂ",
+  "Could not move the employees.": "ਕਰਮਚਾਰੀਆਂ ਨੂੰ ਤਬਦੀਲ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ।",
+  "Employees ({count})": "ਕਰਮਚਾਰੀ ({count})",
+  "Move from": "ਇੱਥੋਂ",
+  "Move org unit": "ਸੰਗਠਨ ਇਕਾਈ ਬਦਲੋ",
+  "Move to": "ਇੱਥੇ",
+  "Move to another": "ਦੂਜੀ",
+  "Move {count} employee(s)": "{count} ਕਰਮਚਾਰੀ ਤਬਦੀਲ ਕਰੋ",
+  "Moving…": "ਤਬਦੀਲ ਹੋ ਰਿਹਾ ਹੈ…",
+  "New position for {name}": "{name} ਦਾ ਨਵਾਂ ਅਹੁਦਾ",
+  "No active employees in this org unit.": "ਇਸ ਸੰਗਠਨ ਇਕਾਈ ਵਿੱਚ ਕੋਈ ਸਰਗਰਮ ਕਰਮਚਾਰੀ ਨਹੀਂ।",
+  "No vacant position": "ਕੋਈ ਖਾਲੀ ਅਹੁਦਾ ਨਹੀਂ",
+  "e.g. Team restructure": "ਜਿਵੇਂ ਟੀਮ ਦਾ ਪੁਨਰਗਠਨ",
+  "org unit": "ਸੰਗਠਨ ਇਕਾਈ ਵਿੱਚ ਭੇਜੋ",
+  "{count} employee(s) moved.": "{count} ਕਰਮਚਾਰੀ ਤਬਦੀਲ ਕੀਤੇ ਗਏ।",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "ਚੁਣੇ ਗਏ {count} ਕਰਮਚਾਰੀਆਂ ਲਈ ਕੋਈ ਖਾਲੀ ਅਹੁਦਾ ਨਹੀਂ ਬਚਿਆ: ਪਹਿਲਾਂ ਸੰਗਠਨ ਢਾਂਚੇ ਵਿੱਚ ਅਹੁਦੇ ਜੋੜੋ।",
+  "{count} vacant position(s) in the target org unit.": "ਟੀਚਾ ਸੰਗਠਨ ਇਕਾਈ ਵਿੱਚ {count} ਖਾਲੀ ਅਹੁਦੇ।",
 };

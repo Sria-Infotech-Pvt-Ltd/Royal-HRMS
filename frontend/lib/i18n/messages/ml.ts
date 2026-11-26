@@ -7402,4 +7402,22 @@ export const MALAYALAM: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} നൽകുന്നത്",
+  // Move employees to another org unit
+  "All org units": "എല്ലാ സ്ഥാപന യൂണിറ്റുകളും",
+  "Could not move the employees.": "ജീവനക്കാരെ മാറ്റാൻ കഴിഞ്ഞില്ല.",
+  "Employees ({count})": "ജീവനക്കാർ ({count})",
+  "Move from": "എവിടെ നിന്ന്",
+  "Move org unit": "സ്ഥാപന യൂണിറ്റ് മാറ്റുക",
+  "Move to": "എവിടേക്ക്",
+  "Move to another": "മറ്റൊരു",
+  "Move {count} employee(s)": "{count} ജീവനക്കാരെ മാറ്റുക",
+  "Moving…": "മാറ്റുന്നു…",
+  "New position for {name}": "{name} എന്നവരുടെ പുതിയ തസ്തിക",
+  "No active employees in this org unit.": "ഈ സ്ഥാപന യൂണിറ്റിൽ സജീവ ജീവനക്കാരില്ല.",
+  "No vacant position": "ഒഴിവുള്ള തസ്തികയില്ല",
+  "e.g. Team restructure": "ഉദാ. ടീം പുനഃസംഘടന",
+  "org unit": "സ്ഥാപന യൂണിറ്റിലേക്ക് മാറ്റുക",
+  "{count} employee(s) moved.": "{count} ജീവനക്കാരെ മാറ്റി.",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "തിരഞ്ഞെടുത്ത {count} ജീവനക്കാർക്ക് ഒഴിവുള്ള തസ്തികയില്ല: ആദ്യം സ്ഥാപന ഘടനയിൽ തസ്തികകൾ ചേർക്കുക.",
+  "{count} vacant position(s) in the target org unit.": "ലക്ഷ്യ സ്ഥാപന യൂണിറ്റിൽ {count} ഒഴിവുള്ള തസ്തികകൾ.",
 };

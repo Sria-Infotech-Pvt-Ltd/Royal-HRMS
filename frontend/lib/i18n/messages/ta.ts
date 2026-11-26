@@ -7402,4 +7402,22 @@ export const TAMIL: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} வழங்குகிறது",
+  // Move employees to another org unit
+  "All org units": "அனைத்து நிறுவன அலகுகள்",
+  "Could not move the employees.": "ஊழியர்களை மாற்ற முடியவில்லை.",
+  "Employees ({count})": "ஊழியர்கள் ({count})",
+  "Move from": "இதிலிருந்து",
+  "Move org unit": "நிறுவன அலகை மாற்று",
+  "Move to": "இதற்கு",
+  "Move to another": "வேறொரு",
+  "Move {count} employee(s)": "{count} ஊழியர்களை மாற்று",
+  "Moving…": "மாற்றுகிறது…",
+  "New position for {name}": "{name} புதிய பதவி",
+  "No active employees in this org unit.": "இந்த நிறுவன அலகில் செயலில் உள்ள ஊழியர்கள் இல்லை.",
+  "No vacant position": "காலியான பதவி இல்லை",
+  "e.g. Team restructure": "எ.கா. குழு மறுசீரமைப்பு",
+  "org unit": "நிறுவன அலகுக்கு மாற்று",
+  "{count} employee(s) moved.": "{count} ஊழியர்கள் மாற்றப்பட்டனர்.",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "தேர்ந்தெடுத்த {count} ஊழியர்களுக்கு காலியான பதவி இல்லை: முதலில் நிறுவன அமைப்பில் பதவிகளைச் சேர்க்கவும்.",
+  "{count} vacant position(s) in the target org unit.": "இலக்கு நிறுவன அலகில் {count} காலியான பதவிகள்.",
 };

@@ -7402,4 +7402,22 @@ export const HINDI: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} द्वारा संचालित",
+  // Move employees to another org unit
+  "All org units": "सभी संगठन इकाइयाँ",
+  "Could not move the employees.": "कर्मचारियों को स्थानांतरित नहीं किया जा सका।",
+  "Employees ({count})": "कर्मचारी ({count})",
+  "Move from": "यहाँ से",
+  "Move org unit": "संगठन इकाई बदलें",
+  "Move to": "यहाँ तक",
+  "Move to another": "दूसरी",
+  "Move {count} employee(s)": "{count} कर्मचारी स्थानांतरित करें",
+  "Moving…": "स्थानांतरित हो रहा है…",
+  "New position for {name}": "{name} का नया पद",
+  "No active employees in this org unit.": "इस संगठन इकाई में कोई सक्रिय कर्मचारी नहीं है।",
+  "No vacant position": "कोई रिक्त पद नहीं",
+  "e.g. Team restructure": "जैसे टीम पुनर्गठन",
+  "org unit": "संगठन इकाई में ले जाएँ",
+  "{count} employee(s) moved.": "{count} कर्मचारी स्थानांतरित किए गए।",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "{count} चुने गए कर्मचारियों के लिए कोई रिक्त पद नहीं बचा: पहले संगठन संरचना में पद जोड़ें।",
+  "{count} vacant position(s) in the target org unit.": "लक्ष्य संगठन इकाई में {count} रिक्त पद।",
 };

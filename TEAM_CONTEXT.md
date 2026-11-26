@@ -6770,3 +6770,18 @@ The user wants EVERYTHING done, thorough (no "faster option"), human-readable er
 
 **To continue ("continue"):** read this block, then the QA RESUME GUIDE above; start with the deploy log of the latest push, then the open items in the order of the owner's priority.
 
+## Manager Edit-form save fix + bulk "Move org unit" (2026-11-26)
+- Bug: saving Edit Record for a manager (e.g. 09000037) returned 400 "Managers do not have a reporting manager." The form always sends
+  `reporting_manager_id` (null when blank) and `employees_detail.py` refused the key whenever the employee's seat has can_manage_team.
+  Now only a NEW non-blank reporting manager is refused for a manager (same rule as the hire wizard). Test: `tests_manager_edit_form_save.py`.
+  Managers still use "Reporting Approver" for their own boss; whether managers should take a Reporting Manager is an OPEN owner decision.
+- New: Employees page > "Move org unit" button (employees.edit). Pick From unit (filter), To unit, effective date (today or later), reason;
+  tick employees; each gets a vacant seat in the target unit, pre-matched by same title then any spare (`lib/orgMove.ts` suggestSeats),
+  editable per row. POST `/employees/bulk-move-org-unit/` (`views/employees_bulk_org_move.py`): per move checks scope, active + vacant seat,
+  no seat twice, assignment_refusal (sensitive seats), then assign_position (ends the old placement, so the OLD SEAT SHOWS VACANT from the
+  effective date) + one AuditLog (via=bulk_move_org_unit). Skips come back with a reason; the rest still move. Seats are never displaced:
+  if the target unit has too few vacancies, add positions in Org Structure first (creating seats automatically was NOT built).
+  Tests: `tests_bulk_move_org_unit.py` (5), `lib/orgMove.test.ts` (4). 17 new strings added to all 12 language files (machine-drafted).
+- Not done: Perform Action > Org Assignment still only changes manager/work location (no position/unit change there).
+- Build note: `next build --webpack` in a junctioned copy fails on `app/dashboard/my-payslip/page.tsx` (props on a page, pre-existing since
+  2026-11-24, webpack-only type check). The normal Turbopack `npm run build` passed on that file in earlier pushes.

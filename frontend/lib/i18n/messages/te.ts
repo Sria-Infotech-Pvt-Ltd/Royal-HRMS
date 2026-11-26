@@ -7402,4 +7402,22 @@ export const TELUGU: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} ద్వారా నడుస్తోంది",
+  // Move employees to another org unit
+  "All org units": "అన్ని సంస్థ యూనిట్లు",
+  "Could not move the employees.": "ఉద్యోగులను తరలించలేకపోయాము.",
+  "Employees ({count})": "ఉద్యోగులు ({count})",
+  "Move from": "నుండి",
+  "Move org unit": "సంస్థ యూనిట్ మార్చండి",
+  "Move to": "కు",
+  "Move to another": "మరో",
+  "Move {count} employee(s)": "{count} ఉద్యోగులను తరలించండి",
+  "Moving…": "తరలిస్తోంది…",
+  "New position for {name}": "{name} కొత్త పదవి",
+  "No active employees in this org unit.": "ఈ సంస్థ యూనిట్‌లో సక్రియ ఉద్యోగులు లేరు.",
+  "No vacant position": "ఖాళీ పదవి లేదు",
+  "e.g. Team restructure": "ఉదా. టీమ్ పునర్వ్యవస్థీకరణ",
+  "org unit": "సంస్థ యూనిట్‌కు తరలించండి",
+  "{count} employee(s) moved.": "{count} ఉద్యోగులు తరలించబడ్డారు.",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "ఎంచుకున్న {count} ఉద్యోగులకు ఖాళీ పదవి లేదు: ముందుగా సంస్థ నిర్మాణంలో పదవులు జోడించండి.",
+  "{count} vacant position(s) in the target org unit.": "లక్ష్య సంస్థ యూనిట్‌లో {count} ఖాళీ పదవులు.",
 };

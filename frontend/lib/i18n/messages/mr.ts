@@ -7402,4 +7402,22 @@ export const MARATHI: Readonly<Record<string, string>> = {
   "?": "?",
   // Branding
   "Powered by {brand}": "{brand} द्वारे संचालित",
+  // Move employees to another org unit
+  "All org units": "सर्व संघटना एकके",
+  "Could not move the employees.": "कर्मचाऱ्यांना हलवता आले नाही.",
+  "Employees ({count})": "कर्मचारी ({count})",
+  "Move from": "येथून",
+  "Move org unit": "संघटना एकक बदला",
+  "Move to": "येथे",
+  "Move to another": "दुसऱ्या",
+  "Move {count} employee(s)": "{count} कर्मचारी हलवा",
+  "Moving…": "हलवत आहे…",
+  "New position for {name}": "{name} यांचे नवीन पद",
+  "No active employees in this org unit.": "या संघटना एककात कोणतेही सक्रिय कर्मचारी नाहीत.",
+  "No vacant position": "रिक्त पद नाही",
+  "e.g. Team restructure": "उदा. टीम पुनर्रचना",
+  "org unit": "संघटना एककात हलवा",
+  "{count} employee(s) moved.": "{count} कर्मचारी हलवले.",
+  "{count} selected employee(s) have no vacant position left: add positions in Org Structure first.": "निवडलेल्या {count} कर्मचाऱ्यांसाठी रिक्त पद उरले नाही: आधी संघटना रचनेत पदे जोडा.",
+  "{count} vacant position(s) in the target org unit.": "लक्ष्य संघटना एककात {count} रिक्त पदे.",
 };
