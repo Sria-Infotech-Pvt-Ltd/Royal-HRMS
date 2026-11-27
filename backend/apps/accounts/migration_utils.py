@@ -3,14 +3,17 @@
 PostgresOnlyAddConstraint/PostgresOnlyRemoveConstraint wrap Django's own
 AddConstraint/RemoveConstraint so a Postgres-only constraint (ExclusionConstraint,
 which generates `EXCLUDE USING gist (...)` SQL) is a no-op on any other
-backend. The project now runs on PostgreSQL only (see config/settings.py), so
-these guards never skip anything; they are kept because already-applied
-migrations import them and applied migrations must not be edited.
+backend. UAT/production run on PostgreSQL; local development may use SQLite
+(see config/settings.py), where these guards skip the Postgres-only SQL.
 """
 from __future__ import annotations
 
 from django.contrib.postgres.constraints import ExclusionConstraint
-from django.db import migrations
+from django.contrib.postgres.fields import RangeOperators
+from django.core.exceptions import ValidationError
+from django.db import DEFAULT_DB_ALIAS, connections, migrations
+from django.db.models import Exists, F, Func, Q
+from django.db.models.lookups import Exact
 
 
 class PortableExclusionConstraint(ExclusionConstraint):
@@ -50,6 +53,55 @@ class PortableExclusionConstraint(ExclusionConstraint):
         if schema_editor.connection.vendor != 'postgresql':
             return None
         return super().remove_sql(model, schema_editor)
+
+    def validate(self, model, instance, exclude=None, using=DEFAULT_DB_ALIAS):
+        """Postgres validates with the real `&&` range operator. Other backends (local SQLite) can't run that, so the
+        same rule is checked with plain comparisons: every EQUAL expression matches, and the inclusive
+        daterange(lower, upper, '[]') windows overlap (a null upper bound means open-ended)."""
+        if connections[using].vendor == 'postgresql':
+            return super().validate(model, instance, exclude=exclude, using=using)
+        replacement_map = instance._get_field_expression_map(meta=model._meta, exclude=exclude)
+        replacements = {F(field): value for field, value in replacement_map.items()}
+        filters = []
+        for expression, operator in self.expressions:
+            expression = F(expression) if isinstance(expression, str) else expression
+            if exclude and any(isinstance(part, F) and part.name in exclude for part in expression.flatten()):
+                return
+            if operator == RangeOperators.EQUAL:
+                filters.append(Exact(expression, expression.replace_expressions(replacements)))
+            elif operator == RangeOperators.OVERLAPS and _is_inclusive_daterange(expression):
+                filters.append(_overlap_filter(expression, instance))
+            else:
+                raise NotImplementedError(f'{self.name}: operator {operator!r} has no non-Postgres validation.')
+        queryset = model._default_manager.using(using).filter(*filters)
+        model_class_pk = instance._get_pk_val(model._meta)
+        if not instance._state.adding and model_class_pk is not None:
+            queryset = queryset.exclude(pk=model_class_pk)
+        if self.condition:
+            is_violated = (self.condition & Exists(queryset.filter(self.condition))).check(replacement_map, using=using)
+        else:
+            is_violated = queryset.exists()
+        if is_violated:
+            raise ValidationError(self.get_violation_error_message(), code=self.violation_error_code)
+
+
+def _is_inclusive_daterange(expression) -> bool:
+    if not isinstance(expression, Func):
+        return False
+    # Func(..., function='daterange') keeps that keyword in `extra`; a Func subclass would set the class attribute instead.
+    function_name = expression.extra.get('function') or expression.function
+    return (function_name == 'daterange'
+            and all(isinstance(part, F) for part in expression.get_source_expressions()[:2]))
+
+
+def _overlap_filter(expression, instance) -> Q:
+    """Rows whose [lower, upper] window (upper null = open-ended) overlaps the instance's own window."""
+    lower_field, upper_field = (part.name for part in expression.get_source_expressions()[:2])
+    lower, upper = getattr(instance, lower_field), getattr(instance, upper_field)
+    overlap = Q(**{f'{upper_field}__isnull': True}) | Q(**{f'{upper_field}__gte': lower})
+    if upper is not None:
+        overlap &= Q(**{f'{lower_field}__lte': upper})
+    return overlap
 
 
 class PostgresOnlyAddConstraint(migrations.AddConstraint):

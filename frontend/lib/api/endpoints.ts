@@ -516,9 +516,11 @@ export const API = {
   workStatus: {
     me:       "/work-status/me/",
     employee: (employeeId: string) => `/work-status/${employeeId}/`,
-  },
-  projectSync: {
-    status: "/project-sync/status/",
+    // Admin actions on an employee's project assignments
+    assign:   (employeeId: string) => `/work-status/${employeeId}/assignments/`,
+    edit:     (employeeId: string, assignmentId: number) => `/work-status/${employeeId}/assignments/${assignmentId}/`,
+    extend:   (employeeId: string, assignmentId: number) => `/work-status/${employeeId}/assignments/${assignmentId}/extend/`,
+    end:      (employeeId: string, assignmentId: number) => `/work-status/${employeeId}/assignments/${assignmentId}/end/`,
   },
 
   payroll: {

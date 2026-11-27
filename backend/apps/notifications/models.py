@@ -26,13 +26,15 @@ NOTIFICATION_TYPE_CHOICES = [
     ('password_reset',         'Password Reset'),
     ('employee_confirmed',     'Employee Confirmed'),
     ('salary_updated',         'Salary Updated'),
-    ('project_sync_alert',     'Project Sync Alert'),
     ('face_registration_status', 'Face ID Registration Status'),
     ('timesheet_submitted',      'Timesheet Submitted'),
     ('timesheet_returned',       'Timesheet Sent Back'),
     ('timesheet_approved',       'Timesheet Approved'),
     ('timesheet_reminder',       'Timesheet Reminder'),
     ('hr_help_request',          'HR Help Request'),
+    ('project_assigned',         'Project Assigned'),
+    ('project_ending_soon',      'Project Ending Soon'),
+    ('project_completed',        'Project Completed'),
 ]
 
 MODULE_CHOICES = [

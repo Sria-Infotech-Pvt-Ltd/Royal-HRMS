@@ -1,21 +1,24 @@
 "use client";
 
-import type { WorkStatusHistoryPage } from "@/types/workStatus";
-import { STATUS_BADGE, changeLabel, endLabel, fmtDate, statusLabel } from "./workStatusFormat";
+import type { AssignmentAction, WorkStatusAssignment, WorkStatusHistoryPage } from "@/types/workStatus";
+import { changeLabel, endLabel, fmtDate, statusBadge, statusLabel, workPlaceLabel } from "./workStatusFormat";
 
 interface Props {
   history:      WorkStatusHistoryPage;
   onPageChange: (page: number) => void;
+  /** Present only for admins: lets them extend a finished project (which re-opens it). */
+  onAction?:    (action: AssignmentAction, assignment: WorkStatusAssignment) => void;
 }
 
-export default function WorkStatusHistory({ history, onPageChange }: Props) {
+export default function WorkStatusHistory({ history, onPageChange, onAction }: Props) {
   return (
     <>
       <div style={{ overflowX: "auto" }}>
         <table className="table" style={{ width: "100%", fontSize: 12 }}>
           <thead>
             <tr>
-              <th>Project</th><th>Role</th><th>Allocation</th><th>Start</th><th>End</th><th>Status</th><th>Last change</th>
+              <th>Project</th><th>Role</th><th>Work mode</th><th>Start</th><th>End</th><th>Status</th><th>Last change</th>
+              {onAction && <th />}
             </tr>
           </thead>
           <tbody>
@@ -23,20 +26,28 @@ export default function WorkStatusHistory({ history, onPageChange }: Props) {
               <tr key={assignment.assignment_id}>
                 <td>
                   <div style={{ fontWeight: 500 }}>{assignment.project_name}</div>
-                  <div style={{ color: "var(--on-variant)" }}>
-                    {assignment.project_code || `ID ${assignment.project_id}`} · {assignment.milestone_name || "Whole project"}
-                  </div>
+                  {assignment.notes && <div style={{ color: "var(--on-variant)" }}>{assignment.notes}</div>}
                 </td>
                 <td>{assignment.role || "—"}</td>
-                <td>{assignment.allocation_percent ? `${assignment.allocation_percent}%` : "—"}</td>
+                <td>{workPlaceLabel(assignment)}</td>
                 <td>{fmtDate(assignment.start_date)}</td>
                 <td>{endLabel(assignment)}</td>
                 <td>
-                  <span className={STATUS_BADGE[assignment.assignment_status] ?? "badge badge-neutral"} style={{ fontSize: 10 }}>
-                    {statusLabel(assignment)}
-                  </span>
+                  <span className={statusBadge(assignment)} style={{ fontSize: 10 }}>{statusLabel(assignment)}</span>
                 </td>
-                <td style={{ color: "var(--on-variant)" }}>{changeLabel(assignment.last_change)}</td>
+                <td style={{ color: "var(--on-variant)" }}>
+                  {changeLabel(assignment.last_change)}
+                  {assignment.last_change?.reason && <div>“{assignment.last_change.reason}”</div>}
+                </td>
+                {onAction && (
+                  <td>
+                    {assignment.assignment_status === "completed" && (
+                      <button className="btn btn-outline btn-sm" type="button" onClick={() => onAction("extend", assignment)}>
+                        <i className="ti ti-calendar-plus" /> Extend
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

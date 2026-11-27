@@ -12,7 +12,7 @@ import { buildApprovalsLink } from "@/lib/approvalLink";
 
 interface HeadcountPoint { label: string; count: number }
 interface LeavePoint { label: string; month?: string; approved: number; rejected: number }
-interface PayrollCostPoint { label: string; amount: number }
+interface PayrollCostPoint { month: string; label: string; amount: number }
 
 function LoadingRow() {
   return (
@@ -150,14 +150,14 @@ export function PayrollCostTrendCard() {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-report-money" /> Payroll Cost (last {series.length || 6} cycles)</div>
+        <div className="card-title"><i className="ti ti-report-money" /> Payroll Cost (last {series.length || 6} months)</div>
       </div>
       {loading ? <LoadingRow /> : series.length === 0 ? (
         <EmptyRow icon="ti-report-money" text="No completed payroll cycles yet" />
       ) : (
         <div style={{ padding: "16px 20px", display: "flex", alignItems: "flex-end", gap: 10, height: 140 }}>
           {series.map(point => (
-            <div key={point.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
+            <div key={point.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--on-bg)" }}>{formatInr(point.amount)}</span>
               <div
                 title={`${point.label}: ${formatInr(point.amount)}`}

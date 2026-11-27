@@ -28,7 +28,6 @@ const OWN_BACK_PREFIXES = [
   "/dashboard/settings/notifications",
   "/dashboard/settings/onboarding-fields",
   "/dashboard/settings/payroll-config",
-  "/dashboard/settings/project-sync",
   "/dashboard/settings/referral-rules",
   "/dashboard/settings/smtp",
   "/dashboard/payroll/",

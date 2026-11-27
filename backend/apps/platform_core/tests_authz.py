@@ -272,29 +272,3 @@ class IsFullAccessTests(TestCase):
     def test_superuser_is_always_full_access(self):
         user = make_user('su-user@test.com', is_superuser=True)
         self.assertTrue(authz.is_full_access(user))
-
-
-class ExternalAPIKeyScopeTests(TestCase):
-    def test_empty_scope_allows_everything_legacy_behaviour(self):
-        from apps.accounts.models import ExternalAPIKey
-        key = ExternalAPIKey.objects.create(name='legacy_key', key_hash='x' * 64)
-        self.assertTrue(key.allows_scope('anything.at.all'))
-
-    def test_explicit_scope_restricts(self):
-        from apps.accounts.models import ExternalAPIKey
-        key = ExternalAPIKey.objects.create(name='scoped_key', key_hash='y' * 64, scope_codenames=['employees.view'])
-        self.assertTrue(key.allows_scope('employees.view'))
-        self.assertFalse(key.allows_scope('payroll.view'))
-
-    def test_ip_allowlist(self):
-        from apps.accounts.models import ExternalAPIKey
-        key = ExternalAPIKey.objects.create(name='ip_key', key_hash='z' * 64, ip_allowlist=['10.0.0.0/24'])
-        self.assertTrue(key.allows_ip('10.0.0.5'))
-        self.assertFalse(key.allows_ip('192.168.1.1'))
-
-    def test_expiry(self):
-        from apps.accounts.models import ExternalAPIKey
-        from django.utils import timezone
-        import datetime as dt
-        key = ExternalAPIKey.objects.create(name='expiring_key', key_hash='w' * 64, expires_at=timezone.now() - dt.timedelta(days=1))
-        self.assertTrue(key.is_expired())

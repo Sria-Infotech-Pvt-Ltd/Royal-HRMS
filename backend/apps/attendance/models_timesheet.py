@@ -5,7 +5,7 @@ approver approves or sends it back, and an approved sheet is locked.
 Four tables:
   Timesheet        one per employee per week, with the approval state and totals snapshotted at submit time
   TimesheetLine    one project row in the grid (or the single Internal / non-project row); the project's id, code and name
-                   are COPIED here, because Project Budgeting owns assignments and can later close or remove them
+                   are COPIED here, so a line keeps its project even if the assignment is later edited or ended
   TimesheetEntry   one cell: hours (0-24, quarter-hour steps) and an optional note for one line on one day
   TimesheetEvent   append-only history of every submit / return / approve / unlock, with a snapshot of the sheet at that
                    moment, so an earlier version is never lost even if HR reopens an approved sheet
@@ -101,8 +101,8 @@ class Timesheet(models.Model):
 class TimesheetLine(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     timesheet = models.ForeignKey(Timesheet, on_delete=models.CASCADE, related_name='lines')
-    # Project Budgeting's assignment id; blank for the Internal / non-project row. No foreign key: assignments are
-    # read-only and keyed by employee_code (see models_project_assignment.py), and may disappear from the source.
+    # The project assignment's assignment_id; blank for the Internal / non-project row. No foreign key: assignments are
+    # keyed by employee_code (see models_project_assignment.py), and the line keeps its own copy of the project name.
     assignment_id = models.BigIntegerField(null=True, blank=True)
     project_id = models.BigIntegerField(null=True, blank=True)
     project_code = models.CharField(max_length=50, blank=True, default='')

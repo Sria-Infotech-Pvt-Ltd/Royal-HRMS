@@ -1,62 +1,152 @@
+"""
+Admin actions on an employee's project assignments, from the Work Status panel on the employee record:
+
+POST  /api/work-status/<employee_id>/assignments/                      assign a project
+PATCH /api/work-status/<employee_id>/assignments/<assignment_id>/      edit an active assignment
+POST  /api/work-status/<employee_id>/assignments/<assignment_id>/extend/   move the end date later
+POST  /api/work-status/<employee_id>/assignments/<assignment_id>/end/      finish it early
+
+Only admins holding employees.edit, within their branch scope. Every action is audit-logged.
+"""
 import logging
 
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.responses import error, first_error, get_client_ip, success
-from apps.accounts.authentication_external import ExternalAPIKeyAuthentication
-from apps.accounts.models import AuditLog
-from apps.accounts.throttles import ExternalWebhookThrottle
-from apps.hrms.models import ProjectSyncLog
+from apps.accounts.models import AuditLog, User
+from apps.hrms.models import ProjectAssignment
 from apps.hrms.serializers_project_assignment import (
-    WEBHOOK_EVENT_PROJECTS_CHANGED,
-    ProjectsChangedWebhookSerializer,
+    AssignProjectSerializer,
+    EditAssignmentSerializer,
+    EndAssignmentSerializer,
+    ExtendAssignmentSerializer,
 )
-from apps.hrms.services_project_sync import SOURCE_WEBHOOK, sync_employee_snapshot
+from apps.hrms.services_project_assignments import (
+    AssignmentError,
+    assign_project,
+    edit_assignment,
+    end_assignment,
+    extend_assignment,
+)
+from apps.hrms.services_project_notifications import notify_assigned
+from apps.hrms.services_work_status import assignment_dict, history_queryset
+from apps.hrms.views.work_status import can_manage_assignments
 
 logger = logging.getLogger(__name__)
 
+NOT_FOUND = 'No employee found with that employee_id.'
 
-class ProjectAssignmentsWebhookView(APIView):
-    """POST /api/external/project-assignments/ — Project Budgeting pushes an employee's complete current project list
-    here (event employee.projects_changed). X-API-Key auth, same as the read-only external APIs.
 
-    A well-formed push always gets 2xx — even for an employee_id we don't have yet (it's stored, logged and reported to
-    admins) — because the sender retries on anything else. A malformed body gets 400 (they don't retry 4xx) and is
-    written to the sync log so admins can see it. An unexpected failure is logged and surfaces as 500 so they retry."""
-    authentication_classes = [ExternalAPIKeyAuthentication]
-    permission_classes     = [IsAuthenticated]
-    throttle_classes       = [ExternalWebhookThrottle]
+def _employee_for(request, employee_id: str) -> User | None:
+    """The employee, or None when they don't exist or the viewer can't manage them (same answer, so IDs can't be probed)."""
+    employee = User.objects.filter(employee_id=employee_id).first()
+    if employee is None or not can_manage_assignments(request.user, employee):
+        return None
+    return employee
 
-    def post(self, request):
-        client_name = request.auth.name
-        serializer = ProjectsChangedWebhookSerializer(data=request.data)
+
+def _assignment_for(employee: User, assignment_id: int) -> ProjectAssignment | None:
+    return ProjectAssignment.objects.filter(employee_code=employee.employee_id, assignment_id=assignment_id).first()
+
+
+def _audit(request, action: str, employee: User, assignment: ProjectAssignment) -> None:
+    AuditLog.objects.create(
+        user=request.user, action=action, module='work_status', object_id=str(assignment.pk),
+        changes={'employee_id': employee.employee_id, 'project_name': assignment.project_name,
+                 'start_date': assignment.assignment_start_date.isoformat(),
+                 'end_date': assignment.assignment_end_date.isoformat()},
+        ip_address=get_client_ip(request),
+    )
+
+
+def _fresh(assignment: ProjectAssignment) -> dict:
+    """The assignment as the Work Status panel shows it, with its change log."""
+    reloaded = history_queryset(assignment.employee_code).get(pk=assignment.pk)
+    return assignment_dict(reloaded, timezone.localdate())
+
+
+class AssignProjectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, employee_id):
+        employee = _employee_for(request, employee_id)
+        if employee is None:
+            return error(NOT_FOUND, http_status=404)
+        if not employee.is_active:
+            return error('Projects cannot be assigned to an employee who has left.')
+        serializer = AssignProjectSerializer(data=request.data)
         if not serializer.is_valid():
-            message = first_error(serializer.errors)
-            employee_code = str(request.data.get('employee_id', ''))[:20] if hasattr(request.data, 'get') else ''
-            ProjectSyncLog.objects.create(
-                source=SOURCE_WEBHOOK, triggered_by=client_name, employee_code=employee_code,
-                status=ProjectSyncLog.STATUS_FAILED,
-                message='Project Budgeting sent an update that was incomplete or not valid, so it was not saved.',
-            )
-            return error(message)
-        payload = serializer.validated_data
+            return error(first_error(serializer.errors))
+        try:
+            assignment = assign_project(employee, serializer.validated_data, request.user)
+        except AssignmentError as exc:
+            return error(str(exc))
+        notify_assigned(assignment)
+        _audit(request, 'project_assigned', employee, assignment)
+        return success('Project assigned.', _fresh(assignment), http_status=201)
 
-        if payload['event'] != WEBHOOK_EVENT_PROJECTS_CHANGED:
-            return success('Event ignored.')
 
-        employee_code = payload['employee_id']
-        result = sync_employee_snapshot(employee_code, payload['rows'], source=SOURCE_WEBHOOK, triggered_by=client_name)
+class _AssignmentActionView(APIView):
+    """Shared lookup + validation for edit / extend / end."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = None
+    audit_action = ''
+    success_message = ''
 
-        AuditLog.objects.create(
-            user=None,
-            action='external_project_assignments_push',
-            module='external_api',
-            changes={'client': client_name, 'employee_id': employee_code, 'saved': result['saved'],
-                     'changed': result['changed'], 'removed': result['removed']},
-            ip_address=get_client_ip(request),
-        )
-        return success('Project assignments updated.', {
-            'employee_id': employee_code, 'saved': result['saved'], 'changed': result['changed'],
-            'removed': result['removed'], 'is_matched': result['is_matched'],
-        })
+    def apply(self, assignment, data, actor):
+        raise NotImplementedError
+
+    def handle(self, request, employee_id, assignment_id):
+        employee = _employee_for(request, employee_id)
+        if employee is None:
+            return error(NOT_FOUND, http_status=404)
+        assignment = _assignment_for(employee, assignment_id)
+        if assignment is None:
+            return error('No such project assignment for this employee.', http_status=404)
+        serializer = self.serializer_class(data=request.data, context={'assignment': assignment})
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors))
+        try:
+            assignment = self.apply(assignment, serializer.validated_data, request.user)
+        except AssignmentError as exc:
+            return error(str(exc))
+        _audit(request, self.audit_action, employee, assignment)
+        return success(self.success_message, _fresh(assignment))
+
+
+class EditAssignmentView(_AssignmentActionView):
+    serializer_class = EditAssignmentSerializer
+    audit_action = 'project_assignment_edited'
+    success_message = 'Project assignment updated.'
+
+    def apply(self, assignment, data, actor):
+        return edit_assignment(assignment, data, actor)
+
+    def patch(self, request, employee_id, assignment_id):
+        return self.handle(request, employee_id, assignment_id)
+
+
+class ExtendAssignmentView(_AssignmentActionView):
+    serializer_class = ExtendAssignmentSerializer
+    audit_action = 'project_assignment_extended'
+    success_message = 'Project extended.'
+
+    def apply(self, assignment, data, actor):
+        return extend_assignment(assignment, data['end_date'], data.get('reason', ''), actor)
+
+    def post(self, request, employee_id, assignment_id):
+        return self.handle(request, employee_id, assignment_id)
+
+
+class EndAssignmentView(_AssignmentActionView):
+    serializer_class = EndAssignmentSerializer
+    audit_action = 'project_assignment_ended'
+    success_message = 'Project ended.'
+
+    def apply(self, assignment, data, actor):
+        return end_assignment(assignment, data.get('end_date'), data.get('reason', ''), actor)
+
+    def post(self, request, employee_id, assignment_id):
+        return self.handle(request, employee_id, assignment_id)

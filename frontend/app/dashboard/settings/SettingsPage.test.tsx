@@ -15,11 +15,11 @@ import SettingsPage from "./page";
 afterEach(() => { cleanup(); window.localStorage.clear(); });
 
 describe("settings list", () => {
-  it("keeps all sixteen settings and the pages they open", () => {
-    expect(SETTINGS_ITEMS).toHaveLength(16);
+  it("keeps all fifteen settings and the pages they open", () => {
+    expect(SETTINGS_ITEMS).toHaveLength(15);
     expect(SETTINGS_ITEMS.find(item => item.id === "leave-policy")?.route).toBe("/dashboard/settings/leave-policy");
     expect(SETTINGS_ITEMS.find(item => item.id === "access")?.route).toBe("/dashboard/settings/access");
-    expect(new Set(SETTINGS_ITEMS.map(item => item.route)).size).toBe(16);
+    expect(new Set(SETTINGS_ITEMS.map(item => item.route)).size).toBe(15);
   });
   it("finds by every typed word in the name or the description, within a category", () => {
     expect(filterSettings(SETTINGS_ITEMS, "email", "all").map(item => item.id).sort()).toEqual(["email-templates", "notifications", "smtp"]);
@@ -28,17 +28,17 @@ describe("settings list", () => {
     expect(filterSettings(SETTINGS_ITEMS, "leave types", "all").map(item => item.id)).toEqual(["leave-policy"]);
   });
   it("counts what is left in each category after a search", () => {
-    expect(countByCategory(SETTINGS_ITEMS, "")).toEqual({ all: 16, company: 3, modules: 8, comm: 3, system: 2 });
-    expect(countByCategory(SETTINGS_ITEMS, "sync").all).toBe(1);
+    expect(countByCategory(SETTINGS_ITEMS, "")).toEqual({ all: 15, company: 3, modules: 8, comm: 3, system: 1 });
+    expect(countByCategory(SETTINGS_ITEMS, "smtp").all).toBe(1);
   });
 });
 
 describe("the Settings page", () => {
   it("shows the four numbers and every setting, grouped under a heading for each category", () => {
     render(<SettingsPage />);
-    expect(screen.getAllByTestId("kpi").map(node => node.textContent)).toEqual(["CONFIGURED:16", "ACCESS SEATS:5", "AUTOMATIONS:—", "AUDIT EVENTS:102"]);
+    expect(screen.getAllByTestId("kpi").map(node => node.textContent)).toEqual(["CONFIGURED:15", "ACCESS SEATS:5", "AUTOMATIONS:—", "AUDIT EVENTS:102"]);
     for (const heading of ["Company", "Modules", "Communication", "System"]) expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
-    expect(screen.getAllByRole("link")).toHaveLength(16);
+    expect(screen.getAllByRole("link")).toHaveLength(15);
     expect(within(screen.getByRole("region", { name: "Modules" })).getAllByRole("link")).toHaveLength(8);
   });
 

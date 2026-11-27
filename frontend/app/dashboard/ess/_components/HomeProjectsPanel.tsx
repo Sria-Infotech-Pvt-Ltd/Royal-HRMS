@@ -1,12 +1,11 @@
 "use client";
 
-// "My projects" on the employee's Home tab — the projects they're currently assigned to in Project Budgeting
-// (read-only here). Same data as the Employment tab's Work Status section (useWorkStatus), just the current ones.
+// "My projects" on the employee's Home tab — the projects an admin has currently assigned them to (read-only here). Same data as the Employment tab's Work Status section (useWorkStatus), just the current ones.
 // Always shown (loading, error and empty included) so an employee can tell "nothing assigned" apart from "not working";
 // it disappears only when the account has no employee ID at all (404) or may not see Work Status (403).
 
 import { useWorkStatus } from "@/hooks/useWorkStatus";
-import { STATUS_BADGE, endLabel, fmtDate, statusLabel } from "@/components/work-status/workStatusFormat";
+import { endLabel, fmtDate, statusBadge, statusLabel, workPlaceLabel } from "@/components/work-status/workStatusFormat";
 import { tr } from "@/lib/i18n/tr";
 
 const MAX_PROJECTS_SHOWN = 5;
@@ -27,7 +26,7 @@ export default function HomeProjectsPanel({ onViewAll }: Props) {
         <div>
           <div className="card-title" style={{ fontSize: 20 }}><i className="ti ti-briefcase" /> {tr("Work status")}</div>
           <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--on-variant)" }}>
-            {tr("Projects assigned to you in Project Budgeting.")}
+            {tr("Projects assigned to you.")}
           </p>
         </div>
         <button onClick={onViewAll} className="btn btn-ghost btn-sm">
@@ -45,7 +44,7 @@ export default function HomeProjectsPanel({ onViewAll }: Props) {
         </div>
       ) : current.length === 0 ? (
         <div style={{ padding: "16px 20px", fontSize: 13, color: "var(--on-variant)" }}>
-          {tr("No project is assigned to you in Project Budgeting right now.")}
+          {tr("No project is assigned to you right now.")}
         </div>
       ) : (
       <div>
@@ -59,13 +58,12 @@ export default function HomeProjectsPanel({ onViewAll }: Props) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{assignment.project_name}</div>
               <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                {assignment.milestone_name || tr("Whole project")}
+                {fmtDate(assignment.start_date)} – {endLabel(assignment)}
+                {` · ${workPlaceLabel(assignment)}`}
                 {assignment.role && ` · ${assignment.role}`}
-                {assignment.allocation_percent && tr(" · {allocation_percent}% allocated", { allocation_percent: assignment.allocation_percent })}
-                {" · "}{fmtDate(assignment.start_date)} – {endLabel(assignment)}
               </div>
             </div>
-            <span className={STATUS_BADGE[assignment.assignment_status] ?? "badge badge-neutral"} style={{ flexShrink: 0 }}>
+            <span className={statusBadge(assignment)} style={{ flexShrink: 0 }}>
               {statusLabel(assignment)}
             </span>
           </div>

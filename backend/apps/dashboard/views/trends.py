@@ -19,6 +19,7 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 from django.core.cache import cache
 from django.db.models import Sum
+from django.db.models.functions import TruncMonth
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -113,9 +114,11 @@ class LeaveTrendView(APIView):
 
 
 class PayrollCostTrendView(APIView):
-    """GET /dashboard/trends/payroll-cost/ — total net pay per payroll
-    cycle for the last 6 cycles that actually reached payslip generation
-    (drafts/cancelled cycles carry no meaningful cost yet)."""
+    """GET /dashboard/trends/payroll-cost/ — total net pay per month (by the
+    cycle's start month) for the last 6 months that have a cycle that actually
+    reached payslip generation (drafts/cancelled cycles carry no meaningful
+    cost yet). Cycles are per branch, so one month can hold several cycles;
+    they are summed into one company-wide point rather than repeated."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -127,20 +130,26 @@ class PayrollCostTrendView(APIView):
         if cached is not None:
             return success('Payroll cost trend retrieved.', data=cached)
 
-        from apps.payroll.models import PayrollCycle
+        from apps.payroll.models import EmployeePayslip, PayrollCycle
 
         excluded_statuses = [PayrollCycle.STATUS_DRAFT, PayrollCycle.STATUS_CANCELLED, PayrollCycle.STATUS_ATTENDANCE_PENDING, PayrollCycle.STATUS_ATTENDANCE_APPROVED, PayrollCycle.STATUS_PROCESSING]
-        cycles = (
-            PayrollCycle.objects
-            .exclude(status__in=excluded_statuses)
-            .order_by('-cycle_start')[:_TRAILING_MONTHS]
-        )
+        cycles = PayrollCycle.objects.exclude(status__in=excluded_statuses).annotate(month=TruncMonth('cycle_start'))
+        months = list(cycles.order_by('-month').values_list('month', flat=True).distinct()[:_TRAILING_MONTHS])
+        totals = {
+            row['month']: row['total']
+            for row in EmployeePayslip.objects
+            .filter(cycle__in=cycles.filter(month__in=months).values('pk'))
+            .annotate(month=TruncMonth('cycle__cycle_start'))
+            .values('month')
+            .annotate(total=Sum('net_pay'))
+        }
         series = [
             {
-                'label': cycle.cycle_start.strftime('%b %Y'),
-                'amount': float(cycle.payslips.aggregate(total=Sum('net_pay'))['total'] or 0),
+                'month': month.strftime('%Y-%m'),
+                'label': month.strftime('%b %Y'),
+                'amount': float(totals.get(month) or 0),
             }
-            for cycle in reversed(list(cycles))
+            for month in reversed(months)
         ]
         data = {'series': series}
         cache.set(cache_key, data, _TTL_TREND)

@@ -1,10 +1,30 @@
-// Work Status: project assignments synced from Project Budgeting. Status values are plain strings because Project
-// Budgeting may add new ones without notice — the *_display fields are the labels to show.
+// Work Status: project assignments that admins create and manage in AIRA HRMS (assign, edit, extend, end).
+
+export type AssignmentStatus = "active" | "completed";
+
+export type AssignmentAction = "assign" | "edit" | "extend" | "end";
+
+/** Where the employee works on the project; labels are in components/work-status/workStatusFormat.ts (WORK_MODE_OPTIONS). */
+export type WorkMode = "office" | "home" | "client_site" | "hybrid";
+
+/** What the assign / edit / extend / end dialog sends; each action uses the fields it needs. */
+export interface AssignmentForm {
+  project_name: string;
+  start_date:   string;
+  end_date:     string;
+  role:         string;
+  work_mode:    WorkMode;
+  /** The client's address or site (required for client_site), or the office/branch. */
+  work_location: string;
+  notes:        string;
+  reason:       string;
+}
 
 export interface WorkStatusChange {
   event_type:   string;
   source:       string;
   triggered_by: string;
+  reason:       string;
   changes:      Record<string, [string | number | null, string | number | null]>;
   at:           string;
 }
@@ -14,24 +34,24 @@ export interface WorkStatusAssignment {
   project_id:                number;
   project_code:              string;
   project_name:              string;
-  project_status:            string;
-  project_status_display:    string;
-  milestone_name:            string;
   role:                      string;
-  allocation_percent:        string | null;
-  start_date:                string | null;
-  end_date:                  string | null;
-  is_ongoing:                boolean;
-  assignment_status:         string;
+  work_mode:                 WorkMode;
+  /** e.g. "Client Location (On-site)" */
+  work_mode_display:         string;
+  work_location:             string;
+  notes:                     string;
+  start_date:                string;
+  end_date:                  string;
+  assignment_status:         AssignmentStatus;
   assignment_status_display: string;
   is_current:                boolean;
+  /** Current, but its start date is still ahead. */
+  is_upcoming:               boolean;
+  /** Days until the end date for a current assignment; null otherwise. */
+  days_left:                 number | null;
+  is_ending_soon:            boolean;
   last_change:               WorkStatusChange | null;
   change_log:                WorkStatusChange[];
-}
-
-export interface WorkStatusConflict {
-  type:    string;
-  message: string;
 }
 
 export interface WorkStatusHistoryPage {
@@ -46,39 +66,8 @@ export interface WorkStatusResponse {
   employee_id:        string;
   employee_name:      string;
   employee_is_active: boolean;
-  managed_in:         string;
-  is_read_only:       boolean;
-  last_synced_at:     string | null;
-  /** True while a background pull from Project Budgeting may still be running for this employee. Absent on older servers. */
-  sync_pending?:      boolean;
+  /** True when the viewer may assign, edit, extend and end this employee's projects (admins only). */
+  can_manage:         boolean;
   current:            WorkStatusAssignment[];
-  conflicts:          WorkStatusConflict[];
   history:            WorkStatusHistoryPage;
-}
-
-export interface ProjectSyncLogRow {
-  source:       string;
-  triggered_by: string;
-  employee_id:  string;
-  status:       "success" | "failed" | "unmatched";
-  saved:        number;
-  changed:      number;
-  removed:      number;
-  message:      string;
-  at:           string;
-}
-
-export interface ProjectSyncStatus {
-  is_pull_configured:     boolean;
-  last_synced_at:         string | null;
-  failed_last_24h:        number;
-  unmatched_employee_ids: string[];
-  open_assignments:       number;
-  logs: {
-    count:       number;
-    page:        number;
-    page_size:   number;
-    total_pages: number;
-    results:     ProjectSyncLogRow[];
-  };
 }

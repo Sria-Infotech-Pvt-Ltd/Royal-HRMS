@@ -19,7 +19,8 @@ export type EmployeeStatus = "active" | "onboarding" | "inactive";
 // have their own per-row status value since the table shows them via
 // employmentStatus / the Notice Period pill instead.
 // Stage values ("stage:pre_joining" ...) are sent as the `employment_stage` parameter instead (see lib/employeeLifecycle).
-export type EmployeeStatusFilter = EmployeeStatus | "probation" | "notice_period" | StageFilterValue;
+// "unassigned" = active employees with no current project (Work Status), for admins to assign one.
+export type EmployeeStatusFilter = EmployeeStatus | "probation" | "notice_period" | "unassigned" | StageFilterValue;
 export type Gender = "male" | "female" | "transgender";
 
 /** A single field's value bag — every detail value lives here keyed by FieldDef.key */

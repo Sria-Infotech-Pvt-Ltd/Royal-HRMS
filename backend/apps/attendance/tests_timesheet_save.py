@@ -24,10 +24,10 @@ class WeekViewTests(TimesheetTestBase):
         self.assertTrue(view['is_editable'])
         self.assertEqual(Timesheet.objects.count(), 0)                                  # reading never writes
 
-    def test_assignments_outside_the_week_or_removed_are_not_prefilled(self):
+    def test_assignments_outside_the_week_are_not_prefilled(self):
         assign(self.employee, 1, 'Ended', end=datetime.date(2026, 11, 1))
         assign(self.employee, 2, 'NotStarted', start=datetime.date(2026, 11, 20))
-        assign(self.employee, 3, 'Gone', status='removed')
+        assign(self.employee, 3, 'EndedEarly', end=MONDAY - datetime.timedelta(days=1), status='completed')
         assign(self.employee, 4, 'Current')
         with pinned_today():
             names = [line['project_name'] for line in get_week(self.employee, MONDAY)['lines']]

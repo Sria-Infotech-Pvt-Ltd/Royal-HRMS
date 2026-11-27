@@ -175,9 +175,10 @@ class ProjectChangeTests(SubmitBase):
         self.assertEqual(sheet.lines.get().project_name, 'Alpha')
         self.assertEqual(TimesheetEvent.objects.get().snapshot['lines'][0]['project_name'], 'Alpha')
 
-    def test_a_project_removed_after_saving_still_shows_on_the_saved_sheet(self):
+    def test_a_project_ended_early_after_saving_still_shows_on_the_saved_sheet(self):
         self.save(project_line(1, cell(0, '8')))
-        self.alpha.assignment_status = 'removed'
+        self.alpha.assignment_end_date = MONDAY - datetime.timedelta(days=1)
+        self.alpha.assignment_status = 'completed'
         self.alpha.save()
         with pinned_today():
             from apps.attendance.services_timesheet import get_week

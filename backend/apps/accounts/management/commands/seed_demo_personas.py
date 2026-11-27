@@ -21,6 +21,7 @@ from datetime import date
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.accounts.models import OrgUnit, Permission, Placement, Position, PositionPermission, User
 
@@ -86,7 +87,7 @@ def create_missing_personas():
                 email=email, password=PASSWORD, full_name=full_name, employee_id=employee_id,
                 branch=branch, phone='', date_of_joining=date(2024, 4, 1),
                 must_change_password=False, onboarding_status=User.ONBOARDING_COMPLETE,
-                assessment_status=User.ASSESSMENT_COMPLETE,
+                assessment_status=User.ASSESSMENT_COMPLETE, account_activated_at=timezone.now(),
                 employment_status=User.EMPLOYMENT_STATUS_CONFIRMED, employee_type='Permanent',
             )
             _place_in_demo_seat(user, access_kind, full_name)

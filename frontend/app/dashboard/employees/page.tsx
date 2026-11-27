@@ -28,6 +28,7 @@ const STATUS_FILTERS: { value: "all" | EmployeeStatusFilter; label: string }[] =
   { value: "onboarding",     label: "Onboarding"     },
   { value: "probation",      label: "Probation"      },
   { value: "notice_period",  label: "Notice Period"  },
+  { value: "unassigned",     label: "No current project" },
   { value: "inactive",       label: "Exited"         },
   { value: "stage:pre_joining", label: "Pre-Joining" },
   { value: "stage:unknown",     label: "Joining date missing" },

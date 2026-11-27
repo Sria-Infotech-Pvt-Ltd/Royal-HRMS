@@ -45,7 +45,12 @@ def internal_line(*entries: dict) -> dict:
     return {'assignment_id': None, 'is_internal': True, 'is_billable': False, 'entries': list(entries)}
 
 
+# Assignments always have an end date now; tests that don't care about it get one far in the future.
+OPEN_END = datetime.date(2099, 12, 31)
+
+
 def assign(employee, assignment_id: int, name: str = 'Alpha', start=datetime.date(2026, 1, 1), end=None, status: str = 'active') -> ProjectAssignment:
+    end = end or OPEN_END
     return ProjectAssignment.objects.create(
         assignment_id=assignment_id, employee_code=employee.employee_id, project_id=assignment_id * 10, project_code=f'P{assignment_id}',
         project_name=name, assignment_start_date=start, assignment_end_date=end, assignment_status=status,

@@ -93,6 +93,21 @@ for _unit_index, _unit in enumerate(_UNITS):
 ROSTER = [row for city in LOCATIONS for row in _ROSTER_BY_CITY[city]]
 
 
+def roster(count: int | None = None) -> list:
+    """The first `count` people of the roster, taken in turn from each office so the offices stay balanced and each
+    office's first person (its team lead) is always included. None (or >= 100) returns the full roster."""
+    if count is None or count >= len(ROSTER):
+        return list(ROSTER)
+    picked = {city: 0 for city in LOCATIONS}
+    remaining = count
+    while remaining:
+        for city in LOCATIONS:
+            if remaining and picked[city] < len(_ROSTER_BY_CITY[city]):
+                picked[city] += 1
+                remaining -= 1
+    return [row for city in LOCATIONS for row in _ROSTER_BY_CITY[city][:picked[city]]]
+
+
 def email_for(first_name: str, last_name: str) -> str:
     local = f'{first_name}.{last_name}'.lower().replace(' ', '')
     return f'{local}{EMAIL_SUFFIX}'

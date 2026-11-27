@@ -17,6 +17,7 @@ Safe by construction:
 
 Run:  python manage.py seed_demo_workforce --dry-run
       python manage.py seed_demo_workforce --confirm-demo-server
+      python manage.py seed_demo_workforce --confirm-demo-server --count 30
       python manage.py seed_demo_workforce --confirm-demo-server --skip-payroll
       python manage.py seed_demo_workforce --confirm-demo-server --cleanup
 """
@@ -33,7 +34,7 @@ from apps.accounts import demo_workforce_data as data
 from apps.accounts.demo_workforce_attendance import generate_for_employee, weekly_off_weekdays
 from apps.accounts.demo_workforce_payroll import PayrollStepError, run_cycle
 from apps.accounts.management.commands.seed_demo_employee_details import fill_user
-from apps.accounts.management.commands.seed_demo_personas import PERSONAS, create_missing_personas
+from apps.accounts.management.commands.seed_demo_personas import PASSWORD, PERSONAS, create_missing_personas
 from apps.accounts.models import EmployeeCodeSettings, Placement, Position, User
 from apps.accounts.services_placement import assign_position
 from apps.attendance.models import EmployeeWeeklyOffAssignment, WeeklyDayPolicy
@@ -117,11 +118,17 @@ class Command(BaseCommand):
         parser.add_argument('--cleanup', action='store_true', help='Remove the people, cycles and holidays this seed made.')
         parser.add_argument('--skip-payroll', action='store_true', help='Stop after attendance; run no payroll cycles.')
         parser.add_argument('--with-photos', action='store_true', help='Also generate profile pictures (uploads to storage).')
+        parser.add_argument('--count', type=int, default=None,
+                            help=f'How many employees to create (1-{len(data.ROSTER)}, spread evenly over the offices). '
+                                 'Default: the full roster.')
         parser.add_argument('--actor-email', help='Admin who runs payroll (default: the first active superuser).')
         parser.add_argument('--approve-as-any-manager', action='store_true',
                             help='Let the seed approve attendance on behalf of real (non-@example.com) managers.')
 
     def handle(self, *args, **options):
+        if options['count'] is not None and not 1 <= options['count'] <= len(data.ROSTER):
+            raise CommandError(f'--count must be between 1 and {len(data.ROSTER)}.')
+        self.roster = data.roster(options['count'])
         database = connection.settings_dict
         self.stdout.write(f"Database: {database.get('NAME')} on {database.get('HOST') or 'local file'}")
         if options['dry_run']:
@@ -169,7 +176,7 @@ class Command(BaseCommand):
         self.stdout.write('[dry-run] would create/ensure:')
         self.stdout.write(f'  personas: {", ".join(PERSONA_EMAILS)}')
         self.stdout.write(f'  offices: {", ".join(f"{c} ({s["name"]})" for c, s in data.LOCATIONS.items())}')
-        for first, last, _g, city, unit, joined, kind in data.ROSTER:
+        for first, last, _g, city, unit, joined, kind in self.roster:
             seats = len(_vacant_seats(unit))
             self.stdout.write(f'  {first} {last:<12} {city:<10} {unit:<24} joined {joined}  {kind:<9} (vacant seats in unit: {seats})')
         self.stdout.write(f'  attendance {data.ATTENDANCE_START} → yesterday; payroll periods: '
@@ -192,6 +199,8 @@ class Command(BaseCommand):
                 work_location=data.LOCATIONS[city]['address'], work_mode=User.WORK_MODE_OFFICE,
                 onboarding_status=User.ONBOARDING_COMPLETE, assessment_status=User.ASSESSMENT_COMPLETE,
             )
+            # Onboarded = complete AND activated (User.onboarded_q); without an activation date payroll skips everyone.
+            User.objects.filter(pk=user.pk, account_activated_at__isnull=True).update(account_activated_at=timezone.now())
             user.branch = branches[city].branch_name
             user.branch_fk_id = branches[city].pk
             user.work_location = data.LOCATIONS[city]['address']
@@ -204,13 +213,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'  no vacant seat in {unit} — skipped {first} {last}'))
             return None, False
         user = User.objects.create_user(
-            email=email, full_name=f'{first} {last}',
+            email=email, password=PASSWORD, full_name=f'{first} {last}',  # same demo password as the persona logins
             employee_id=EmployeeCodeSettings.generate_employee_id(first_name=first.split()[0], last_name=last, date_of_joining=joined),
             employee_type=kind, date_of_joining=joined, branch=branches[city].branch_name,
             branch_fk_id=branches[city].pk, phone='', work_location=data.LOCATIONS[city]['address'],
             work_mode=User.WORK_MODE_OFFICE,
             must_change_password=False, onboarding_status=User.ONBOARDING_COMPLETE,
-            assessment_status=User.ASSESSMENT_COMPLETE,
+            assessment_status=User.ASSESSMENT_COMPLETE, account_activated_at=timezone.now(),
         )
         assign_position(user, seats[0], effective_from=joined)
         if is_lead:  # a team lead's seat manages a team
@@ -223,7 +232,7 @@ class Command(BaseCommand):
     def _create_people(self, branches, policy, with_photos) -> list:
         qa_manager = User.objects.filter(email='manager@example.com').first()
         leads, people, created = {}, [], 0
-        for row in data.ROSTER:
+        for row in self.roster:
             close_old_connections()
             city = row[3]
             is_lead = data.team_leads().get(city) == (row[0], row[1])
@@ -245,7 +254,7 @@ class Command(BaseCommand):
             close_old_connections()
             if not EmployeeWeeklyOffAssignment.objects.filter(employee=user).exists():
                 bulk_assign_weekly_off([user.employee_id], policy, user.date_of_joining or today)
-        self.stdout.write(f'Employees created: {created} (of {len(data.ROSTER)} in the roster).')
+        self.stdout.write(f'Employees created: {created} (of {len(self.roster)} requested).')
         return everyone
 
     def _fix_addresses(self, people, branches):

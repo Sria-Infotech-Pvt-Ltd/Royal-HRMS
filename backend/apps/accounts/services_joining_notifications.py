@@ -76,8 +76,10 @@ def _notify(employee: User, recipient: User, role: str, joined_on: datetime.date
     # waits here, then finds the marker the first one wrote and does nothing. The lock is held until the transaction ends, so the
     # notification and its marker become visible together (or not at all).
     with transaction.atomic():
-        with connection.cursor() as cursor:
-            cursor.execute('SELECT pg_advisory_xact_lock(%s)', [_lock_key(employee, recipient, joined_on)])
+        # Local SQLite has no advisory locks; it lets only one writer at a time, which gives the same guarantee there.
+        if connection.vendor == 'postgresql':
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_xact_lock(%s)', [_lock_key(employee, recipient, joined_on)])
         if _already_sent(employee, recipient, joined_on):
             return False
         # Type and module are both `system` (like the other system messages), and a person who has switched system

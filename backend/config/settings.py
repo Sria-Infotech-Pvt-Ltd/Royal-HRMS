@@ -108,10 +108,24 @@ ASGI_APPLICATION = 'config.asgi.application'
 # PostgreSQL only (Neon in every environment). The app relies on Postgres features — e.g. the ExclusionConstraints on
 # Placement that stop one person holding two seats / one seat having two holders — so there is no other supported
 # database. DATABASE_URL is required; Django's tests create their own separate `test_*` database on the same server.
-DATABASES = {'default': env.db('DATABASE_URL')}
-if DATABASES['default'].get('ENGINE') != 'django.db.backends.postgresql':
+DATABASES = {'default': env.db('DATABASE_URL', default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")}
+_DB_ENGINE = DATABASES['default'].get('ENGINE')
+if _DB_ENGINE == 'django.db.backends.sqlite3':
+    # Local development only. SQLite cannot enforce the Postgres ExclusionConstraints (e.g. one seat / one holder on
+    # Placement) or advisory locks, so it must never be used for UAT/production (DEBUG=False).
+    if not DEBUG:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured('SQLite is for local development only (DEBUG=True). Use a postgresql:// DATABASE_URL.')
+    # Stock SQLite backend plus schema-editor fixes that let the existing migrations run (see core/sqlite_backend).
+    DATABASES['default']['ENGINE'] = 'core.sqlite_backend'
+    # sqlite:///db.sqlite3 is relative: anchor it to backend/ so the same file is used whatever folder the server starts in.
+    _SQLITE_NAME = DATABASES['default'].get('NAME') or 'db.sqlite3'
+    if _SQLITE_NAME != ':memory:' and not Path(_SQLITE_NAME).is_absolute():
+        DATABASES['default']['NAME'] = str(BASE_DIR / _SQLITE_NAME)
+    DATABASES['default'].setdefault('OPTIONS', {})['timeout'] = 20
+elif _DB_ENGINE != 'django.db.backends.postgresql':
     from django.core.exceptions import ImproperlyConfigured
-    raise ImproperlyConfigured('DATABASE_URL must be a postgresql:// URL (this app supports PostgreSQL only).')
+    raise ImproperlyConfigured('DATABASE_URL must be a postgresql:// or sqlite:/// URL.')
 from core.db_settings import apply_local_debug_options, default_conn_max_age, health_checks_enabled  # noqa: E402
 
 # Production/UAT (DEBUG=False): 60 s, exactly as before. Local DEBUG: 0 (see core/db_settings.py for why). DB_CONN_MAX_AGE
@@ -332,13 +346,9 @@ HIRE_DRAFT_EXPIRY_DAYS = env.int('HIRE_DRAFT_EXPIRY_DAYS', default=30)
 WFH_GPS_RADIUS_M = env.int('WFH_GPS_RADIUS_M', default=200)
 WFH_ADDRESS_RADIUS_M = env.int('WFH_ADDRESS_RADIUS_M', default=500)
 
-# Project Budget & Tracking tool — used only for the "My Projects" fallback pull when we hold no rows for an employee.
-# Blank means the fallback is switched off (the push webhook still works).
-PROJECT_BUDGET_API_BASE_URL = env('PROJECT_BUDGET_API_BASE_URL', default='')
-PROJECT_BUDGET_API_KEY      = env('PROJECT_BUDGET_API_KEY', default='')
-# When an employee is assigned a new project, end their still-open assignments on other projects the day before it
-# starts. Skipped for assignments that carry an allocation %. Turn off if the business wants concurrent open-ended work.
-PROJECT_ASSIGNMENT_AUTO_CLOSE_OPEN_ENDED = env.bool('PROJECT_ASSIGNMENT_AUTO_CLOSE_OPEN_ENDED', default=True)
+# Project assignments: how many days before a project's end date the employee, their manager and admins are reminded
+# to extend it or assign a new project (Work Status also flags it as "ending soon" from then on).
+PROJECT_ENDING_SOON_DAYS = env.int('PROJECT_ENDING_SOON_DAYS', default=7)
 
 CELERY_BEAT_SCHEDULE = {
     # Fridays 15:00 IST - reminds employees whose timesheet for this week is still not submitted (once per person per week).
@@ -351,11 +361,10 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.attendance.tasks.send_timesheet_approver_reminders',
         'schedule': crontab(day_of_week='mon', hour=9, minute=30),
     },
-    # Every 30 minutes — safety net for missed Project Budgeting pushes: pulls all employee assignments and re-applies
-    # them. Does nothing unless PROJECT_BUDGET_API_BASE_URL / PROJECT_BUDGET_API_KEY are set.
-    'reconcile-project-assignments': {
-        'task':     'apps.hrms.tasks.reconcile_project_assignments',
-        'schedule': 1800.0,  # seconds
+    # Daily at 00:20 IST — completes project assignments whose end date has passed and sends "ending soon" reminders.
+    'daily-project-assignments': {
+        'task':     'apps.hrms.tasks.run_daily_project_assignments',
+        'schedule': crontab(hour=0, minute=20),
     },
     # Runs daily at 02:10 IST — discards hire drafts nobody has touched for HIRE_DRAFT_EXPIRY_DAYS and releases their
     # reserved employee numbers. Drafts that merely look like an existing employee are NOT touched here (see the
@@ -485,14 +494,6 @@ REST_FRAMEWORK = {
         'voice_speak':          env('VOICE_SPEAK_RATE', default='150/hour'),
         'voice_transcribe':     env('VOICE_TRANSCRIBE_RATE', default='60/hour'),
         'voice_llm':            env('VOICE_LLM_RATE', default='40/hour'),
-        # A polling internal system (e.g. Project Budget & Tracking)
-        # reasonably needs more headroom than a human-facing anon action
-        # like login/forgot-password, but still capped well under
-        # anything resembling a scrape. Raised from 120/hour so a full
-        # paginated sync plus individual employee lookups doesn't get
-        # throttled mid-sync.
-        'external_api':         '600/hour',
-        'external_webhook':     '6000/hour',
     },
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }

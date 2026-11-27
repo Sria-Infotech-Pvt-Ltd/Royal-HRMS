@@ -146,3 +146,19 @@ class PayrollCostTrendTests(TestCase):
         amounts = [row['amount'] for row in series]
         self.assertIn(80000.0, amounts)
         self.assertNotIn(999999.0, amounts)
+
+    def test_cycles_of_different_branches_in_one_month_are_one_point(self):
+        # Cycles are per branch: two branches paying for the same month must give one summed point, not two
+        # points with the same label (which the dashboard chart rendered as duplicate bars / duplicate React keys).
+        month_start = datetime.date.today().replace(day=1)
+        previous_month = month_start - datetime.timedelta(days=1)
+        _make_payslip(self.employee, _make_cycle(month_start, self.admin), Decimal('50000'))
+        _make_payslip(make_user('payroll-trend-emp3@test.com'), _make_cycle(month_start, self.admin), Decimal('30000'))
+        _make_payslip(self.employee, _make_cycle(previous_month.replace(day=1), self.admin), Decimal('10000'))
+
+        resp = self.client.get('/api/dashboard/trends/payroll-cost/')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        series = resp.data['data']['series']
+        self.assertEqual([row['month'] for row in series],
+                         [previous_month.strftime('%Y-%m'), month_start.strftime('%Y-%m')])  # oldest first, no repeats
+        self.assertEqual([row['amount'] for row in series], [10000.0, 80000.0])

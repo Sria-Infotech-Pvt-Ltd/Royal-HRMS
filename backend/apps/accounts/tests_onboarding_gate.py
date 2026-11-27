@@ -112,11 +112,6 @@ class GateFixtures(TestCase):
 
     def setUp(self):
         cache.clear()
-        # work-status falls back to an external service when credentials are configured; without them it returns
-        # before any network call, which is what a test must do.
-        credentials = patch('apps.hrms.services_project_sync._credentials', return_value=None)
-        credentials.start()
-        self.addCleanup(credentials.stop)
         self.candidates = {
             status: make_user(f'gate_{status}@test.com', employee_id=f'GT{index}', requires_self_service_onboarding=True, onboarding_status=status)
             for index, status in enumerate(INCOMPLETE)

@@ -30,7 +30,6 @@ export const SETTINGS_ITEMS: SettingsItem[] = [
   { id: "smtp",              cat: "comm",    icon: "ti-server",          label: "SMTP Settings",          desc: "Outgoing email server configuration",                                   route: `${BASE}/smtp` },
   { id: "notifications",     cat: "comm",    icon: "ti-bell",            label: "Notifications",          desc: "In-app and email notification preferences",                             route: `${BASE}/notifications` },
   { id: "employee-code",     cat: "company", icon: "ti-id-badge",        label: "Employee ID Format",     desc: "Prefix, padding, and starting number for employee codes",               route: `${BASE}/employee-code` },
-  { id: "project-sync",      cat: "system",  icon: "ti-refresh",         label: "Project Budgeting Sync", desc: "Last synced time, failed syncs and unmatched employee IDs",             route: `${BASE}/project-sync` },
   { id: "audit",             cat: "system",  icon: "ti-history",         label: "Audit Log",              desc: "View all system actions and changes",                                   route: `${BASE}/audit` },
 ];
 

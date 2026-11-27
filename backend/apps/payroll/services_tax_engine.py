@@ -73,8 +73,11 @@ def compute_annual_tax(annual_taxable_income: Decimal, regime_code: str, financi
 
 def _capped_old_regime_deductions(declared_investments: dict, financial_year_start: int) -> Decimal:
     declared_investments = declared_investments or {}
+    # Membership checked in Python, not `applicable_regime_codes__contains=[...]`: JSON containment isn't supported on
+    # local SQLite. The table holds a handful of statutory sections, so this stays cheap.
     sections = {
-        s.code: s for s in TaxSection.objects.filter(is_active=True, applicable_regime_codes__contains=['old'])
+        s.code: s for s in TaxSection.objects.filter(is_active=True)
+        if isinstance(s.applicable_regime_codes, list) and 'old' in s.applicable_regime_codes
     }
 
     def _amount(key: str) -> Decimal:

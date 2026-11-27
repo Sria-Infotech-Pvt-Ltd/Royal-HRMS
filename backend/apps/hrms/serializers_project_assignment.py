@@ -1,50 +1,78 @@
-from decimal import Decimal
-
+"""Input validation for the admin actions on an employee's project assignments (assign, edit, extend, end)."""
 from rest_framework import serializers
 
-WEBHOOK_EVENT_PROJECTS_CHANGED = 'employee.projects_changed'
-MAX_ASSIGNMENTS_PER_PUSH = 500
+from apps.hrms.models import ProjectAssignment
+
+CLIENT_SITE = ProjectAssignment.WORK_MODE_CLIENT_SITE
 
 
-class ProjectAssignmentRowSerializer(serializers.Serializer):
-    """One assignment row, shaped like the budgeting tool's project-assignments API. Unknown fields are ignored —
-    they've said new fields may be added without notice."""
-    assignment_id             = serializers.IntegerField()
-    project_id                = serializers.IntegerField()
-    project_name              = serializers.CharField(max_length=255)
-    project_status            = serializers.CharField(max_length=50, required=False, allow_blank=True, default='')
-    project_status_display    = serializers.CharField(max_length=30, required=False, allow_blank=True, default='')
-    project_start_date        = serializers.DateField(required=False, allow_null=True, default=None)
-    project_end_date          = serializers.DateField(required=False, allow_null=True, default=None)
-    # Required: every assignment must have a start date (Work Status history is built on it).
-    assignment_start_date     = serializers.DateField()
-    assignment_end_date       = serializers.DateField(required=False, allow_null=True, default=None)
-    assignment_status         = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
-    assignment_status_display = serializers.CharField(max_length=30, required=False, allow_blank=True, default='')
-    milestone_name            = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default='')
-    updated_at                = serializers.DateTimeField(required=False, allow_null=True, default=None)
-    # Not sent by Project Budgeting today; accepted so they show up the day it starts sending them.
-    project_code              = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True, default='')
-    role                      = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True, default='')
-    allocation_percent        = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=Decimal(0), max_value=Decimal(100), required=False, allow_null=True, default=None)
+def _check_dates(start, end) -> None:
+    if start and end and end < start:
+        raise serializers.ValidationError({'end_date': 'End date cannot be before the start date.'})
+
+
+def _check_location(work_mode, work_location) -> None:
+    if work_mode == CLIENT_SITE and not (work_location or '').strip():
+        raise serializers.ValidationError({'work_location': 'Enter the client location (address or site name).'})
+
+
+class AssignProjectSerializer(serializers.Serializer):
+    project_name = serializers.CharField(max_length=255, trim_whitespace=True)
+    start_date   = serializers.DateField()
+    end_date     = serializers.DateField()
+    role         = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    work_mode    = serializers.ChoiceField(choices=ProjectAssignment.WORK_MODE_CHOICES)
+    work_location = serializers.CharField(max_length=255, required=False, allow_blank=True, default='')
+    notes        = serializers.CharField(max_length=2000, required=False, allow_blank=True, default='')
+
+    def validate_project_name(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError('Enter the project name.')
+        return value.strip()
 
     def validate(self, attrs):
-        start, end = attrs['assignment_start_date'], attrs.get('assignment_end_date')
-        if end and end < start:
-            raise serializers.ValidationError('assignment_end_date cannot be before assignment_start_date.')
+        _check_dates(attrs['start_date'], attrs['end_date'])
+        _check_location(attrs['work_mode'], attrs.get('work_location'))
         return attrs
 
 
-class ProjectsChangedWebhookSerializer(serializers.Serializer):
-    """Body of the employee.projects_changed push: the employee's COMPLETE current list, not a diff, so an empty list
-    means "no projects". The list may arrive as `projects` or `results` (same row shape as their pull API)."""
-    event       = serializers.CharField(required=False, allow_blank=True, default=WEBHOOK_EVENT_PROJECTS_CHANGED)
-    employee_id = serializers.CharField(max_length=20)
-    projects    = serializers.ListField(child=ProjectAssignmentRowSerializer(), required=False, max_length=MAX_ASSIGNMENTS_PER_PUSH)
-    results     = serializers.ListField(child=ProjectAssignmentRowSerializer(), required=False, max_length=MAX_ASSIGNMENTS_PER_PUSH)
+class EditAssignmentSerializer(AssignProjectSerializer):
+    """Same fields as assigning; all optional so only what changed needs to be sent."""
+    project_name = serializers.CharField(max_length=255, trim_whitespace=True, required=False)
+    start_date   = serializers.DateField(required=False)
+    end_date     = serializers.DateField(required=False)
+    role         = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    work_mode    = serializers.ChoiceField(choices=ProjectAssignment.WORK_MODE_CHOICES, required=False)
+    work_location = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    notes        = serializers.CharField(max_length=2000, required=False, allow_blank=True)
 
     def validate(self, attrs):
-        if 'projects' not in attrs and 'results' not in attrs:
-            raise serializers.ValidationError('Send the employee\'s project list as "projects".')
-        attrs['rows'] = attrs.get('projects', attrs.get('results'))
+        if not attrs:
+            raise serializers.ValidationError('Nothing to change.')
+        assignment = self.context['assignment']
+        _check_dates(attrs.get('start_date', assignment.assignment_start_date),
+                     attrs.get('end_date', assignment.assignment_end_date))
+        _check_location(attrs.get('work_mode', assignment.work_mode),
+                        attrs.get('work_location', assignment.work_location))
         return attrs
+
+
+class ExtendAssignmentSerializer(serializers.Serializer):
+    end_date = serializers.DateField()
+    reason   = serializers.CharField(max_length=1000, required=False, allow_blank=True, default='')
+
+    def validate_end_date(self, value):
+        if value <= self.context['assignment'].assignment_end_date:
+            raise serializers.ValidationError('The new end date must be after the current end date.')
+        return value
+
+
+class EndAssignmentSerializer(serializers.Serializer):
+    """End date defaults to today when omitted."""
+    end_date = serializers.DateField(required=False)
+    reason   = serializers.CharField(max_length=1000, required=False, allow_blank=True, default='')
+
+    def validate_end_date(self, value):
+        if value < self.context['assignment'].assignment_start_date:
+            raise serializers.ValidationError('End date cannot be before the start date.')
+        return value

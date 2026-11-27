@@ -60,7 +60,7 @@ class RequestContextMiddleware:
         request_id = request.META.get('HTTP_X_REQUEST_ID') or uuid.uuid4().hex
 
         # KNOWN LIMITATION (see PHASE1_REPORT.md): this app authenticates
-        # via a DRF authentication class (JWT cookie / ExternalAPIKeyAuth),
+        # via a DRF authentication class (JWT cookie),
         # which resolves request.user lazily on DRF's OWN Request wrapper
         # during view dispatch — not on the plain HttpRequest this Django
         # middleware receives, and not during Django's own

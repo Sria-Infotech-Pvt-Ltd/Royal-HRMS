@@ -3,9 +3,11 @@ constraints, conditions, cache invalidation, and the explainer."""
 from __future__ import annotations
 
 import datetime
+import unittest
 
 from django.core.cache import cache
-from django.db import IntegrityError, transaction
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
 
 from apps.accounts.factories import make_role, make_user
@@ -123,6 +125,7 @@ class PolicyResolutionTests(TestCase):
         self.assertEqual(result2['start'], '08:30')
 
 
+@unittest.skipUnless(connection.vendor == 'postgresql', 'Exclusion constraints are enforced by the database only on PostgreSQL.')
 class PolicyOverlapConstraintTests(TestCase):
     def setUp(self):
         self.policy_type = PolicyType.objects.create(code='TEST_OVERTIME', name='Overtime')
@@ -154,6 +157,42 @@ class PolicyOverlapConstraintTests(TestCase):
                     policy=policy, target_type=PolicyAssignment.TARGET_INDIVIDUAL, target_id='emp-1',
                     effective_from=datetime.date(2026, 6, 1),
                 )
+
+
+class PolicyOverlapValidationTests(TestCase):
+    """The same overlap rules through validate_constraints(), which every backend runs (Postgres via `&&`, local SQLite
+    via PortableExclusionConstraint's plain-comparison fallback)."""
+
+    def setUp(self):
+        self.policy_type = PolicyType.objects.create(code='TEST_OVERTIME', name='Overtime')
+
+    def _default(self, code, effective_from, effective_to=None, is_default=True):
+        return Policy(type=self.policy_type, code=code, name=code, parameters={}, is_default=is_default,
+                      status=Policy.STATUS_PUBLISHED, effective_from=effective_from, effective_to=effective_to)
+
+    def test_overlapping_default_for_same_type_and_entity_is_rejected(self):
+        self._default('d1', datetime.date(2026, 1, 1)).save()
+        with self.assertRaises(ValidationError):
+            self._default('d2', datetime.date(2026, 6, 1)).validate_constraints()
+
+    def test_non_overlapping_or_non_default_policy_is_allowed(self):
+        self._default('d1', datetime.date(2026, 1, 1), datetime.date(2026, 5, 31)).save()
+        self._default('d2', datetime.date(2026, 6, 1)).validate_constraints()
+        self._default('nd', datetime.date(2026, 3, 1), is_default=False).validate_constraints()
+
+    def test_overlapping_assignment_for_same_target_is_rejected(self):
+        policy = self._default('p1', datetime.date(2026, 1, 1), is_default=False)
+        policy.save()
+        PolicyAssignment.objects.create(policy=policy, target_type=PolicyAssignment.TARGET_INDIVIDUAL, target_id='emp-1',
+                                        effective_from=datetime.date(2026, 1, 1), effective_to=datetime.date(2026, 3, 31))
+        # policy_type is normally copied from policy.type in save(); set it here because these rows are never saved.
+        overlapping = PolicyAssignment(policy=policy, policy_type=self.policy_type, effective_from=datetime.date(2026, 3, 31),
+                                       target_type=PolicyAssignment.TARGET_INDIVIDUAL, target_id='emp-1')
+        later = PolicyAssignment(policy=policy, policy_type=self.policy_type, effective_from=datetime.date(2026, 4, 1),
+                                 target_type=PolicyAssignment.TARGET_INDIVIDUAL, target_id='emp-1')
+        with self.assertRaises(ValidationError):
+            overlapping.validate_constraints()
+        later.validate_constraints()
 
 
 class PolicyExplainerTests(TestCase):

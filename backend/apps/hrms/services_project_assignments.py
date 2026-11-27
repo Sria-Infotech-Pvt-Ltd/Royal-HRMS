@@ -1,210 +1,204 @@
 """
-Applying an employee's project assignments from Project Budgeting to our ProjectAssignment history.
+Admin-managed project assignments: assign, edit, extend and end, plus the daily job that completes assignments whose
+end date has passed.
 
-Every path in (push webhook, per-employee pull, scheduled reconcile) hands this module the employee's COMPLETE current
-list. Nothing is ever deleted: rows are upserted by assignment_id, rows that vanished from the list are marked removed
-and closed, and every real change is recorded as a ProjectAssignmentEvent. Re-applying an identical list changes
-nothing and records nothing, so retries and duplicate syncs are harmless.
+An assignment is "active" until the day after its end date, when it becomes "completed". Extending a completed
+assignment re-opens it. Every change is recorded as a ProjectAssignmentEvent; nothing is ever deleted.
 """
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
-from decimal import Decimal
+from datetime import date
 
-from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from apps.hrms.models import ProjectAssignment, ProjectAssignmentEvent
-from apps.hrms.models_project_assignment import END_DATE_SOURCE_AUTO_CLOSED, END_DATE_SOURCE_BUDGETING
 
 logger = logging.getLogger(__name__)
 
-STATUS_REMOVED = 'removed'
-STATUS_COMPLETED = 'completed'
-OPEN_STATUSES = ('active', 'on_hold')
-
-_TRACKED_FIELDS = (
-    'project_id', 'project_code', 'project_name', 'project_status', 'project_status_display',
-    'project_start_date', 'project_end_date', 'assignment_start_date', 'assignment_end_date',
-    'assignment_status', 'assignment_status_display', 'milestone_name', 'role', 'allocation_percent',
-)
-# Project Budgeting may send null for these; we store blank.
-_BLANK_WHEN_NULL = ('project_code', 'milestone_name', 'role')
+STATUS_ACTIVE = ProjectAssignment.STATUS_ACTIVE
+STATUS_COMPLETED = ProjectAssignment.STATUS_COMPLETED
+STATUS_DISPLAY = dict(ProjectAssignment.STATUS_CHOICES)
+SYSTEM_ACTOR = 'daily_project_job'
+_ID_ATTEMPTS = 3
 
 
-def _jsonable(value):
-    if isinstance(value, (date, Decimal)):
-        return value.isoformat() if isinstance(value, date) else str(value)
-    return value
+class AssignmentError(Exception):
+    """A request that breaks a business rule; the message is shown to the admin."""
 
 
-def _normalise(row: dict) -> dict:
-    values = {field: row.get(field) for field in _TRACKED_FIELDS}
-    for field in _BLANK_WHEN_NULL:
-        values[field] = values[field] or ''
-    for field in ('project_status', 'project_status_display', 'assignment_status', 'assignment_status_display'):
-        values[field] = values[field] or ''
-    return values
+def _actor_name(actor) -> str:
+    return (getattr(actor, 'full_name', '') or getattr(actor, 'email', '') or '')[:100]
 
 
-def _is_stale(assignment: ProjectAssignment, row: dict) -> bool:
-    """An older copy of a row (retry/out-of-order delivery) must not overwrite a newer one we already hold."""
-    incoming, stored = row.get('updated_at'), assignment.source_updated_at
-    return bool(incoming and stored and incoming < stored)
+def _iso(value):
+    return value.isoformat() if isinstance(value, date) else value
 
 
-def _record(assignment, event_type, changes, source, triggered_by) -> None:
+def _status_for(end_date: date, today: date) -> str:
+    return STATUS_COMPLETED if end_date < today else STATUS_ACTIVE
+
+
+def _set_status(assignment: ProjectAssignment, today: date) -> None:
+    assignment.assignment_status = _status_for(assignment.assignment_end_date, today)
+    assignment.assignment_status_display = STATUS_DISPLAY[assignment.assignment_status]
+
+
+def _record(assignment, event_type, changes, actor, reason='', source=ProjectAssignmentEvent.SOURCE_MANUAL) -> None:
     ProjectAssignmentEvent.objects.create(
-        assignment=assignment, event_type=event_type, changes=changes, source=source, triggered_by=triggered_by,
+        assignment=assignment, event_type=event_type, changes=changes, source=source,
+        triggered_by=_actor_name(actor) if actor else SYSTEM_ACTOR, reason=reason,
     )
 
 
-def _protect_auto_close(assignment: ProjectAssignment, values: dict) -> None:
-    """A row we auto-closed still looks open-ended in Project Budgeting, so every later sync would re-open it. Keep our
-    close until Project Budgeting itself sends an end date."""
-    if assignment.end_date_source == END_DATE_SOURCE_AUTO_CLOSED and values['assignment_end_date'] is None:
-        values['assignment_end_date'] = assignment.assignment_end_date
-        values['assignment_status'] = assignment.assignment_status
-        values['assignment_status_display'] = assignment.assignment_status_display
+def _timesheet_max(field: str) -> int:
+    """Highest id an existing timesheet line already uses, so new ids never collide with old lines."""
+    from apps.attendance.models_timesheet import TimesheetLine
+    return TimesheetLine.objects.aggregate(top=Max(field))['top'] or 0
 
 
-def _event_type_for(assignment: ProjectAssignment, diff: dict) -> str:
-    new_status = diff.get('assignment_status', [assignment.assignment_status, assignment.assignment_status])[1]
-    if assignment.assignment_status == STATUS_REMOVED and new_status != STATUS_REMOVED:
-        return ProjectAssignmentEvent.EVENT_RESTORED
-    end_change = diff.get('assignment_end_date')
-    if end_change and end_change[0] is None:
-        return ProjectAssignmentEvent.EVENT_ENDED
-    return ProjectAssignmentEvent.EVENT_UPDATED
+def _next_assignment_id() -> int:
+    held = ProjectAssignment.objects.aggregate(top=Max('assignment_id'))['top'] or 0
+    return max(held, _timesheet_max('assignment_id')) + 1
 
 
-def _update_existing(assignment, row, values, employee_code, now, source, triggered_by) -> bool:
-    if _is_stale(assignment, row):
-        return False
-    _protect_auto_close(assignment, values)
-    diff = {}
-    for field, new in values.items():
-        old = getattr(assignment, field)
-        if old != new:
-            diff[field] = [_jsonable(old), _jsonable(new)]
-    if assignment.employee_code != employee_code:
-        diff['employee_code'] = [assignment.employee_code, employee_code]
-    if not diff:
-        return False
-    event_type = _event_type_for(assignment, diff)
-    for field, new in values.items():
-        setattr(assignment, field, new)
-    assignment.employee_code = employee_code
-    if values['assignment_end_date'] is not None and assignment.end_date_source == END_DATE_SOURCE_AUTO_CLOSED \
-            and 'assignment_end_date' in diff:
-        assignment.end_date_source = END_DATE_SOURCE_BUDGETING
-    assignment.source_updated_at = row.get('updated_at') or assignment.source_updated_at
-    assignment.last_synced_at = now
-    assignment.save()
-    _record(assignment, event_type, diff, source, triggered_by)
-    return True
+def project_id_for(name: str) -> int:
+    """The same project name (ignoring case) always maps to the same project_id, so reports group correctly."""
+    from apps.attendance.models_timesheet import TimesheetLine
+    known = ProjectAssignment.objects.filter(project_name__iexact=name).values_list('project_id', flat=True).first()
+    if known is None:
+        known = (TimesheetLine.objects.filter(project_name__iexact=name, project_id__isnull=False)
+                 .values_list('project_id', flat=True).first())
+    if known is not None:
+        return known
+    held = ProjectAssignment.objects.aggregate(top=Max('project_id'))['top'] or 0
+    return max(held, _timesheet_max('project_id')) + 1
 
 
-def _mark_removed(assignment: ProjectAssignment, today: date, now, source, triggered_by) -> None:
-    """The row vanished from Project Budgeting (resource removed, milestone or project deleted). Keep it, closed."""
-    diff = {'assignment_status': [assignment.assignment_status, STATUS_REMOVED]}
-    assignment.assignment_status = STATUS_REMOVED
-    assignment.assignment_status_display = 'Removed'
-    end = assignment.assignment_end_date
-    if end is None or end > today:
-        diff['assignment_end_date'] = [_jsonable(end), today.isoformat()]
-        assignment.assignment_end_date = today
-        assignment.end_date_source = END_DATE_SOURCE_BUDGETING
-    assignment.last_synced_at = now
-    assignment.save()
-    _record(assignment, ProjectAssignmentEvent.EVENT_REMOVED, diff, source, triggered_by)
-
-
-def auto_close_previous(new: ProjectAssignment, created_now: set, source: str, triggered_by: str) -> int:
-    """When an employee moves to a new project, end their still-open assignments on OTHER projects the day before the
-    new one starts. Skipped when allocation % is recorded on either side (they may legitimately run concurrently), and
-    switched off entirely by PROJECT_ASSIGNMENT_AUTO_CLOSE_OPEN_ENDED=False."""
-    if not getattr(settings, 'PROJECT_ASSIGNMENT_AUTO_CLOSE_OPEN_ENDED', True) or new.allocation_percent is not None:
-        return 0
-    previous = (
-        ProjectAssignment.objects
-        .filter(
-            employee_code=new.employee_code, assignment_end_date__isnull=True,
-            assignment_status__in=OPEN_STATUSES, assignment_start_date__lt=new.assignment_start_date,
-            allocation_percent__isnull=True,
-        )
-        .exclude(project_id=new.project_id)
-        .exclude(pk__in=created_now)
+def _check_no_duplicate(employee_code, name, start, end, exclude_pk=None) -> None:
+    clash = ProjectAssignment.objects.filter(
+        employee_code=employee_code, project_name__iexact=name,
+        assignment_start_date__lte=end, assignment_end_date__gte=start,
     )
-    closed = 0
-    for old in previous:
-        end = new.assignment_start_date - timedelta(days=1)
-        diff = {
-            'assignment_end_date': [None, end.isoformat()],
-            'assignment_status': [old.assignment_status, STATUS_COMPLETED],
-        }
-        old.assignment_end_date = end
-        old.assignment_status = STATUS_COMPLETED
-        old.assignment_status_display = 'Completed'
-        old.end_date_source = END_DATE_SOURCE_AUTO_CLOSED
-        old.save()
-        _record(old, ProjectAssignmentEvent.EVENT_AUTO_CLOSED, diff, source, triggered_by)
-        closed += 1
-    return closed
+    if exclude_pk:
+        clash = clash.exclude(pk=exclude_pk)
+    if clash.exists():
+        raise AssignmentError(f'This employee is already assigned to "{name}" for part of these dates.')
+
+
+def assign_project(employee, data: dict, actor) -> ProjectAssignment:
+    """Create a new assignment for `employee` from validated AssignProjectSerializer data."""
+    name, start, end = data['project_name'], data['start_date'], data['end_date']
+    _check_no_duplicate(employee.employee_id, name, start, end)
+    for attempt in range(_ID_ATTEMPTS):
+        try:
+            with transaction.atomic():
+                assignment = ProjectAssignment(
+                    assignment_id=_next_assignment_id(), employee_code=employee.employee_id,
+                    project_id=project_id_for(name), project_name=name,
+                    assignment_start_date=start, assignment_end_date=end,
+                    role=data.get('role', ''), notes=data.get('notes', ''), assigned_by=actor,
+                    work_mode=data['work_mode'], work_location=data.get('work_location', ''),
+                )
+                _set_status(assignment, timezone.localdate())
+                assignment.save()
+                _record(assignment, ProjectAssignmentEvent.EVENT_CREATED, {
+                    'project_name': [None, name], 'assignment_start_date': [None, _iso(start)],
+                    'assignment_end_date': [None, _iso(end)], 'role': [None, assignment.role],
+                    'work_mode': [None, assignment.work_mode], 'work_location': [None, assignment.work_location],
+                }, actor)
+                return assignment
+        except IntegrityError:
+            # Two admins assigned at the same moment and got the same running number; take the next one.
+            if attempt == _ID_ATTEMPTS - 1:
+                raise
+    raise AssertionError('unreachable')
+
+
+_EDIT_FIELDS = {
+    'project_name': 'project_name', 'start_date': 'assignment_start_date', 'end_date': 'assignment_end_date',
+    'role': 'role', 'notes': 'notes', 'work_mode': 'work_mode', 'work_location': 'work_location',
+}
 
 
 @transaction.atomic
-def apply_employee_snapshot(employee_code: str, rows: list[dict], *, source: str, triggered_by: str) -> dict:
-    """Make our history for `employee_code` reflect `rows` (already validated), keeping everything we had.
-    Returns counts: saved (rows in the list), changed (rows created/updated), removed (rows closed because they vanished),
-    auto_closed."""
-    now = timezone.now()
-    today = timezone.localdate()
-    incoming_ids = [row['assignment_id'] for row in rows]
-    held = {
-        a.assignment_id: a
-        for a in ProjectAssignment.objects.select_for_update().filter(employee_code=employee_code)
-    }
-    had_history = bool(held)
-    for assignment in ProjectAssignment.objects.select_for_update().filter(assignment_id__in=incoming_ids):
-        held.setdefault(assignment.assignment_id, assignment)
-
-    changed, created_now = 0, []
-    for row in rows:
-        values = _normalise(row)
-        assignment = held.get(row['assignment_id'])
-        if assignment is None:
-            assignment = ProjectAssignment.objects.create(
-                assignment_id=row['assignment_id'], employee_code=employee_code,
-                source_updated_at=row.get('updated_at'), last_synced_at=now, **values,
-            )
-            _record(assignment, ProjectAssignmentEvent.EVENT_CREATED,
-                    {field: [None, _jsonable(value)] for field, value in values.items()}, source, triggered_by)
-            created_now.append(assignment)
-            changed += 1
-        else:
-            if _update_existing(assignment, row, values, employee_code, now, source, triggered_by):
-                changed += 1
-            else:
-                ProjectAssignment.objects.filter(pk=assignment.pk).update(last_synced_at=now)
-
-    removed = 0
-    vanished = (
-        ProjectAssignment.objects
-        .filter(employee_code=employee_code)
-        .exclude(assignment_id__in=incoming_ids)
-        # Already-completed rows naturally drop off a "current projects" list; they aren't removals.
-        .exclude(assignment_status__in=(STATUS_REMOVED, STATUS_COMPLETED))
+def edit_assignment(assignment: ProjectAssignment, data: dict, actor) -> ProjectAssignment:
+    if assignment.assignment_status != STATUS_ACTIVE:
+        raise AssignmentError('A completed project cannot be edited. Extend it instead.')
+    new_values = {_EDIT_FIELDS[key]: value for key, value in data.items() if key in _EDIT_FIELDS}
+    _check_no_duplicate(
+        assignment.employee_code, new_values.get('project_name', assignment.project_name),
+        new_values.get('assignment_start_date', assignment.assignment_start_date),
+        new_values.get('assignment_end_date', assignment.assignment_end_date), exclude_pk=assignment.pk,
     )
-    for assignment in vanished:
-        _mark_removed(assignment, today, now, source, triggered_by)
-        removed += 1
+    diff = {}
+    for field, new in new_values.items():
+        old = getattr(assignment, field)
+        if old != new:
+            diff[field] = [_iso(old), _iso(new)]
+            setattr(assignment, field, new)
+    if not diff:
+        return assignment
+    if 'project_name' in diff:
+        assignment.project_id = project_id_for(assignment.project_name)
+    if 'assignment_end_date' in diff:
+        assignment.ending_soon_notified_on = None
+    _set_status(assignment, timezone.localdate())
+    assignment.save()
+    _record(assignment, ProjectAssignmentEvent.EVENT_UPDATED, diff, actor)
+    return assignment
 
-    auto_closed = 0
-    if had_history:
-        created_ids = {a.pk for a in created_now}
-        for assignment in created_now:
-            auto_closed += auto_close_previous(assignment, created_ids, source, triggered_by)
-    return {'saved': len(rows), 'changed': changed, 'removed': removed, 'auto_closed': auto_closed}
+
+@transaction.atomic
+def extend_assignment(assignment: ProjectAssignment, end_date: date, reason: str, actor) -> ProjectAssignment:
+    """Move the end date later. Re-opens a completed assignment when the new end date is today or later."""
+    _check_no_duplicate(assignment.employee_code, assignment.project_name, assignment.assignment_start_date,
+                        end_date, exclude_pk=assignment.pk)
+    old_end, old_status = assignment.assignment_end_date, assignment.assignment_status
+    assignment.assignment_end_date = end_date
+    assignment.ending_soon_notified_on = None
+    _set_status(assignment, timezone.localdate())
+    assignment.save()
+    diff = {'assignment_end_date': [_iso(old_end), _iso(end_date)]}
+    if old_status != assignment.assignment_status:
+        diff['assignment_status'] = [old_status, assignment.assignment_status]
+    _record(assignment, ProjectAssignmentEvent.EVENT_EXTENDED, diff, actor, reason)
+    return assignment
+
+
+@transaction.atomic
+def end_assignment(assignment: ProjectAssignment, end_date: date | None, reason: str, actor) -> ProjectAssignment:
+    """Finish an assignment early. Defaults to today (or the start date, for one that hasn't started yet)."""
+    if assignment.assignment_status != STATUS_ACTIVE:
+        raise AssignmentError('This project has already ended.')
+    today = timezone.localdate()
+    end_date = end_date or max(today, assignment.assignment_start_date)
+    if end_date > assignment.assignment_end_date:
+        raise AssignmentError('To move the end date later, use Extend.')
+    old_end, old_status = assignment.assignment_end_date, assignment.assignment_status
+    assignment.assignment_end_date = end_date
+    # Ended today means done today, so it is completed straight away rather than tomorrow.
+    assignment.assignment_status = STATUS_COMPLETED if end_date <= today else STATUS_ACTIVE
+    assignment.assignment_status_display = STATUS_DISPLAY[assignment.assignment_status]
+    assignment.save()
+    diff = {'assignment_end_date': [_iso(old_end), _iso(end_date)]}
+    if old_status != assignment.assignment_status:
+        diff['assignment_status'] = [old_status, assignment.assignment_status]
+    _record(assignment, ProjectAssignmentEvent.EVENT_ENDED, diff, actor, reason)
+    return assignment
+
+
+def complete_finished_assignments(today: date) -> list[ProjectAssignment]:
+    """Mark every active assignment whose end date has passed as completed. Returns the ones it changed."""
+    finished = list(ProjectAssignment.objects.filter(assignment_status=STATUS_ACTIVE, assignment_end_date__lt=today))
+    for assignment in finished:
+        with transaction.atomic():
+            assignment.assignment_status = STATUS_COMPLETED
+            assignment.assignment_status_display = STATUS_DISPLAY[STATUS_COMPLETED]
+            assignment.save(update_fields=['assignment_status', 'assignment_status_display', 'updated_at'])
+            _record(assignment, ProjectAssignmentEvent.EVENT_COMPLETED,
+                    {'assignment_status': [STATUS_ACTIVE, STATUS_COMPLETED]}, None,
+                    source=ProjectAssignmentEvent.SOURCE_SYSTEM)
+    return finished

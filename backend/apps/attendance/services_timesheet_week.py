@@ -18,7 +18,6 @@ from apps.attendance.services_timesheet_common import (
     DAILY_WARNING_HOURS, INTERNAL_LABEL, MAX_NOTE_LENGTH, WEEKLY_TARGET_HOURS, due_date, hours_text, today, week_days,
 )
 from apps.hrms.models import ProjectAssignment
-from apps.hrms.services_project_assignments import STATUS_REMOVED
 
 UPCOMING = 'upcoming'                       # a future day with nothing recorded yet
 DAY_LABELS = {**AttendanceRecord.STATUS_DISPLAY_MAP, UPCOMING: 'Upcoming'}
@@ -27,13 +26,12 @@ NON_WORKING = (AttendanceRecord.STATUS_HOLIDAY, AttendanceRecord.STATUS_WEEKLY_O
 
 
 def employee_assignments(employee, week_start: datetime.date) -> list[ProjectAssignment]:
-    """The employee's project assignments that overlap this week (a removed one is left out), oldest project first."""
+    """The employee's project assignments that overlap this week, ordered by project name."""
     if not employee.employee_id:
         return []
     week_end = week_start + datetime.timedelta(days=6)
     return list(
         ProjectAssignment.objects.filter(employee_code=employee.employee_id)
-        .exclude(assignment_status=STATUS_REMOVED)
         .filter(Q(assignment_start_date__isnull=True) | Q(assignment_start_date__lte=week_end))
         .filter(Q(assignment_end_date__isnull=True) | Q(assignment_end_date__gte=week_start))
         .order_by('project_name', 'assignment_id')

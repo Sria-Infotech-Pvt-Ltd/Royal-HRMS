@@ -328,14 +328,6 @@ class DirectoryApiTests(LifecycleFixtures):
         self.assertLessEqual(len(large), len(small) + 2, f'{len(small)} queries for 3 rows, {len(large)} for a full page')
         self.assertLessEqual(len(large), 25)
 
-    def test_external_api_shape_is_unchanged(self):
-        from apps.accounts.views_external_api import _basic_employee_dict
-
-        payload = _basic_employee_dict(self.active)
-        self.assertEqual(payload['is_active'], True)
-        for key in ('employment_stage', 'account_status', 'onboarding_stage', 'date_missing', 'account_locked'):
-            self.assertNotIn(key, payload)
-
     def test_employees_report_gets_two_trailing_lifecycle_columns(self):
         from apps.dashboard.services_reports import _employees
 

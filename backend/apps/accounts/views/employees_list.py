@@ -313,8 +313,13 @@ class EmployeeListCreateView(APIView):
                 ).filter(fully_onboarded_q()).filter(User.onboarded_q()).exclude(notice_period_q)
             elif status_param == 'notice_period':
                 qs = qs.filter(is_active=True).filter(notice_period_q).distinct()
+            elif status_param == 'unassigned':
+                # Onboarded active employees with no current project, so admins can see who needs one assigned.
+                from apps.hrms.services_work_status import employee_codes_on_projects
+                qs = qs.filter(is_active=True).filter(fully_onboarded_q()).filter(User.onboarded_q()).exclude(
+                    employee_id__in=employee_codes_on_projects())
             else:
-                return error('status must be one of: active, onboarding, probation, notice_period, inactive.')
+                return error('status must be one of: active, onboarding, probation, notice_period, inactive, unassigned.')
 
         # Lifecycle filters (additive; the `status` filter above keeps its meaning). See services_lifecycle_status.
         lifecycle_error = _apply_lifecycle_filters(request, qs)

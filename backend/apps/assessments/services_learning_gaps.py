@@ -65,7 +65,9 @@ def draw_from_pool(pool: QuestionPool, *, rng: random.Random | None = None) -> l
     per the master prompt's own testing requirement — defaults to a fresh
     `random.Random()` (non-deterministic) when not supplied."""
     rng = rng or random.Random()
-    candidates = list(Question.objects.filter(tags__contains=[pool.tag], is_active=True))
+    # Membership checked in Python, not `tags__contains=[...]`: JSON containment isn't supported on local SQLite.
+    candidates = [question for question in Question.objects.filter(is_active=True)
+                  if isinstance(question.tags, list) and pool.tag in question.tags]
     if len(candidates) < pool.pick_count:
         raise ValueError(f'Pool {pool.code}: only {len(candidates)} active question(s) tagged {pool.tag!r}, need {pool.pick_count}.')
     return rng.sample(candidates, pool.pick_count)
