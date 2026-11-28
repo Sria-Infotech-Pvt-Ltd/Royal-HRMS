@@ -36,7 +36,12 @@ jobs:
       # requires these to be present to boot at all; none of them are read
       # from anywhere else in CI.
       SECRET_KEY: ci-test-secret-key-not-for-production-use
-      DEBUG: "False"
+      # "True" marks CI as a test environment, like local development. With "False" the production-only security block
+      # in config/settings.py turned on SECURE_SSL_REDIRECT, and every test-client request (plain HTTP) got a 301 instead of
+      # its real answer. It also sets IS_LOCAL_OR_TEST_ENV, which the HTTPS-only checks (face punch, secure transport) expect
+      # to be True under test; the tests that cover the HTTPS branch override it themselves. Django's test runner still forces
+      # settings.DEBUG to False while the tests run.
+      DEBUG: "True"
       FIELD_ENCRYPTION_KEY: PLKNukCgrZlA0FdDISEkbmOp6U912HDAXRmDacwioE8=
       FIELD_INDEX_HMAC_KEY: ci-test-hmac-key-not-for-production-use
       IMAGEKIT_PUBLIC_KEY: ci-test-public-key

@@ -140,6 +140,13 @@ ALLOWED_CHOICES_FIELDS = {
     'platform_core.WorkflowInstance.status', 'platform_core.WorkflowStep.no_approver_action',
     'platform_core.WorkflowStep.quorum', 'platform_core.WorkflowStep.sla_timeout_action',
     'platform_core.WorkflowStep.step_type', 'platform_core.WorkflowTask.status',
+    # Added 2026-11-28 at the team's request. These were merged while CI stopped at the test step's 301s (DEBUG=False) and
+    # nobody saw this check fail. Allow-listed to unblock CI, not reviewed: each is a candidate to move to a LookupType.
+    'accounts.ApprovalWorkflowRule.l1_approver_kind', 'accounts.ApprovalWorkflowRule.l2_approver_kind',
+    'announcements.AnnouncementAttachment.attachment_type', 'hrms.LeavePolicy.grant_mode',
+    'hrms.WFHSavedLocation.location_source', 'hrms.WorkFromHomeRequest.location_source',
+    'platform_core.PositionAssignment.scope_type',
+    'recruitment.InterviewFeedback.rating', 'recruitment.InterviewFeedback.recommendation',
 }
 
 _CLASS_RE = re.compile(r'^class (\w+)\(')

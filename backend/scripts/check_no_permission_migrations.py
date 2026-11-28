@@ -4,7 +4,7 @@ Phase 4 Rule 5 — "No permission-granting migrations, ever again."
 
 Fails CI if any migration file writes RolePermission or Permission rows
 (create/bulk_create/get_or_create/update_or_create) UNLESS that file is
-in the frozen baseline below — the exact 40 pre-Phase-4 migrations this
+in the frozen baseline below — the 40 pre-Phase-4 migrations (plus the 6 already-applied ones added 2026-11-28) this
 codebase already has (grep-verified at the time this check was written;
 see PHASE4_REPORT.md). The baseline must only ever SHRINK (if one of
 these files is ever deleted/squashed), never grow — any new migration
@@ -67,6 +67,14 @@ BASELINE_FILES = {
     'apps/hrms/migrations/0033_seed_hr_help_respond_permission.py',
     'apps/payroll/migrations/0021_seed_tax_declarations_approve_permission.py',
     'apps/performance/migrations/0002_seed_performance_manage_cycles_permission.py',
+    # Added 2026-11-28 at the team's request: already merged (and applied on deployed databases) while this check was never
+    # seen failing in CI. A migration that has run cannot be removed, so it joins the baseline; new ones still fail.
+    'apps/accounts/migrations/0179_seed_payroll_admin_role.py',
+    'apps/accounts/migrations/0181_seed_employees_raise_action_permission.py',
+    'apps/accounts/migrations/0182_revoke_reset_password_from_employee_role.py',
+    'apps/accounts/migrations/0183_seed_leave_record_permission.py',
+    'apps/performance/migrations/0005_seed_review_team_permission.py',
+    'apps/platform_core/migrations/0019_seed_privacy_manage_dsr_permission.py',
 }
 
 
