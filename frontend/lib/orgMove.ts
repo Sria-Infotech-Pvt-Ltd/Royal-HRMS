@@ -2,6 +2,9 @@
 // suggestSeats() pre-fills a sensible match so HR only has to review it: a seat with the person's own title first,
 // then any vacant seat left over. Nobody gets the same seat twice; people left without a seat stay unmatched ("").
 
+// The reason is saved as each new placement's note on the server, a 255-character column.
+export const MOVE_REASON_MAX_LENGTH = 255;
+
 export interface MovePerson { employeeId: string; title: string }
 export interface VacantSeat { id: string; title: string }
 

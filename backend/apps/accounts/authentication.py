@@ -12,6 +12,10 @@ VIEW_AS_PERMISSION = 'employees.view_workspace'
 _SAFE_METHODS = ('GET', 'HEAD', 'OPTIONS')
 # One audit entry per (viewer, employee) in this window, not one per request.
 _VIEW_AS_AUDIT_WINDOW_SECONDS = 30 * 60
+# An employee's workspace sends many GETs at once, and each would repeat the same scope and permission checks (about ten
+# queries). An ALLOWED (viewer, employee) pair is remembered this long; a refusal is never cached. A change to either
+# person's access is therefore seen within a minute, well inside the 15-minute life of the access token's own claims.
+_VIEW_AS_ALLOWED_SECONDS = 60
 
 
 class CookieJWTAuthentication(_JWTAuthentication):
@@ -70,10 +74,23 @@ class CookieJWTAuthentication(_JWTAuthentication):
             raise exceptions.PermissionDenied('Unknown employee.')
         if target.pk == viewer.pk:
             return viewer
+        self._check_view_as_allowed(viewer, target)
 
         self._audit_view_as(request, viewer, target)
         target.viewed_by = viewer  # lets views tell "the employee" from the person looking
         return target
+
+    @staticmethod
+    def _check_view_as_allowed(viewer, target):
+        from apps.accounts.services_access_guards import view_as_refusal
+
+        allowed_key = f'view-as-allowed:{viewer.pk}:{target.pk}'
+        if cache.get(allowed_key):
+            return
+        refusal = view_as_refusal(viewer, target)
+        if refusal:
+            raise exceptions.PermissionDenied(refusal)
+        cache.set(allowed_key, 1, _VIEW_AS_ALLOWED_SECONDS)
 
     @staticmethod
     def _audit_view_as(request, viewer, target):

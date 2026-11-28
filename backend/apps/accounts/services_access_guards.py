@@ -143,6 +143,28 @@ def anonymous_assignment_refusal(position) -> str | None:
     return None
 
 
+def view_as_refusal(viewer, target) -> str | None:
+    """Why `viewer` may not open `target`'s workspace read-only (X-View-As-Employee), or None when it is allowed.
+
+    A view-as request reads with ALL of the target's access, so it must never let the viewer read more than they could
+    themselves: nobody but a superuser views a superuser, nobody views someone holding a SENSITIVE permission the viewer
+    lacks, and the target must be inside the viewer's own employee scope (branch, or direct reports for a manager)."""
+    from core.permissions import effective_permission_codenames
+    from apps.accounts.views.shared import _employee_out_of_branch_scope
+
+    if viewer.is_superuser:
+        return None
+    if target.is_superuser:
+        return 'You cannot view the workspace of a full-access user.'
+    target_sensitive = set(effective_permission_codenames(target)) & SENSITIVE_PERMISSIONS
+    # The viewer's own list is only needed when the target holds something sensitive (most employees hold nothing).
+    if target_sensitive and target_sensitive - set(effective_permission_codenames(viewer)):
+        return 'You cannot view the workspace of someone who holds access you do not have.'
+    if _employee_out_of_branch_scope(viewer, target):
+        return 'Unknown employee.'  # same answer as a missing employee: does not reveal who exists outside your scope
+    return None
+
+
 def seat_permission_refusal(actor, positions) -> str | None:
     """Why `actor` may not change the permissions of these positions: one of them is the seat the actor holds."""
     for position in positions:

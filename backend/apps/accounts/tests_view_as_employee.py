@@ -87,3 +87,36 @@ class ViewAsEmployeeTests(TestCase):
         client = APIClient()
         client.credentials(**{HEADER: str(self.employee.pk)})
         self.assertEqual(client.get(ME_URL).status_code, 401)
+
+
+class ViewAsCannotReadMoreThanTheViewerTests(TestCase):
+    """Viewing as someone reads with all of THEIR access, so a viewer who is not a superuser may only open the workspace
+    of an employee holding no sensitive access the viewer lacks, inside the viewer's own branch."""
+
+    def setUp(self):
+        cache.clear()
+        permission, _ = Permission.objects.get_or_create(
+            codename='employees.view_workspace', defaults={'module': 'employees', 'action': 'view_workspace'},
+        )
+        self.viewer = make_user('va-hr@test.com', role=make_role('va_hr'), full_name='Branch HR', employee_id='VAH001', branch='North')
+        EmployeePermission.objects.create(employee=self.viewer, permission=permission)
+        self.colleague = make_user('va-colleague@test.com', role=make_role('va_colleague'), full_name='Colleague', employee_id='VAH002',
+                                   branch='North')
+
+    def test_an_everyday_employee_in_the_same_branch_can_be_viewed(self):
+        self.assertEqual(_client_for(self.viewer, self.colleague.pk).get(ME_URL).status_code, 200)
+
+    def test_a_superuser_cannot_be_viewed(self):
+        admin = make_user('va-super@test.com', is_superuser=True, employee_id='VAH003', branch='North')
+        self.assertEqual(_client_for(self.viewer, admin.pk).get(ME_URL).status_code, 403)
+
+    def test_someone_with_sensitive_access_the_viewer_lacks_cannot_be_viewed(self):
+        payroll, _ = Permission.objects.get_or_create(codename='payroll.view', defaults={'module': 'payroll', 'action': 'view'})
+        EmployeePermission.objects.create(employee=self.colleague, permission=payroll)
+        self.assertEqual(_client_for(self.viewer, self.colleague.pk).get(ME_URL).status_code, 403)
+
+    def test_an_employee_in_another_branch_cannot_be_viewed(self):
+        self.colleague.branch = 'South'
+        self.colleague.save(update_fields=['branch'])
+        self.assertEqual(_client_for(self.viewer, self.colleague.pk).get(ME_URL).status_code, 403)
+

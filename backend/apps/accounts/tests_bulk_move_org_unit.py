@@ -59,7 +59,7 @@ class BulkMoveOrgUnitTests(TestCase):
         data = self._post(moves).json()['data']
         reasons = {row['employee_id']: row['reason'] for row in data['skipped']}
         self.assertEqual([row['employee_id'] for row in data['moved']], [self.people[1].employee_id])
-        self.assertIn('not vacant', reasons[self.people[0].employee_id])
+        self.assertIn('is held by', reasons[self.people[0].employee_id])
         self.assertIn('already taken', reasons[self.people[2].employee_id])
         self.assertEqual(reasons['NOPE'], 'Employee not found.')
         self.assertIsNotNone(current_placement(self.old_seats[0], timezone.localdate()))   # skipped people stay where they are
@@ -82,3 +82,35 @@ class BulkMoveOrgUnitTests(TestCase):
         self.assertEqual(self._post(self._moves(1), effective_date=yesterday).status_code, 400)
         self.assertEqual(self._post(self._moves(1), actor=self.viewer).status_code, 403)
         self.assertIsNone(current_placement(self.new_seats[0], timezone.localdate()))
+
+    def test_a_long_reason_is_cut_to_the_placement_note_length_and_everyone_still_moves(self):
+        data = self._post(self._moves(), reason='x' * 400).json()['data']
+        self.assertEqual(len(data['moved']), 3, data)
+        self.assertEqual(len(Placement.objects.get(employee=self.people[0], position=self.new_seats[0]).note), 255)
+
+    def test_an_inactive_employee_is_not_given_a_seat(self):
+        self.people[0].is_active = False
+        self.people[0].save(update_fields=['is_active'])
+        data = self._post(self._moves(1)).json()['data']
+        self.assertEqual(data['skipped'][0]['reason'], 'Employee not found.')
+        self.assertIsNone(current_placement(self.new_seats[0], timezone.localdate()))
+
+    def test_a_seat_with_a_holder_starting_later_is_not_vacant(self):
+        newcomer = make_user('newcomer@test.com', employee_id='30000098')
+        assign_position(newcomer, self.new_seats[0], effective_from=timezone.localdate() + timedelta(days=30))
+        data = self._post(self._moves(1)).json()['data']
+        self.assertIn('is taken by', data['skipped'][0]['reason'])
+        self.assertEqual(current_placement(self.old_seats[0], timezone.localdate()).employee_id, self.people[0].pk)
+
+    def test_the_same_employee_twice_moves_once_and_the_repeat_is_skipped(self):
+        moves = [
+            {'employee_id': self.people[0].employee_id, 'position_id': str(self.new_seats[0].pk)},
+            {'employee_id': self.people[0].employee_id, 'position_id': str(self.new_seats[1].pk)},
+        ]
+        data = self._post(moves).json()['data']
+        self.assertEqual(len(data['moved']), 1)
+        self.assertEqual(data['skipped'][0]['reason'], 'This employee is already being moved in this request.')
+        self.assertEqual(current_placement(self.new_seats[0], timezone.localdate()).employee_id, self.people[0].pk)
+        self.assertIsNone(current_placement(self.new_seats[1], timezone.localdate()))
+        self.assertEqual(AuditLog.objects.filter(changes__via='bulk_move_org_unit').count(), 1)
+

@@ -4,11 +4,10 @@
 // vacant seats, a suggested seat for each chosen person (editable), and the one POST that moves them all.
 
 import { useCallback, useMemo, useState } from "react";
-import { useFetch } from "@/hooks/useFetch";
+import { useAllActiveEmployees } from "@/hooks/useAllActiveEmployees";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { rowsOf } from "@/lib/listResponse";
 import { suggestSeats, todayIsoDate } from "@/lib/orgMove";
 import type { ApiEmployee } from "@/app/dashboard/employees/[id]/_apiMapping";
 import type { OrgUnit, Position } from "@/types/orgStructure";
@@ -17,8 +16,6 @@ export interface BulkMoveSkipped { employee_id: string; reason: string }
 export interface BulkMoveResult { moved: { employee_id: string; org_unit: string; position: string }[]; skipped: BulkMoveSkipped[] }
 export interface UnitSummary { unit: OrgUnit; parentName: string | null; vacant: number; filled: number }
 
-const EMPLOYEE_LIST_URL = `${API.employees.list}?page_size=200&status=active`;
-
 function matchesSearch(person: ApiEmployee, query: string): boolean {
   if (!query) return true;
   const haystack = `${person.full_name} ${person.employee_id} ${person.designation ?? ""}`.toLowerCase();
@@ -26,7 +23,7 @@ function matchesSearch(person: ApiEmployee, query: string): boolean {
 }
 
 export function useBulkMoveOrgUnit(initialFromUnitId = "") {
-  const { data: employeePage, loading: isLoadingEmployees, refetch } = useFetch<{ results: ApiEmployee[] }>(EMPLOYEE_LIST_URL);
+  const { employees, isLoading: isLoadingEmployees, reload } = useAllActiveEmployees();
   const { units, positions, loading: isLoadingUnits } = useOrgUnitsAndPositions();
   const [fromUnitId, setFromUnitId] = useState(initialFromUnitId);
   const [toUnitId, setToUnitId] = useState("");
@@ -46,7 +43,7 @@ export function useBulkMoveOrgUnit(initialFromUnitId = "") {
   }, [units, positions]);
   const unitName = useCallback((id: string | null) => units.find(unit => unit.id === id)?.name ?? "", [units]);
 
-  const everyone = useMemo(() => rowsOf<ApiEmployee>(employeePage).filter(person => person.is_active), [employeePage]);
+  const everyone = useMemo(() => employees.filter(person => person.is_active), [employees]);
   const people = useMemo(
     () => everyone.filter(person => (!fromUnitId || person.org_unit_id === fromUnitId) && matchesSearch(person, search.trim())),
     [everyone, fromUnitId, search],
@@ -113,9 +110,9 @@ export function useBulkMoveOrgUnit(initialFromUnitId = "") {
     const { data } = await clientApi.post<{ data: BulkMoveResult }>(API.employees.bulkMoveOrgUnit, { moves, effective_date: effectiveDate, reason });
     setSelected(new Set());
     setSeatOverrides({});
-    refetch();
+    reload();
     return data.data;
-  }, [chosenPeople, seatFor, effectiveDate, reason, refetch]);
+  }, [chosenPeople, seatFor, effectiveDate, reason, reload]);
 
   return {
     isLoading: isLoadingEmployees || isLoadingUnits, unitSummaries, unitName, people, chosenPeople, vacantSeats, selected, seatFor,

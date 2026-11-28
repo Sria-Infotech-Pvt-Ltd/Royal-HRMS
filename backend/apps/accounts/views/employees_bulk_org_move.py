@@ -15,15 +15,16 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.accounts.models import AuditLog, Position
+from apps.accounts.models import AuditLog, Placement, Position
 from apps.accounts.services_access_guards import assignment_refusal
-from apps.accounts.services_placement import assign_position, current_placement
+from apps.accounts.services_placement import assign_position, current_placement, occupied_seat_refusal
 from apps.accounts.views.shared import _employee_out_of_branch_scope, _get_employee
 from core.permissions import has_perm as _has_perm
 from core.responses import error, get_client_ip, success
 
 MAX_BULK = 200
-MAX_REASON_LENGTH = 500
+# The reason is saved as each new Placement's note, so it can be no longer than that column (255).
+MAX_REASON_LENGTH = Placement._meta.get_field('note').max_length
 
 
 def _parse_date(raw) -> date | None:
@@ -54,23 +55,29 @@ class EmployeeBulkMoveOrgUnitView(APIView):
             return error('The effective date cannot be in the past.', data={'effective_date': 'Choose today or a later date.'})
         reason = str(request.data.get('reason') or '').strip()[:MAX_REASON_LENGTH]
 
-        moved, skipped, seats_used = [], [], set()
+        # Seats and people already handled in this request: each may appear only once, or the second move would silently
+        # replace the first while both were reported (and audit-logged) as done.
+        moved, skipped, seats_used, people_used = [], [], set(), set()
         for move in moves:
-            outcome = self._move_one(request, move, effective_date, reason, seats_used)
+            outcome = self._move_one(request, move, effective_date, reason, seats_used, people_used)
             (moved if outcome['ok'] else skipped).append(outcome['row'])
 
         message = f'{len(moved)} employee(s) moved.' + (f' {len(skipped)} skipped.' if skipped else '')
         return success(message, data={'moved': moved, 'skipped': skipped})
 
-    def _move_one(self, request, move, effective_date, reason, seats_used) -> dict:
+    def _move_one(self, request, move, effective_date, reason, seats_used, people_used) -> dict:
         reference = str(move.get('employee_id') or '') if isinstance(move, dict) else ''
 
         def skip(why: str) -> dict:
             return {'ok': False, 'row': {'employee_id': reference, 'reason': why}}
 
         employee = _get_employee(reference) if reference else None
-        if employee is None or _employee_out_of_branch_scope(request.user, employee):
+        # An inactive or separated employee cannot be given a seat (the board only lists active people; this covers a stale tab
+        # or a direct API call).
+        if employee is None or not employee.is_active or _employee_out_of_branch_scope(request.user, employee):
             return skip('Employee not found.')
+        if employee.pk in people_used:
+            return skip('This employee is already being moved in this request.')
         position_id = str(move.get('position_id') or '')
         try:
             position = Position.objects.select_related('org_unit').get(pk=position_id, is_active=True)
@@ -81,8 +88,9 @@ class EmployeeBulkMoveOrgUnitView(APIView):
         holder = current_placement(position, effective_date)
         if holder is not None and holder.employee_id == employee.pk:
             return skip('Already in this position.')
-        if holder is not None:
-            return skip(f'"{position.title}" is not vacant.')
+        vacancy_refusal = occupied_seat_refusal(employee, position, effective_date)  # also counts a holder due to start later
+        if vacancy_refusal:
+            return skip(vacancy_refusal)
         refusal = assignment_refusal(request.user, employee, position)
         if refusal:
             return skip(refusal.message)
@@ -104,6 +112,7 @@ class EmployeeBulkMoveOrgUnitView(APIView):
         except ValidationError as exc:
             return skip('; '.join(exc.messages))
         seats_used.add(position.pk)
+        people_used.add(employee.pk)
         return {'ok': True, 'row': {'employee_id': employee.employee_id, 'org_unit': position.org_unit.name, 'position': position.title}}
 
 

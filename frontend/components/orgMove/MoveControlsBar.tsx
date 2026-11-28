@@ -5,6 +5,7 @@
 
 import { useT } from "@/hooks/useI18n";
 import type { BulkMove } from "@/hooks/useBulkMoveOrgUnit";
+import { MOVE_REASON_MAX_LENGTH } from "@/lib/orgMove";
 import styles from "./orgMove.module.css";
 
 const REASON_PRESETS = ["Team restructure", "Project change", "Department merger", "Business need"];
@@ -40,7 +41,7 @@ export default function MoveControlsBar({ move }: MoveControlsBarProps) {
       </div>
       <div className="f">
         <label htmlFor="move-reason">{t("Reason")}</label>
-        <input id="move-reason" className="finput" list="move-reason-presets" maxLength={500} value={move.reason} onChange={event => move.setReason(event.target.value)} placeholder={t("e.g. Team restructure")} />
+        <input id="move-reason" className="finput" list="move-reason-presets" maxLength={MOVE_REASON_MAX_LENGTH} value={move.reason} onChange={event => move.setReason(event.target.value)} placeholder={t("e.g. Team restructure")} />
         <datalist id="move-reason-presets">{REASON_PRESETS.map(preset => <option key={preset} value={t(preset)} />)}</datalist>
       </div>
     </div>

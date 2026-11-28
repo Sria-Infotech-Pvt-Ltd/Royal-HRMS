@@ -10,7 +10,7 @@ services, not views.
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -36,11 +36,47 @@ def current_placement(position: 'Position', as_of=None) -> 'Placement | None':
 
 def occupied_seat_refusal(employee: 'User', position: 'Position', as_of=None) -> str | None:
     """Why `employee` cannot be moved into `position` on `as_of` (default today) without pushing someone out, or None when
-    the seat is free then (or already theirs). Used where a move must never displace the current holder."""
+    the seat is free then (or already theirs). Used where a move must never displace the current holder.
+
+    A seat someone else is due to start in AFTER `as_of` is not vacant either: the new placement would be open-ended and
+    overlap theirs, which Placement.full_clean() rejects only when the move is finally applied."""
+    as_of = as_of or timezone.localdate()
     holder = current_placement(position, as_of)
-    if holder is None or holder.employee_id == employee.pk:
+    if holder is not None and holder.employee_id != employee.pk:
+        return f'"{position.title}" is held by {holder.employee.full_name or holder.employee.employee_id}. Choose a vacant position.'
+    upcoming = (
+        position.placements.filter(effective_from__gt=as_of).exclude(employee=employee)
+        .select_related('employee').order_by('effective_from').first()
+    )
+    if upcoming is not None:
+        who = upcoming.employee.full_name or upcoming.employee.employee_id
+        return f'"{position.title}" is taken by {who} from {upcoming.effective_from.isoformat()}. Choose a vacant position.'
+    return None
+
+
+def active_position_for_assignment(position_id: str) -> 'Position | None':
+    """The active Position with this id (org unit and job template loaded), or None for an unknown, inactive or malformed id."""
+    from django.core.exceptions import ValidationError
+    from apps.accounts.models import Position
+
+    try:
+        return Position.objects.select_related('org_unit', 'job_template').get(pk=position_id, is_active=True)
+    except (Position.DoesNotExist, ValueError, ValidationError):
         return None
-    return f'"{position.title}" is held by {holder.employee.full_name or holder.employee.employee_id}. Choose a vacant position.'
+
+
+def requested_vacant_seat_refusal(employee: 'User', position: 'Position', data) -> str | None:
+    """For an employee-record edit: when the request asks for a vacant seat (`position_must_be_vacant`, sent by Org assignment),
+    why `position` is not free on the request's effective date, else None. Edit Record's "Reassign Position" leaves the flag off
+    and may still replace the holder, as before. A blank or malformed date is checked for today (the edit refuses a malformed
+    date itself later on)."""
+    if str(data.get('position_must_be_vacant') or '').lower() not in ('true', '1'):
+        return None
+    try:
+        seat_date = datetime.strptime(str(data.get('effective_date') or '').strip(), '%Y-%m-%d').date()
+    except ValueError:
+        seat_date = None
+    return occupied_seat_refusal(employee, position, seat_date)
 
 
 def org_unit_names_for(employee_ids) -> dict:

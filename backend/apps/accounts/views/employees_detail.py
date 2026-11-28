@@ -32,7 +32,6 @@ def _is_valid_phone(raw: str) -> bool:
 
 from django.conf import settings
 from django.core import signing
-from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, StreamingHttpResponse
@@ -125,7 +124,9 @@ from apps.accounts.services_contact_change import (
     notify_login_email_changed,
     require_login_email_confirmation,
 )
-from apps.accounts.services_placement import assign_position, occupied_seat_refusal, sync_from_position
+from apps.accounts.services_placement import (
+    active_position_for_assignment, assign_position, requested_vacant_seat_refusal, sync_from_position,
+)
 from apps.accounts.services_work_location import follow_branch_change
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
@@ -267,28 +268,17 @@ class EmployeeDetailView(APIView):
                 update_fields.append(field)
 
         position_id = (data.get('position') or '').strip()
-        position_obj = None
-        if position_id:
-            try:
-                position_obj = Position.objects.select_related(
-                    'org_unit', 'job_template',
-                ).get(pk=position_id, is_active=True)
-            except (Position.DoesNotExist, ValueError, ValidationError):
-                return error('Select a valid, active position.', data={'position': 'Position not found.'})
+        position_obj = active_position_for_assignment(position_id) if position_id else None
+        if position_id and position_obj is None:
+            return error('Select a valid, active position.', data={'position': 'Position not found.'})
+        if position_obj is not None:
             refusal = assignment_refusal(request.user, employee, position_obj)
             if refusal:
                 return error(refusal.message, http_status=refusal.status)
-            # Org Assignment moves someone into a seat in another unit without pushing anyone out: it sends this flag, and a
-            # seat held by someone else on the effective date is refused before anything is saved. (Edit Record's
-            # "Reassign Position" leaves it off and may still replace the holder, as before.)
-            if str(data.get('position_must_be_vacant') or '').lower() in ('true', '1'):
-                try:
-                    seat_date = datetime.strptime(str(data.get('effective_date') or '').strip(), '%Y-%m-%d').date()
-                except ValueError:
-                    seat_date = None   # blank or malformed: checked for today (a malformed date is refused further down)
-                vacancy_refusal = occupied_seat_refusal(employee, position_obj, seat_date)
-                if vacancy_refusal:
-                    return error(vacancy_refusal, data={'position': vacancy_refusal})
+            # Org Assignment asks for a vacant seat in another unit, so nobody is pushed out (see the helper).
+            vacancy_refusal = requested_vacant_seat_refusal(employee, position_obj, data)
+            if vacancy_refusal:
+                return error(vacancy_refusal, data={'position': vacancy_refusal})
 
         # Mobile and personal email are HR-correctable after hire (a typo at hire had no other fix). The caller already
         # holds employees.edit; same validation as the hire wizard plus uniqueness, every change audit-logged below.

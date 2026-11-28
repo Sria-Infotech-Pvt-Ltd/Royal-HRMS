@@ -28,16 +28,19 @@ interface Result {
   resolveDepartmentName: (orgUnitId: string) => string | null;
 }
 
+// The most the org-structure list endpoints return in one page (max_page_size there). 200 cut off the positions of a real
+// org chart (223 seats), so seats past the 200th never appeared in the position and vacancy pickers.
+const ORG_LIST_PAGE_SIZE = 1000;
+
 // Shared source of Org Unit / Position option lists for every Position
 // picker across the app (Create Employee, Onboarding Approval, Employee
-// Edit's "Reassign Position") — same endpoints/page_size OrgStructureClient
-// itself already uses, so this reuses whatever the API already returns
-// rather than adding a new query shape.
+// Edit's "Reassign Position", Org assignment, Move employees) — the same
+// endpoints OrgStructureClient uses, asking for every row in one page.
 export function useOrgUnitsAndPositions(): Result {
   const { data: unitData, loading: unitsLoading } =
-    useFetch<OrgUnit[] | { results: OrgUnit[] }>(`${API.orgStructure.units.list}?page_size=200`);
+    useFetch<OrgUnit[] | { results: OrgUnit[] }>(`${API.orgStructure.units.list}?page_size=${ORG_LIST_PAGE_SIZE}`);
   const { data: posData, loading: positionsLoading } =
-    useFetch<Position[] | { results: Position[] }>(`${API.orgStructure.positions.list}?page_size=200`);
+    useFetch<Position[] | { results: Position[] }>(`${API.orgStructure.positions.list}?page_size=${ORG_LIST_PAGE_SIZE}`);
 
   const units     = useMemo(() => (Array.isArray(unitData) ? unitData : (unitData?.results ?? [])), [unitData]);
   const positions = useMemo(() => (Array.isArray(posData)  ? posData  : (posData?.results ?? [])), [posData]);
