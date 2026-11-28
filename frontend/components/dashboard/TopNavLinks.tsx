@@ -90,13 +90,17 @@ export default function TopNavLinks({ bar, activeNavId, menu, onNavigate }: Prop
           const isCurrent = entry.items.some(item => item.id === activeNavId);
           const isTwoColumn = entry.items.length > TWO_COLUMN_THRESHOLD;
           return (
-            <div key={entry.id} className="relative flex h-full items-center" {...{ [MENU_ATTRIBUTE]: "" }} onMouseEnter={() => menu.switchTo(entry.id)}>
+            <div
+              key={entry.id} className="relative flex h-full items-center" {...{ [MENU_ATTRIBUTE]: "" }}
+              onMouseEnter={() => menu.hoverOpen(entry.id)} onMouseLeave={menu.hoverLeave}
+            >
               <button
                 type="button"
                 className={`navlink${isCurrent ? " on" : ""}`}
                 aria-haspopup="menu"
                 aria-expanded={isOpen}
-                onClick={() => menu.toggle(entry.id)}
+                // A keyboard-triggered click has no mouse clicks behind it (detail 0), so Enter/Space still toggles.
+                onClick={event => menu.press(entry.id, event.detail === 0)}
                 suppressHydrationWarning
               >
                 {t(entry.title)}
