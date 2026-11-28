@@ -81,7 +81,11 @@ export default function SalarySetupTab() {
       salary_structure: current?.salary_structure ?? "",
       // A revision can't start before the current one or inside paid payroll; today is the usual choice.
       effective_from: new Date().toISOString().split("T")[0],
-      components: null,
+      // Start from the employee's current saved amounts (e.g. imported); older revisions
+      // without saved components (and new assignments) start from the structure template.
+      components: current?.components?.length
+        ? toInputs([...current.components].sort((a, b) => a.order - b.order))
+        : null,
       pf_eligible: current?.pf_eligible ?? null,
       esi_eligible: current?.esi_eligible ?? null,
       pt_applicable: current?.pt_applicable ?? null,

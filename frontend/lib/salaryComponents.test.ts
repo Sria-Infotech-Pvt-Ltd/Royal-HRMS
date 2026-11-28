@@ -18,6 +18,14 @@ describe("salary component helpers", () => {
     expect(r.name).toBe("Basic");
   });
 
+  it("saved revision rows (Update CTC prefill) keep their values and drop the id and amounts", () => {
+    const saved = { ...preview("HRA", "1167.00", { calculation_type: "fixed", value: "1167.0000", role: "hra" }), id: "c1" };
+    const [r] = toInputs([saved]);
+    expect(r).not.toHaveProperty("id");
+    expect(r).not.toHaveProperty("monthly_amount");
+    expect(r).toMatchObject({ name: "HRA", calculation_type: "fixed", value: "1167.0000", role: "hra" });
+  });
+
   it("new rows are employee-only (no template link) and enabled", () => {
     expect(blankComponent(5)).toMatchObject({ source_component: null, order: 5, is_enabled: true, role: "other" });
   });
